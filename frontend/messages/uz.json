@@ -7,7 +7,8 @@
     "register": "Ro'yxatdan o'tish",
     "logout": "Chiqish",
     "dashboard": "Kabinet",
-    "admin": "Admin panel"
+    "admin": "Admin panel",
+    "superAdmin": "Super Admin"
   },
   "common": {
     "loading": "Yuklanmoqda...",
@@ -121,7 +122,10 @@
     "noAccount": "Akkauntingiz yo'qmi?",
     "haveAccount": "Akkauntingiz bormi?",
     "invalid": "Email yoki parol noto'g'ri",
-    "welcome": "Xush kelibsiz!"
+    "welcome": "Xush kelibsiz!",
+    "or": "yoki",
+    "googleSetup": "Google OAuth o'rnatilmagan. NEXT_PUBLIC_GOOGLE_CLIENT_ID belgilang.",
+    "googleLoading": "Google orqali kirilmoqda..."
   },
   "dashboard": {
     "title": "Shaxsiy kabinet",
@@ -166,5 +170,29 @@
     "quickLinks": "Tezkor havolalar",
     "contact": "Bog'lanish",
     "rights": "Barcha huquqlar himoyalangan"
+  },
+  "superAdmin": {
+    "title": "Super Admin",
+    "accessDenied": "Faqat Super Admin uchun",
+    "tabOverview": "Umumiy",
+    "tabUsers": "Foydalanuvchilar",
+    "tabRooms": "Xonalar",
+    "statUsers": "Foydalanuvchilar",
+    "statAdmins": "Adminlar",
+    "statRooms": "Xonalar",
+    "statBookings": "Jami bronlar",
+    "statRevenue": "Jami tushum",
+    "statActive": "Aktiv bronlar",
+    "recentRooms": "Yangi xonalar",
+    "noRooms": "Xonalar yo'q",
+    "searchUsers": "Qidirish (ism, email, telefon)...",
+    "allRoles": "Barcha rollar",
+    "createAdmin": "Admin yaratish",
+    "password": "Parol",
+    "noUsers": "Foydalanuvchilar topilmadi",
+    "name": "Ism",
+    "activate": "Faollashtirish",
+    "deactivate": "Yopish",
+    "delete": "O'chirish"
   }
 }

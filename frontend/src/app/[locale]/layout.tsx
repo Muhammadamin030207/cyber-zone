@@ -5,6 +5,7 @@ import { getTranslations, getMessages } from 'next-intl/server';
 import '../globals.css';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
+import ChatWidget from '@/components/layout/ChatWidget';
 import AuthInit from '@/components/providers/AuthInit';
 
 const inter = Inter({ subsets: ['latin', 'latin-ext'] });
@@ -30,7 +31,7 @@ export default async function RootLayout({ children, params }: Props) {
   const messages = await getMessages();
 
   return (
-    <html lang={locale} className="dark">
+    <html lang={locale}>
       <head>
         <style>{`
           :root {
@@ -38,6 +39,11 @@ export default async function RootLayout({ children, params }: Props) {
             --font-inter: ${inter.style.fontFamily};
           }
         `}</style>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('cyber-zone-theme');if(t==='halloween'||t==='night'||t==='dark'){document.documentElement.dataset.theme=t;}}catch(e){}document.documentElement.style.colorScheme='dark';})();`,
+          }}
+        />
       </head>
       <body
         className={`${inter.className} antialiased min-h-screen flex flex-col`}
@@ -47,6 +53,7 @@ export default async function RootLayout({ children, params }: Props) {
           <Header />
           <main className="flex-1 grid-matrix">{children}</main>
           <Footer />
+          <ChatWidget />
         </NextIntlClientProvider>
       </body>
     </html>

@@ -11,6 +11,7 @@ interface AuthState {
   initialized: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  googleLogin: (idToken: string) => Promise<void>;
   register: (data: { email: string; password: string; fullName: string; phone?: string; language?: string }) => Promise<void>;
   logout: () => void;
   setAuth: (auth: AuthResponse) => void;
@@ -59,6 +60,21 @@ export const useAuthStore = create<AuthState>()(
           get().setAuth(data.data);
         } catch (err) {
           set({ error: getApiErrorMessage(err, "Ro'yxatdan o'tishda xatolik") });
+          throw err;
+        } finally {
+          set({ loading: false });
+        }
+      },
+
+      googleLogin: async (idToken) => {
+        set({ loading: true, error: null });
+        try {
+          const { data } = await api.post<{ success: boolean; data: AuthResponse }>('/api/auth/login/google', {
+            token: idToken,
+          });
+          get().setAuth(data.data);
+        } catch (err) {
+          set({ error: getApiErrorMessage(err, 'Google bilan kirishda xatolik') });
           throw err;
         } finally {
           set({ loading: false });

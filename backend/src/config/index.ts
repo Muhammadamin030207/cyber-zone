@@ -14,11 +14,15 @@ export const config = {
     clientId: process.env.GOOGLE_CLIENT_ID!,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
   },
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
+  frontendUrls: (process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:3006')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
   email: {
     host: process.env.EMAIL_HOST,
     port: parseInt(process.env.EMAIL_PORT || '587'),
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  redisUrl: process.env.REDIS_URL || 'redis://localhost:6380',
 };

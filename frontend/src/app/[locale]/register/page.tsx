@@ -2,19 +2,21 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Gamepad2, UserPlus, Mail, Lock, User as UserIcon, Phone, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
+import GoogleButton from '@/components/auth/GoogleButton';
+import PhoneInput, { normalizeUzPhone } from '@/components/auth/PhoneInput';
 
 const registerSchema = z.object({
   fullName: z.string().min(3, 'Kamida 3 ta belgi'),
   email: z.string().min(1, 'Email kiriting').email('Email noto\u2019g\u2019ri'),
   phone: z
     .string()
-    .regex(/^[+0-9][0-9 ()-]{6,17}$/, 'Telefon noto\u2019g\u2019ri')
+    .regex(/^\+998 \d{2} \d{3} \d{2} \d{2}$/, 'Telefon +998 XX XXX XX XX formatida')
     .optional()
     .or(z.literal('')),
   password: z.string().min(6, 'Kamida 6 ta belgi'),
@@ -33,6 +35,7 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
 
   const {
     register: field,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<RegisterForm>({
@@ -47,7 +50,7 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
       await register({
         fullName: values.fullName,
         email: values.email,
-        phone: values.phone || undefined,
+        phone: values.phone ? normalizeUzPhone(values.phone) : undefined,
         password: values.password,
       });
       router.push('/dashboard');
@@ -149,13 +152,18 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1.5">{t('phone')}</label>
                 <div className="relative">
-                  <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                  <input
-                    {...field('phone')}
-                    type="tel"
-                    autoComplete="tel"
-                    className="glass-input w-full rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none"
-                    placeholder="+998 90 123 45 67"
+                  <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 z-10" />
+                  <Controller
+                    control={control}
+                    name="phone"
+                    render={({ field: f }) => (
+                      <PhoneInput
+                        className="glass-input w-full rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none"
+                        placeholder="+998 90 123 45 67"
+                        value={f.value || ''}
+                        onValueChange={(v) => f.onChange(v)}
+                      />
+                    )}
                   />
                 </div>
                 {errors.phone && <p className="text-xs text-red-400 mt-1">{errors.phone.message}</p>}
@@ -191,8 +199,17 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
                 {submitting ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
                 {t('registerBtn')}
               </button>
-            </form>
-          </div>
+</form>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3 my-6">
+                <div className="h-px flex-1 bg-white/10" />
+                <span className="text-xs text-gray-500 font-medium">{t('or') || 'yoki'}</span>
+                <div className="h-px flex-1 bg-white/10" />
+              </div>
+
+              <GoogleButton />
+            </div>
         </div>
       </div>
     </div>

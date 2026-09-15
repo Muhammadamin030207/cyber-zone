@@ -7,7 +7,8 @@
     "register": "Register",
     "logout": "Logout",
     "dashboard": "Dashboard",
-    "admin": "Admin panel"
+    "admin": "Admin panel",
+    "superAdmin": "Super Admin"
   },
   "common": {
     "loading": "Loading...",
@@ -121,7 +122,10 @@
     "noAccount": "Don't have an account?",
     "haveAccount": "Already have an account?",
     "invalid": "Invalid email or password",
-    "welcome": "Welcome!"
+    "welcome": "Welcome!",
+    "or": "or",
+    "googleSetup": "Google OAuth not configured. Set NEXT_PUBLIC_GOOGLE_CLIENT_ID.",
+    "googleLoading": "Signing in with Google..."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -166,5 +170,29 @@
     "quickLinks": "Quick links",
     "contact": "Contact",
     "rights": "All rights reserved"
+  },
+  "superAdmin": {
+    "title": "Super Admin",
+    "accessDenied": "Super Admin only",
+    "tabOverview": "Overview",
+    "tabUsers": "Users",
+    "tabRooms": "Rooms",
+    "statUsers": "Users",
+    "statAdmins": "Admins",
+    "statRooms": "Rooms",
+    "statBookings": "Total bookings",
+    "statRevenue": "Revenue",
+    "statActive": "Active bookings",
+    "recentRooms": "Recent rooms",
+    "noRooms": "No rooms yet",
+    "searchUsers": "Search (name, email, phone)...",
+    "allRoles": "All roles",
+    "createAdmin": "Create admin",
+    "password": "Password",
+    "noUsers": "No users found",
+    "name": "Name",
+    "activate": "Activate",
+    "deactivate": "Close",
+    "delete": "Delete"
   }
 }

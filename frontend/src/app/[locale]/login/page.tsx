@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { Gamepad2, LogIn, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
+import GoogleButton from '@/components/auth/GoogleButton';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email kiriting').email('Email noto\u2019g\u2019ri'),
@@ -155,6 +156,15 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
                 {t('loginBtn')}
               </button>
             </form>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3 my-6">
+              <div className="h-px flex-1 bg-white/10" />
+              <span className="text-xs text-gray-500 font-medium">{t('or') || 'yoki'}</span>
+              <div className="h-px flex-1 bg-white/10" />
+            </div>
+
+            <GoogleButton />
           </div>
         </div>
       </div>
