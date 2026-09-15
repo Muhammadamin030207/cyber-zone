@@ -97,6 +97,7 @@ model User {
   news         News[]
   reviews      Review[]
   notifications Notification[]
+  promoCodes   PromoCode[]
 
   @@map("users")
 }
@@ -111,6 +112,7 @@ model ComputerRoom {
   longitude    Float?
   phone        String?
   workingHours Json?        @map("working_hours") // { open: "09:00", close: "23:00" }
+  timezone     String       @default("Asia/Tashkent")
   images       Json?        // massiv [url1, url2]
   status       RoomStatus   @default(PENDING)
   createdAt    DateTime     @default(now()) @map("created_at")
@@ -121,6 +123,7 @@ model ComputerRoom {
   bookings     Booking[]
   news         News[]
   reviews      Review[]
+  promoCodes   PromoCode[]
 
   @@map("computer_rooms")
 }
@@ -131,8 +134,8 @@ model Zone {
   type         ZoneType
   name         String
   description  String?
-  capacity     Int       @default(0)
-  pricePerHour Float     @map("price_per_hour")
+  capacity     Int        @default(0)
+  pricePerHour Decimal    @map("price_per_hour") @db.Decimal(10, 2)
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
@@ -164,13 +167,16 @@ model Booking {
   roomId           String        @map("room_id")
   zoneId           String        @map("zone_id")
   computerId       String?       @map("computer_id")
+  promoCodeId      String?       @map("promo_code_id")
   date             DateTime      @db.Date
   startTime        String        @map("start_time") // "14:00"
   endTime          String        @map("end_time")   // "17:00"
-  durationHours    Float         @map("duration_hours")
-  totalPrice       Float         @map("total_price")
-  advanceAmount    Float         @map("advance_amount") // 30%
-  remainingAmount  Float         @map("remaining_amount") // 70%
+  durationHours    Decimal       @map("duration_hours") @db.Decimal(4, 1)
+  totalPrice       Decimal       @map("total_price") @db.Decimal(10, 2)
+  discountAmount   Decimal       @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  finalPrice       Decimal       @map("final_price") @db.Decimal(10, 2)
+  advanceAmount    Decimal       @map("advance_amount") @db.Decimal(10, 2) // 30%
+  remainingAmount  Decimal       @map("remaining_amount") @db.Decimal(10, 2) // 70%
   status           BookingStatus @default(PENDING)
   notes            String?
   createdAt        DateTime      @default(now()) @map("created_at")
@@ -180,16 +186,40 @@ model Booking {
   room     ComputerRoom  @relation(fields: [roomId], references: [id])
   zone     Zone          @relation(fields: [zoneId], references: [id])
   computer Computer?     @relation(fields: [computerId], references: [id])
+  promoCode PromoCode?   @relation(fields: [promoCodeId], references: [id])
   payments Payment[]
 
   @@map("bookings")
+}
+
+model PromoCode {
+  id                String    @id @default(uuid())
+  roomId            String?   @map("room_id")
+  code              String    @unique
+  discountType      String    @map("discount_type") // PERCENTAGE | FIXED
+  discountValue     Decimal   @map("discount_value") @db.Decimal(10, 2)
+  minBookingAmount  Decimal?  @map("min_booking_amount") @db.Decimal(10, 2)
+  maxUses           Int?      @map("max_uses")
+  usedCount         Int       @default(0) @map("used_count")
+  startsAt          DateTime  @map("starts_at")
+  expiresAt         DateTime  @map("expires_at")
+  isActive          Boolean   @default(true) @map("is_active")
+  createdBy         String    @map("created_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  room      ComputerRoom? @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  creator   User          @relation(fields: [createdBy], references: [id])
+  bookings  Booking[]
+
+  @@map("promo_codes")
 }
 
 model Payment {
   id            String           @id @default(uuid())
   bookingId     String           @map("booking_id")
   userId        String           @map("user_id")
-  amount        Float
+  amount        Decimal           @db.Decimal(10, 2)
   type          PaymentType
   method        PaymentMethod?
   status        PaymentStatus    @default(PENDING)

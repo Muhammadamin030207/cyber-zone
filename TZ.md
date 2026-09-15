@@ -21,6 +21,7 @@
 - To'lov tizimini boshqarish
 
 ### 2.2 Admin — Kompyuter Xona Egasi (`admin`)
+- **Muhim:** Har bir Admin faqat **bitta** kompyuter xona egasi bo'la oladi (1 admin = 1 xona) — `ownerId` unique constraint orqali
 - O'z kompyuter xonasini yaratishi va boshqarishi
 - Xonalar (zonalar) qo'shishi: Obshiy zal, VIP zona, Kabinalar
 - Kompyuterlar qo'shishi va ularning holatini boshqarishi
@@ -114,12 +115,16 @@
   - To'lov tasdig'i
 
 ### 3.5 Qidiruv Tizimi
-- Lokatsiya bo'yicha qidirish (Google Maps API)
-- Rayon bo'yicha filtrlash
-- Narx bo'yicha filtrlash
-- Zona turi bo'yicha filtrlash
-- Kompyuter xususiyatlari bo'yicha qidirish
-- Xaritada ko'rish (markerlar bilan)
+- **Asosiy qidiruv:** matn bo'yicha (xona nomi, manzil)
+- **Lokatsiya bo'yicha:** Google Maps API, radius (km), eng yaqin xonalar
+- **Rayon bo'yicha:** viloya → tuman → mahalla ierarxiyasi
+- **Narx bo'yicha:** oraliq (`minPrice`, `maxPrice`), soatlik narx asosida
+- **Zona turi bo'yicha:** obshiy / VIP / kabina — bitta yoki bir nechta tanlash
+- **Kompyuter xususiyatlari bo'yicha:** GPU (RTX 4060+), RAM (16GB+), monitor (144Hz+), qo'shimcha (VR, konsol)
+- **Holat bo'yicha:** faol/nofaol xonalar
+- **Saralash (sort):** narx bo'yicha (arzon/qimmat), masofa, reyting, mashhurlik
+- **Xaritada ko'rish:** barcha natijalar markerlar bilan xaritada, marker bosilganda xona qisqacha ko'rsatiladi
+- **API:** `GET /api/search?query=&location=&lat=&lng=&radius=&type=&price_min=&price_max=&gpu=&ram=&sort=`
 
 ### 3.6 Yangiliklar / Reklamalar
 - Adminlar o'z xonalariga yangiliklar/reklamalar qo'shishi
@@ -134,13 +139,53 @@
   - Jami bronlar soni
   - Jami tushum
   - Faol adminlar
-  - Grafik va diagrammalar
+  - Grafik va diagrammalar (Recharts)
 
 - **Admin uchun:**
   - O'z xonasidagi bronlar statistikasi
   - Kunlik/haftalik/oylik tushum
-  - Kompyuterlar bandligi
-  - Eng ko'p band bo'lgan vaqt
+  - Kompyuterlar bandligi (rejalashtirilgan vs band)
+  - Eng ko'p band bo'lgan vaqt (heatmap)
+  - Bron status taqsimoti (pending/active/completed)
+
+### 3.8 Promo-kodlar va Chegirmalar
+- **Promo-kod tizimi:**
+  - Kod nomi (masalan: `YANGIYIL50`)
+  - Chegirma turi: foiz (%) yoki summa (so'm)
+  - Chegirma miqdori
+  - Amal qilish muddati (start_date → end_date)
+  - Qo'llanilishi: bitta xona uchun yoki platforma bo'ylab
+  - Maksimal ishlatish soni (limit)
+  - Bron narxiga qo'llaniladi (faqat oldindan to'lovga)
+
+- **Admin imkoniyatlari:**
+  - Promo-kod yaratish (o'z xonasi uchun)
+  - Kodni faollashtirish/to'xtatish
+  - Kod statistikasi (necha marta ishlatildi, jami tejamkorlik)
+
+- **Foydalanuvchi imkoniyatlari:**
+  - Bron qilishda promo-kodni kiritish
+  - Koddan foydalanishdan oldin narxni tekshirish
+  - Noto'g'ri/muddati tugagan kod uchun xatolik
+
+### 3.9 Bron To'qnashuvini Oldini Olish (Conflict Protection)
+- **Asosiy qoida:** Bitta kompyuter bitta vaqtda faqat bitta bron bo'lishi mumkin
+- **Algoritim:**
+  1. Bron yaratishdan oldin vaqt oralig'i (start_time → end_time) bo'yicha mavjud bronlar tekshiriladi
+  2. Agar shu kompyuterdagi har qanday mavjud bron bilan vaqt to'qnashuvi bo'lsa — xatolik qaytariladi
+  3. To'qnashuv aniqlansa: `409 Conflict — Bu kompyuter {vaqt} da band`
+  4. Avtomatik tanlash: agar foydalanuvchi kompyuter tanlamagan bo'lsa — bo'sh kompyuter avtomatik tanlanadi
+
+- **Transaktsiya himoyasi:**
+  - Bron yaratish `Prisma.$transaction` ichida amalga oshiriladi
+  - `SELECT ... FOR UPDATE` — kompyuter holati lock qilinadi
+  - Bu `race condition` (bir vaqtda ikki foydalanuvchi) ni oldini oladi
+
+- **Avtomatik boshqaruv:**
+  - Bron vaqti tugaganda kompyuter "bo'sh" ga o'tishi (cron job / timer)
+  - Band bo'lgan kompyuterni boshqa foydalanuvchi ko'rmasligi
+  - Real vaqtda yangilanish (Socket.io — booking_status_changed event)
+  - Bekor qilingan bron uchun kompyuter darhol bo'shatiladi
 
 ---
 
@@ -186,6 +231,8 @@
 
 ### 5.1 Asosiy jadvallar
 
+> **Eslatma:** Barcha pul maydonlari `Decimal` (Prisma uchun `Decimal @db.Decimal(10,2)`) tipida — `Float` ishlatilmaydi. `Decimal(10,2)` — 10 ta umumiy, 2 ta kasr raqami (masalan: 99999999.99 so'm).
+
 ```
 users
 ├── id (UUID)
@@ -203,15 +250,16 @@ users
 
 computer_rooms
 ├── id (UUID)
-├── owner_id → users.id (admin)
+├── owner_id → users.id (admin) — UNIQUE (1 admin = 1 xona)
 ├── name
 ├── description
 ├── address
 ├── latitude
 ├── longitude
 ├── phone
-├── working_hours (JSON)
-├── images (JSON array)
+├── working_hours (JSON: { open: "09:00", close: "23:00" })
+├── timezone (string, default: "Asia/Tashkent")
+├── images (JSON array [url1, url2])
 ├── status (active | inactive | pending)
 ├── created_at
 ├── updated_at
@@ -219,10 +267,11 @@ computer_rooms
 zones
 ├── id (UUID)
 ├── room_id → computer_rooms.id
-├── name (obshiy_zal | vip | kabina)
+├── type (obshiy_zal | vip | kabina)
+├── name
 ├── description
 ├── capacity
-├── price_per_hour
+├── price_per_hour (Decimal(10,2)) — soatlik narx
 ├── status
 ├── created_at
 ├── updated_at
@@ -231,7 +280,7 @@ computers
 ├── id (UUID)
 ├── zone_id → zones.id
 ├── name/number
-├── specs (JSON: cpu, gpu, ram, monitor, peripherals)
+├── specs (JSON: { cpu, gpu, ram, monitor, storage, peripherals })
 ├── status (available | occupied | maintenance | broken)
 ├── created_at
 ├── updated_at
@@ -239,17 +288,21 @@ computers
 bookings
 ├── id (UUID)
 ├── user_id → users.id
-├── computer_id → computers.id
-├── zone_id → zones.id
 ├── room_id → computer_rooms.id
-├── date
-├── start_time
-├── end_time
-├── duration_hours
-├── total_price
-├── advance_payment (30%)
-├── remaining_payment (70%)
+├── zone_id → zones.id
+├── computer_id → computers.id (nullable — avtomatik tanlangan)
+├── promo_code_id → promo_codes.id (nullable)
+├── date (Date)
+├── start_time (string "HH:mm")
+├── end_time (string "HH:mm")
+├── duration_hours (Decimal(4,1))
+├── total_price (Decimal(10,2))
+├── discount_amount (Decimal(10,2), default: 0)
+├── final_price (Decimal(10,2)) — total_price - discount_amount
+├── advance_amount (Decimal(10,2)) — final_price * 0.30
+├── remaining_amount (Decimal(10,2)) — final_price * 0.70
 ├── status (pending | confirmed | active | completed | cancelled)
+├── notes
 ├── created_at
 ├── updated_at
 
@@ -257,13 +310,29 @@ payments
 ├── id (UUID)
 ├── booking_id → bookings.id
 ├── user_id → users.id
-├── amount
+├── amount (Decimal(10,2))
 ├── type (advance | remaining)
 ├── method (payme | click | uzcard | cash)
 ├── status (pending | completed | failed | refunded)
 ├── transaction_id
 ├── paid_at
 ├── created_at
+
+promo_codes
+├── id (UUID)
+├── room_id → computer_rooms.id (nullable — null = platform-wide)
+├── code (string, unique, uppercase)
+├── discount_type (percentage | fixed)
+├── discount_value (Decimal(10,2)) — foiz yoki so'm
+├── min_booking_amount (Decimal(10,2), nullable) — kamida shuncha summa bo'lsa ishlaydi
+├── max_uses (int, nullable) — cheksiz bo'lsa null
+├── used_count (int, default: 0)
+├── starts_at (DateTime)
+├── expires_at (DateTime)
+├── is_active (boolean, default: true)
+├── created_by → users.id (admin)
+├── created_at
+├── updated_at
 
 news
 ├── id (UUID)
@@ -282,7 +351,7 @@ reviews
 ├── id (UUID)
 ├── user_id → users.id
 ├── room_id → computer_rooms.id
-├── rating (1-5)
+├── rating (int 1-5)
 ├── comment
 ├── created_at
 
@@ -291,7 +360,7 @@ notifications
 ├── user_id → users.id
 ├── title
 ├── message
-├── type
+├── type (info | booking | payment | promotion)
 ├── is_read
 ├── created_at
 ```
@@ -314,11 +383,11 @@ notifications
 ### 6.2 Foydalanuvchi sahifalari (User)
 | Sahifa | URL | Tavsif |
 |--------|-----|--------|
-| Shaxsiy kabinet | `/dashboard` | Bronlar tarixi, profil |
-| Bron yaratish | `/booking/[room-id]` | Bron formasi |
-| Bron tafsilotlari | `/booking/[id]` | Bron ma'lumotlari, to'lov |
-| To'lov | `/payment/[booking-id]` | To'lov sahifasi |
-| Sozlamalar | `/settings` | Profil, til o'zgartirish |
+| Shaxsiy kabinet | `/dashboard` | Bronlar tarixi, profil, bildirishnomalar |
+| Bron yaratish | `/booking/[room-id] | Bron formasi + promo-kod kiritish |
+| Bron tafsilotlari | `/booking/[id]` | Bron ma'lumotlari, to'lov, status |
+| To'lov | `/payment/[booking-id]` | To'lov sahifasi (Payme/Click/UZCARD) |
+| Sozlamalar | `/settings` | Profil, til o'zgartirish, parol |
 
 ### 6.3 Admin sahifalari (Kompyuter xona egasi)
 | Sahifa | URL | Tavsif |
@@ -329,6 +398,7 @@ notifications
 | Kompyuterlar | `/admin/computers` | Kompyuterlar ro'yxati |
 | Bronlar | `/admin/bookings` | Bronlarni boshqarish |
 | Narxlar | `/admin/pricing` | Tariflarni boshqarish |
+| Promo-kodlar | `/admin/promos` | Promo-kodlar yaratish/boshqarish |
 | Yangiliklar | `/admin/news` | Yangiliklar qo'shish |
 | Foydalanuvchilar | `/admin/users` | Foydalanuvchilar ro'yxati |
 | Sozlamalar | `/admin/settings` | Xona sozlamalari |
@@ -436,6 +506,17 @@ GET    /api/super-admin/stats       (super_admin)
 GET    /api/admin/stats             (admin)
 ```
 
+### 7.11 Promo-kodlar
+```
+GET    /api/promo/check?code=&room_id=   (user — kodni tekshirish)
+POST   /api/promo/apply                   (user — bron qilishda qo'llash)
+GET    /api/admin/promos                  (admin — o'z promo-kodlari)
+POST   /api/admin/promos                  (admin — yangi kod yaratish)
+PATCH  /api/admin/promos/:id              (admin — tahrirlash)
+DELETE /api/admin/promos/:id              (admin — o'chirish)
+GET    /api/admin/promos/:id/stats        (admin — kod statistikasi)
+```
+
 ---
 
 ## 8. UX/UI TALABLARI
@@ -489,6 +570,7 @@ cyber-zone/
 │   │   │   └── en.json
 │   │   └── styles/            # Global stillar
 │   ├── public/                # Static fayllar
+│   ├── __tests__/             # Frontend testlar
 │   ├── next.config.js
 │   ├── tailwind.config.js
 │   ├── package.json
@@ -500,61 +582,158 @@ cyber-zone/
 │   │   ├── services/          # Business logic
 │   │   ├── routes/            # API route'lar
 │   │   ├── middlewares/       # Auth, validation, error
-│   │   ├── prisma/            # Prisma schema va migratsiyalar
-│   │   │   └── schema.prisma
-│   │   ├── utils/             # Utility funksiyalar
+│   │   ├── lib/               # Prisma, JWT, Redis client
+│   │   ├── utils/             # Utility funksiyalar (pricing, booking utils)
 │   │   ├── types/             # TypeScript type'lar
 │   │   └── config/            # Konfiguratsiya
+│   ├── prisma/
+│   │   ├── schema.prisma      # Database schema
+│   │   └── seed.ts            # Seed skript
+│   ├── __tests__/             # Backend testlar
 │   ├── uploads/               # Yuklangan fayllar
+│   ├── logs/                  # Log fayllar (Winston)
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── .env.example
 │
+├── .github/
+│   └── workflows/
+│       └── ci.yml             # GitHub Actions CI/CD
+│
 ├── .gitignore
 ├── README.md
-└── docker-compose.yml         # (ixtiyoriy) Docker sozlamasi
+└── docker-compose.yml         # PostgreSQL + Redis
 ```
 
 ---
 
 ## 10. ISHLAB CHIQISH QADAMLARI
 
-### Bosqich 1: Asosiy tuzilma (Setup)
-1. Backend: Prisma schema, database migratsiya
-2. Backend: Auth tizimi (register, login, JWT)
-3. Backend: CRUD API endpointlari
-4. Frontend: Layout, komponentlar, routing
-5. Frontend: Auth sahifalari (login, register)
+### Bosqich 1: Asosiy tuzilma (Setup) ✅ TAYYOR
+1. ✅ Backend: Prisma schema, database migratsiya
+2. ✅ Backend: Auth tizimi (register, login, JWT, Google OAuth)
+3. Backend: CRUD API endpointlari (rooms, zones, computers)
+4. Frontend: Layout, komponentlar, routing (Next.js 14+ App Router)
+5. Frontend: Auth sahifalari (login, register, Google)
 6. Frontend: i18n (3 til) sozlash
 
 ### Bosqich 2: Asosiy funksiyalar
 1. Kompyuter xona CRUD (admin)
 2. Zonalar va kompyuterlar CRUD
-3. Kompyuter xonalar ro'yxati (public)
-4. Xona sahifasi (batafsil)
-5. Qidiruv tizimi
+3. Kompyuter xonalar ro'yxati (public — barcha xonalar)
+4. Xona sahifasi (batafsil: zonalar, kompyuterlar, narxlar)
+5. Qidiruv tizimi (lokatsiya, narx, zona turi)
 
 ### Bosqich 3: Bron va to'lov
-1. Bron yaratish tizimi
-2. Bron boshqaruv paneli (admin)
-3. To'lov tizimi (Payme/Click integratsiya)
-4. Real vaqt yangilanish (WebSocket)
+1. Bron yaratish tizimi (vaqt to'qnashuvini oldini olish + Prisma transaction)
+2. Promo-kod tizimi (yaratish, tekshirish, qo'llash)
+3. Bron boshqaruv paneli (admin — qabul qilish/rad etish)
+4. To'lov tizimi (Payme/Click integratsiya sandbox)
+5. Real vaqt yangilanish (Socket.io — booking_status_changed)
 
 ### Bosqich 4: Admin panel
-1. Admin dashboard (statistika)
-2. Boshqaruv sahifalari
+1. Admin dashboard (statistika, diagrammalar)
+2. Boshqaruv sahifalari (zonalar, kompyuterlar, bronlar)
 3. Yangiliklar/reklamalar
+4. Promo-kodlar boshqaruvi
 
 ### Bosqich 5: Super Admin
-1. Super admin dashboard
-2. Platform boshqaruvi
-3. Umumiy statistika
+1. Super admin dashboard (umumiy statistika)
+2. Platform boshqaruvi (adminlarni boshqarish)
+3. Umumiy yangiliklar/reklamalar
 
-### Bosqich 6: Polish
-1. Responsive dizayn tekshirish
+### Bosqich 6: Frontend to'liq
+1. Asosiy sahifa (hero, xarita, top xonalar)
+2. Xonalar ro'yxati (filtrlash, xaritada ko'rish)
+3. Xona sahifasi (galereya, zonalar, bron formasi)
+4. Foydalanuvchi dashboard (bronlar tarixi, profil)
+5. Admin panel sahifalari
+
+### Bosqich 7: Testing va sifat nazorati
+- **Unit test (Vitest):** auth, pricing, booking algoritmi, promo-kod
+- **Integration test:** API endpointlar (supertest)
+- **Frontend test:** komponent render testlari
+- **E2E test (ixtiyoriy):** Playwright bilan to'liq flow
+- **Linting:** ESLint + Prettier (har ikkala qism uchun)
+- **CI/CD:** GitHub Actions — lint + test + build (PR va push)
+
+### Bosqich 8: Seed data (Demo ma'lumotlar)
+- Super admin (seed skript orqali, allaqachon bor)
+- 2-3 ta namuna kompyuter xona (Toshkent shahridagi)
+- Har bir xonada 2-3 zona (obshiy, VIP, kabina)
+- Har bir zonada 3-5 ta kompyuter (turli specs)
+- 5-10 ta namuna bron (turli statuslar bilan)
+- Namuna promo-kodlar
+- 3-5 ta namuna yangilik
+
+### Bosqich 9: Monitoring va logging
+- **Error tracking:** Sentry (frontend + backend)
+- **Logging:** Winston (backend) — info/error/warn loglar, faylga yozish
+- **Request log:** Morgan (Express) — barcha so'rovlar logi
+- **Performance:** response time monitoring
+- **Uptime:** healthcheck endpoint (`/api/health`) — PostgreSQL va Redis ulanishini tekshirish
+
+### Bosqich 10: Polish
+1. Responsive dizayn tekshirish (mobil, planshet, desktop)
 2. Xatolarni tuzatish
-3. Test qilish
-4. Deploy
+3. Performance optimizatsiya (lazy loading, image optimization)
+4. SEO (meta taglar, Open Graph, sitemap.xml)
+5. Deploy (Vercel — frontend, Railway/DigitalOcean — backend)
+
+---
+
+## 13. TESTING STRATEGIYASI
+
+### 13.1 Test turlari
+| Turi | Texnologiya | Nima tekshiriladi |
+|------|-------------|-------------------|
+| Unit | Vitest | Individual funksiyalar (pricing, utils, validation) |
+| Integration | Vitest + Supertest | API endpointlar, database operatsiyalari |
+| Component | Vitest + React Testing Library | React komponentlari render |
+| E2E | Playwright (ixtiyoriy) | To'liq foydalanuvchi flow |
+
+### 13.2 Test qilinadigan asosiy joylar
+- Auth flow (register → login → getMe → refresh → changePassword)
+- Bron yaratish (vaqt to'qnashuvini oldini olish — parallel request test)
+- Promo-kod (chegirma hisob-kitobi, muddat, limit)
+- Narx hisob-kitobi (soatlik × vaqt + zona farqi)
+- Qidiruv (filtrlash, lokatsiya radius)
+- Rollar bo'yicha ruxsatlar (admin boshqa xona bronini ko'ra olmaydi)
+- Input validatsiyasi (Zod — noto'g'ri ma'lumot kiritish)
+
+### 13.3 CI/CD (GitHub Actions)
+```yaml
+# .github/workflows/ci.yml
+# Triggers: push to main, pull_request
+# Steps: install → lint → test → build
+```
+
+---
+
+## 14. MONITORING VA LOGGING
+
+### 14.1 Backend logging
+- **Winston:** asosiy log kutubxoni
+  - `logs/error.log` — faqat xatoliklar
+  - `logs/combined.log` — barcha loglar
+  - Console — development uchun (rangli)
+- **Morgan:** HTTP request log (format: `:method :url :status :res[content-length] - :response-time ms`)
+
+### 14.2 Error tracking
+- **Sentry:** production xatoliklari avtomatik yuboriladi
+  - Backend: `@sentry/node`
+  - Frontend: `@sentry/nextjs`
+  - Source map yuklash (build paytida)
+
+### 14.3 Healthcheck
+```
+GET /api/health
+→ { status: "ok", db: "connected", redis: "connected", uptime: 12345 }
+```
+
+### 14.4 Monitoring (kelajak)
+- Grafana + Prometheus — server resource monitoring
+- UptimeRobot — sayt tutilmasligini kuzatish
 
 ---
 
@@ -585,5 +764,6 @@ cyber-zone/
 
 ---
 
-*TZ v1.0 — 2026-yil 15-sentabr*
+*TZ v1.1 — 2026-yil 15-sentabr*
 *Loyiha nomi: Cyber-ZONE*
+*O'zgarishlar v1.1: Narx Decimal, bron himoyasi, promo-kodlar, testing strategiyasi, seed data, monitoring*
