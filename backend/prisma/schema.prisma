@@ -1,0 +1,251 @@
+// Cyber-ZONE Database Schema
+// Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===================== ENUMS =====================
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  USER
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+}
+
+enum RoomStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
+enum ZoneType {
+  GENERAL_HALL
+  VIP
+  CABIN
+}
+
+enum ComputerStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+  BROKEN
+}
+
+enum BookingStatus {
+  PENDING        // kutilmoqda (30% to'lov kutilmoqda)
+  CONFIRMED      // tasdiqlangan (30% to'landi)
+  ACTIVE         // foydalanuvchi xonada
+  COMPLETED      // tugatilgan
+  CANCELLED      // bekor qilingan
+}
+
+enum PaymentType {
+  ADVANCE        // 30% oldindan
+  REMAINING      // 70% qoldiq
+}
+
+enum PaymentMethod {
+  PAYME
+  CLICK
+  UZCARD
+  CASH
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum NewsType {
+  NEWS
+  PROMOTION
+  BANNER
+}
+
+// ===================== MODELS =====================
+
+model User {
+  id           String       @id @default(uuid())
+  email        String       @unique
+  passwordHash String?      @map("password_hash")
+  googleId     String?      @unique @map("google_id")
+  fullName     String       @map("full_name")
+  phone        String?
+  avatarUrl    String?      @map("avatar_url")
+  role         Role         @default(USER)
+  language     String       @default("uz") // uz | ru | en
+  status       UserStatus   @default(ACTIVE)
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  computerRoom ComputerRoom? // admin egalik qiladi
+  bookings     Booking[]
+  payments     Payment[]
+  news         News[]
+  reviews      Review[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model ComputerRoom {
+  id           String       @id @default(uuid())
+  ownerId      String       @unique @map("owner_id")
+  name         String
+  description  String?
+  address      String
+  latitude     Float?
+  longitude    Float?
+  phone        String?
+  workingHours Json?        @map("working_hours") // { open: "09:00", close: "23:00" }
+  images       Json?        // massiv [url1, url2]
+  status       RoomStatus   @default(PENDING)
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  owner        User         @relation(fields: [ownerId], references: [id])
+  zones        Zone[]
+  bookings     Booking[]
+  news         News[]
+  reviews      Review[]
+
+  @@map("computer_rooms")
+}
+
+model Zone {
+  id           String    @id @default(uuid())
+  roomId       String    @map("room_id")
+  type         ZoneType
+  name         String
+  description  String?
+  capacity     Int       @default(0)
+  pricePerHour Float     @map("price_per_hour")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  room        ComputerRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  computers   Computer[]
+  bookings    Booking[]
+
+  @@map("zones")
+}
+
+model Computer {
+  id        String          @id @default(uuid())
+  zoneId    String          @map("zone_id")
+  name      String
+  specs     Json            // { cpu, gpu, ram, monitor, storage, peripherals }
+  status    ComputerStatus  @default(AVAILABLE)
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+
+  zone     Zone      @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@map("computers")
+}
+
+model Booking {
+  id               String        @id @default(uuid())
+  userId           String        @map("user_id")
+  roomId           String        @map("room_id")
+  zoneId           String        @map("zone_id")
+  computerId       String?       @map("computer_id")
+  date             DateTime      @db.Date
+  startTime        String        @map("start_time") // "14:00"
+  endTime          String        @map("end_time")   // "17:00"
+  durationHours    Float         @map("duration_hours")
+  totalPrice       Float         @map("total_price")
+  advanceAmount    Float         @map("advance_amount") // 30%
+  remainingAmount  Float         @map("remaining_amount") // 70%
+  status           BookingStatus @default(PENDING)
+  notes            String?
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  user     User          @relation(fields: [userId], references: [id])
+  room     ComputerRoom  @relation(fields: [roomId], references: [id])
+  zone     Zone          @relation(fields: [zoneId], references: [id])
+  computer Computer?     @relation(fields: [computerId], references: [id])
+  payments Payment[]
+
+  @@map("bookings")
+}
+
+model Payment {
+  id            String           @id @default(uuid())
+  bookingId     String           @map("booking_id")
+  userId        String           @map("user_id")
+  amount        Float
+  type          PaymentType
+  method        PaymentMethod?
+  status        PaymentStatus    @default(PENDING)
+  transactionId String?          @map("transaction_id")
+  paidAt        DateTime?        @map("paid_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@map("payments")
+}
+
+model News {
+  id          String    @id @default(uuid())
+  roomId      String?   @map("room_id")
+  authorId    String    @map("author_id")
+  title       String
+  content     String
+  imageUrl    String?   @map("image_url")
+  type        NewsType  @default(NEWS)
+  isActive    Boolean   @default(true) @map("is_active")
+  publishedAt DateTime  @default(now()) @map("published_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  room   ComputerRoom? @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  author User         @relation(fields: [authorId], references: [id])
+
+  @@map("news")
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  roomId    String   @map("room_id")
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User         @relation(fields: [userId], references: [id])
+  room ComputerRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@map("reviews")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String
+  message   String
+  type      String   @default("info")
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
