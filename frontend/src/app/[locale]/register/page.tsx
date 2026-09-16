@@ -216,7 +216,7 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
                 <div className="h-px flex-1 bg-white/10" />
               </div>
 
-              <GoogleButton />
+              <GoogleButton mode="signup" />
             </div>
         </div>
       </div>

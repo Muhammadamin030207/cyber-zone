@@ -94,20 +94,26 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
       user = await prisma.user.findUnique({ where: { email: email! } });
 
       if (user) {
-        // Mavjud user ga google_id biriktiramiz
+        // Mavjud user ga google_id va avatarni biriktiramiz
         user = await prisma.user.update({
           where: { id: user.id },
-          data: { googleId },
+          data: {
+            googleId,
+            avatarUrl: user.avatarUrl || picture || null,
+            fullName: user.fullName || name || email!.split('@')[0],
+          },
         });
       } else {
-        // Bazada ro'yhatdan o'tmagan foydalanuvchi — avtomatik akkaunt yaratilmaydi.
-        // Register sahifasiga maydonlar avtoto'ldirilgan holda yo'naltiramiz.
-        return ok(res, {
-          pendingRegister: true,
-          profile: {
-            fullName: name || email?.split('@')[0] || '',
-            email,
+        // Yangi foydalanuvchi: Google ma'lumotlari bilan to'g'ridan-to'g'ri hisob yaratamiz
+        user = await prisma.user.create({
+          data: {
+            email: email!,
+            googleId,
+            fullName: name || email!.split('@')[0] || 'Foydalanuvchi',
             avatarUrl: picture || null,
+            role: 'USER',
+            language: 'uz',
+            status: 'ACTIVE',
           },
         });
       }

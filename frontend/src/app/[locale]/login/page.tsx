@@ -164,7 +164,7 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
               <div className="h-px flex-1 bg-neon-cyan/15" />
             </div>
 
-            <GoogleButton />
+            <GoogleButton mode="signin" />
           </div>
         </div>
       </div>

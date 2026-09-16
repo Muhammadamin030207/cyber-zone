@@ -57,6 +57,54 @@ html[data-theme="ember"] {
   --fg-dim: #737373;
 }
 
+html[data-theme="halloween"] {
+  --acc-a: #ff7700;          /* neon qovoq */
+  --acc-a-soft: #ffa142;
+  --acc-b: #a855f7;          /* sirli binafsha */
+  --acc-b-soft: #c084fc;
+  --bg-0: #0a0604;           /* chuqur tungi qora */
+  --bg-1: #140e0a;
+  --bg-2: #1e150f;
+  --bg-3: #271c15;
+  --line: rgba(255, 119, 0, 0.12);
+  --line-strong: rgba(255, 119, 0, 0.22);
+  --fg: #fbf6f0;
+  --fg-mut: #b8a89c;
+  --fg-dim: #7f6e62;
+}
+
+html[data-theme="cyberpunk"] {
+  --acc-a: #06b6d4;          /* electric cyan */
+  --acc-a-soft: #22d3ee;
+  --acc-b: #ec4899;          /* electric magenta */
+  --acc-b-soft: #f472b6;
+  --bg-0: #070711;
+  --bg-1: #0e0e1e;
+  --bg-2: #16162d;
+  --bg-3: #1f1e3c;
+  --line: rgba(6, 182, 212, 0.14);
+  --line-strong: rgba(236, 72, 153, 0.22);
+  --fg: #f1f5f9;
+  --fg-mut: #94a3b8;
+  --fg-dim: #64748b;
+}
+
+html[data-theme="aurora"] {
+  --acc-a: #0ea5e9;          /* sky cyan */
+  --acc-a-soft: #38bdf8;
+  --acc-b: #10b981;          /* nordic emerald */
+  --acc-b-soft: #34d399;
+  --bg-0: #060a0f;
+  --bg-1: #0c141d;
+  --bg-2: #131e2b;
+  --bg-3: #1b2939;
+  --line: rgba(14, 165, 233, 0.12);
+  --line-strong: rgba(16, 185, 129, 0.20);
+  --fg: #f0fdf4;
+  --fg-mut: #94a3b8;
+  --fg-dim: #64748b;
+}
+
 @theme inline {
   /* Eski klass nomlarini premium aksentlarga xaritalash —
      barcha mavjud komponentlar avtomatik yangi uslubni oladi */

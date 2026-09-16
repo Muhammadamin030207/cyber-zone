@@ -7,6 +7,9 @@ const THEMES = [
   { id: 'obsidian', name: 'Obsidian', swatch: 'bg-emerald-500', desc: 'Zumrad + Oltin' },
   { id: 'midnight', name: 'Midnight', swatch: 'bg-indigo-500', desc: 'Indigo + Apelsin' },
   { id: 'ember', name: 'Ember', swatch: 'bg-orange-500', desc: 'Olov + Teal' },
+  { id: 'halloween', name: 'Halloween', swatch: 'bg-amber-500', desc: 'Qovoq + Binafsha' },
+  { id: 'cyberpunk', name: 'Cyberpunk', swatch: 'bg-pink-500', desc: 'Siyan + Magenta' },
+  { id: 'aurora', name: 'Aurora', swatch: 'bg-cyan-400', desc: 'Muz siyan + Yalpiz' },
 ] as const;
 
 type ThemeId = (typeof THEMES)[number]['id'];
@@ -49,7 +52,7 @@ export default function ThemeSwitcher() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 mt-2 w-44 rounded-xl glass border border-white/10 overflow-hidden z-50 shadow-glow animate-fade-in">
+          <div className="absolute right-0 mt-2 w-48 rounded-xl glass border border-white/10 overflow-hidden z-50 shadow-glow animate-fade-in max-h-[380px] overflow-y-auto scrollbar-thin">
             {THEMES.map((t) => (
               <button
                 key={t.id}
@@ -58,12 +61,12 @@ export default function ThemeSwitcher() {
                   theme === t.id ? 'bg-white/5 text-neon-cyan' : 'text-gray-300 hover:bg-white/5'
                 }`}
               >
-                <span className={`w-3.5 h-3.5 rounded-full ${t.swatch} ${theme === t.id ? 'ring-2 ring-white/40' : ''}`} />
+                <span className={`w-3.5 h-3.5 rounded-full shrink-0 ${t.swatch} ${theme === t.id ? 'ring-2 ring-white/40' : ''}`} />
                 <span className="flex-1">
                   <span className="block font-medium leading-tight">{t.name}</span>
                   <span className="block text-[11px] text-gray-500">{t.desc}</span>
                 </span>
-                {theme === t.id && <Check size={14} />}
+                {theme === t.id && <Check size={14} className="shrink-0" />}
               </button>
             ))}
           </div>

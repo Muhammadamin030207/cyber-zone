@@ -22,7 +22,12 @@ declare global {
   }
 }
 
-export default function GoogleButton() {
+interface GoogleButtonProps {
+  mode?: 'signin' | 'signup';
+  className?: string;
+}
+
+export default function GoogleButton({ mode = 'signin', className = '' }: GoogleButtonProps) {
   const t = useTranslations('auth');
   const router = useRouter();
   const googleLogin = useAuthStore((s) => s.googleLogin);
@@ -45,14 +50,7 @@ export default function GoogleButton() {
           setBusy(true);
           setError(null);
           try {
-            const res = await googleLogin(response.credential);
-            const data = res?.data?.data;
-            if (data?.pendingRegister) {
-              // Bazada bunday user yo'q → ro'yhatdan o'tishga (avtoto'ldirilgan holda)
-              sessionStorage.setItem('google_prefill', JSON.stringify(data.profile || {}));
-              router.push(`/register?google=prefill`);
-              return;
-            }
+            await googleLogin(response.credential);
             const user = useAuthStore.getState().user;
             if (user?.role === 'SUPER_ADMIN') router.push('/super-admin');
             else if (user?.role !== 'USER') router.push('/admin');
@@ -65,13 +63,17 @@ export default function GoogleButton() {
           }
         },
       });
+
+      // Hisoblash: container eni (360-380px oralig'ida)
+      const containerWidth = Math.min(380, Math.max(280, boxRef.current.clientWidth || 360));
+
       window.google.accounts.id.renderButton(boxRef.current, {
         type: 'standard',
-        theme: 'filled_black',
+        theme: 'outline',
         size: 'large',
-        width: 320,
-        text: 'signin_with',
-        shape: 'pill',
+        width: containerWidth,
+        text: mode === 'signup' ? 'signup_with' : 'signin_with',
+        shape: 'rectangular',
         logo_alignment: 'left',
       });
       window.google.accounts.id.disableAutoSelect();
@@ -87,32 +89,38 @@ export default function GoogleButton() {
       s.onload = start;
       document.head.appendChild(s);
     }
-  }, [googleLogin, router, t]);
+  }, [googleLogin, mode, router, t]);
 
   if (!CLIENT_ID) {
     return (
-      <div>
+      <div className={className}>
         <p className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
           <AlertCircle size={14} className="shrink-0 mt-0.5" />
-          {t('googleSetup') || 'Google OAuth Client ID o\u2019rnatilmagan. NEXT_PUBLIC_GOOGLE_CLIENT_ID belgilang.'}
+          {t('googleSetup') || 'Google OAuth Client ID o‘rnatilmagan.'}
         </p>
       </div>
     );
   }
 
   return (
-    <div>
-      <div
-        ref={boxRef}
-        className={`overflow-hidden rounded-xl w-full max-w-[320px] mx-auto ${busy ? 'opacity-60 pointer-events-none' : ''}`}
-      />
-      {busy && (
-        <div className="mt-2 flex items-center justify-center gap-2 text-xs text-gray-400">
-          <Loader2 size={14} className="animate-spin" /> {t('googleLoading') || 'Google orqali kirilmoqda...'}
-        </div>
-      )}
+    <div className={`w-full ${className}`}>
+      <div className="relative flex flex-col items-center justify-center">
+        <div
+          ref={boxRef}
+          className={`overflow-hidden rounded-xl w-full flex justify-center items-center min-h-[44px] transition-opacity ${
+            busy ? 'opacity-50 pointer-events-none' : 'opacity-100'
+          }`}
+        />
+
+        {busy && (
+          <div className="absolute inset-0 flex items-center justify-center gap-2 text-xs text-white bg-black/60 rounded-xl backdrop-blur-xs font-medium">
+            <Loader2 size={16} className="animate-spin text-neon-cyan" /> {t('googleLoading') || 'Google orqali ulanmoqda...'}
+          </div>
+        )}
+      </div>
+
       {error && (
-        <p className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300">
+        <p className="mt-2.5 flex items-start gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300">
           <AlertCircle size={14} className="shrink-0 mt-0.5" /> {error}
         </p>
       )}
