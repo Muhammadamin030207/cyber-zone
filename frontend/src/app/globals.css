@@ -1,51 +1,105 @@
 @import "tailwindcss";
 
-@theme {
-  /* Cyber-ZONE neon palette */
-  --color-cyber-950: #05050f;
-  --color-cyber-900: #0a0a18;
-  --color-cyber-800: #10102a;
-  --color-cyber-700: #16163a;
-  --color-neon-cyan: #00d4ff;
-  --color-neon-magenta: #ff00ff;
-  --color-neon-green: #00ff88;
-  --color-neon-purple: #a855f7;
-  --color-cyber-surface: #0d0d1f;
+/* ============================================================
+   CYBERARENA HUB — Premium Obsidian Dark Design System
+   Apple / Linear / Vercel uslubidagi chuqur toza qora
+   Aksentlar: Zumrad (#10B981) + Oltin (#F59E0B)
+   3 mavzu: obsidian (default), midnight, ember
+   ============================================================ */
 
-  --font-display: var(--font-orbitron), 'Arial Black', sans-serif;
+/* ---- Accent & background CSS-markerlar (runtime theme) ---- */
+:root,
+html[data-theme="obsidian"] {
+  --acc-a: #10b981;          /* zumrad / primary */
+  --acc-a-soft: #34d399;
+  --acc-b: #f59e0b;          /* oltin / secondary */
+  --acc-b-soft: #fbbf24;
+  --bg-0: #0a0a0c;           /* chuqur obsidian */
+  --bg-1: #101014;           /* card */
+  --bg-2: #18181c;           /* hover / input */
+  --bg-3: #1f1f24;           /* elevated */
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --fg: #f4f4f5;
+  --fg-mut: #a1a1aa;
+  --fg-dim: #71717a;
+}
+
+html[data-theme="midnight"] {
+  --acc-a: #6366f1;          /* indigo */
+  --acc-a-soft: #818cf8;
+  --acc-b: #fb923c;          /* apelsin */
+  --acc-b-soft: #fdba74;
+  --bg-0: #0c0c10;
+  --bg-1: #121217;
+  --bg-2: #1a1a21;
+  --bg-3: #22222b;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.13);
+  --fg: #f4f4f5;
+  --fg-mut: #a1a1aa;
+  --fg-dim: #71717a;
+}
+
+html[data-theme="ember"] {
+  --acc-a: #f97316;          /* olov rang */
+  --acc-a-soft: #fb923c;
+  --acc-b: #14b8a6;          /* teal */
+  --acc-b-soft: #2dd4bf;
+  --bg-0: #0b0a09;
+  --bg-1: #141210;
+  --bg-2: #1d1a17;
+  --bg-3: #252220;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --fg: #f4f4f5;
+  --fg-mut: #a3a3a3;
+  --fg-dim: #737373;
+}
+
+@theme inline {
+  /* Eski klass nomlarini premium aksentlarga xaritalash —
+     barcha mavjud komponentlar avtomatik yangi uslubni oladi */
+  --color-neon-cyan: var(--acc-a);
+  --color-neon-green: var(--acc-a);
+  --color-neon-purple: var(--acc-b);
+  --color-neon-magenta: var(--acc-b);
+  --color-cyber-950: var(--bg-0);
+  --color-cyber-900: var(--bg-1);
+  --color-cyber-800: var(--bg-2);
+  --color-cyber-700: var(--bg-3);
+  --color-cyber-surface: var(--bg-1);
+
+  --font-display: var(--font-inter), system-ui, sans-serif;
   --font-sans: var(--font-inter), system-ui, sans-serif;
 
-  --animate-float: float 6s ease-in-out infinite;
-  --animate-glow: glow 2s ease-in-out infinite;
-  --animate-scan: scan 3s linear infinite;
-  --animate-fade-up: fadeUp 0.5s ease-out forwards;
+  --animate-fade-up: fadeUp 0.4s ease-out forwards;
+  --animate-fade-in: fadeIn 0.3s ease-out forwards;
+  --animate-chime: chime 0.6s ease-out;
 
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-14px); }
-  }
-  @keyframes glow {
-    0%, 100% { opacity: 0.6; }
-    50% { opacity: 1; }
-  }
-  @keyframes scan {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(200%); }
-  }
   @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(16px); }
+    from { opacity: 0; transform: translateY(12px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes chime {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.06); }
+    100% { transform: scale(1); }
   }
 }
 
 :root {
-  --background: #05050f;
-  --foreground: #e6e6f0;
+  --background: var(--bg-0);
+  --foreground: var(--fg);
   color-scheme: dark;
 }
 
 * {
-  border-color: rgba(0, 212, 255, 0.12);
+  border-color: var(--line);
 }
 
 html {
@@ -53,39 +107,56 @@ html {
 }
 
 body {
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 212, 255, 0.15), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(255, 0, 255, 0.08), transparent),
-    var(--background);
+  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* ==== Utility komponentlar ==== */
+::selection {
+  background: color-mix(in srgb, var(--acc-a) 30%, transparent);
+  color: #fff;
+}
+
+/* ---- Micro-interactionlar ---- */
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+a { transition: color 0.15s ease, opacity 0.15s ease; }
+
+:focus-visible {
+  outline: 2px solid var(--acc-a);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------
+   Utility komponentlar (eski nomlar, premium uslub)
+   ------------------------------------------------------------ */
 
 .glass {
-  background: rgba(13, 13, 31, 0.7);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 212, 255, 0.15);
+  background: rgba(16, 16, 20, 0.72);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--line);
 }
 
 .neo-card {
   position: relative;
-  background: linear-gradient(160deg, rgba(16, 16, 42, 0.9), rgba(5, 5, 15, 0.9));
-  border: 1px solid rgba(0, 212, 255, 0.18);
-  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  background: linear-gradient(180deg, var(--bg-1), color-mix(in srgb, var(--bg-1) 86%, #000));
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .neo-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(0, 212, 255, 0.5);
-  box-shadow: 0 0 24px rgba(0, 212, 255, 0.15), 0 8px 30px rgba(0, 0, 0, 0.5);
+  transform: translateY(-3px);
+  border-color: var(--line-strong);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
 }
 
 .neon-text {
-  background: linear-gradient(90deg, #00d4ff, #a855f7, #ff00ff);
+  background: linear-gradient(90deg, var(--acc-a), var(--acc-b));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -93,52 +164,52 @@ body {
 }
 
 .neon-border {
-  border: 1px solid rgba(0, 212, 255, 0.4);
-  box-shadow: 0 0 12px rgba(0, 212, 255, 0.25), inset 0 0 12px rgba(0, 212, 255, 0.1);
+  border: 1px solid color-mix(in srgb, var(--acc-a) 45%, transparent);
 }
 
 .neon-btn {
   position: relative;
-  overflow: hidden;
-  background: linear-gradient(90deg, #00d4ff, #a855f7);
-  color: #05050f;
+  background: linear-gradient(180deg, var(--acc-a), color-mix(in srgb, var(--acc-a) 70%, #000));
+  color: #06110d;
   font-weight: 700;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 0.75rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--acc-a) 40%, transparent) inset;
 }
 
 .neon-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 0 24px rgba(0, 212, 255, 0.5);
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow: 0 6px 20px -6px color-mix(in srgb, var(--acc-a) 55%, transparent);
 }
 
 .neon-btn::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  width: 60px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
-  animation: scan 2.5s linear infinite;
+  display: none;
 }
 
 .glass-input {
-  background: rgba(13, 13, 31, 0.6);
-  border: 1px solid rgba(0, 212, 255, 0.2);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background: rgba(18, 18, 22, 0.6);
+  border: 1px solid var(--line-strong);
+  border-radius: 0.75rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.glass-input:hover {
+  border-color: color-mix(in srgb, var(--acc-a) 35%, transparent);
 }
 
 .glass-input:focus {
   outline: none;
-  border-color: rgba(0, 212, 255, 0.6);
-  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.15);
+  border-color: var(--acc-a);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--acc-a) 18%, transparent);
+  background: rgba(20, 20, 24, 0.8);
 }
 
 .grid-matrix {
   background-image:
-    linear-gradient(rgba(0, 212, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 212, 255, 0.05) 1px, transparent 1px);
-  background-size: 40px 40px;
+    linear-gradient(color-mix(in srgb, var(--acc-a) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--acc-a) 4%, transparent) 1px, transparent 1px);
+  background-size: 44px 44px;
 }
 
 .scrollbar-thin::-webkit-scrollbar {
@@ -146,7 +217,96 @@ body {
   height: 6px;
 }
 
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(0, 212, 255, 0.4);
+  background: var(--line-strong);
   border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-dim);
+}
+
+/* ---- Premium qo'shimchalar ---- */
+.card-hover {
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  border-color: var(--line-strong);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.btn-ghost {
+  border: 1px solid var(--line-strong);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.btn-ghost:hover {
+  border-color: color-mix(in srgb, var(--acc-a) 45%, transparent);
+  background: color-mix(in srgb, var(--acc-a) 7%, transparent);
+}
+
+.btn-amber {
+  background: linear-gradient(180deg, var(--acc-b), color-mix(in srgb, var(--acc-b) 68%, #000));
+  color: #160e02;
+  font-weight: 700;
+  border-radius: 0.75rem;
+  transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-amber:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+
+.text-muted { color: var(--fg-mut); }
+.text-dim { color: var(--fg-dim); }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+}
+
+.chip-success {
+  color: var(--acc-a);
+  border-color: color-mix(in srgb, var(--acc-a) 35%, transparent);
+  background: color-mix(in srgb, var(--acc-a) 10%, transparent);
+}
+
+.chip-warn {
+  color: var(--acc-b);
+  border-color: color-mix(in srgb, var(--acc-b) 35%, transparent);
+  background: color-mix(in srgb, var(--acc-b) 10%, transparent);
+}
+
+.chip-danger {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.divider-h {
+  height: 1px;
+  background: var(--line);
+}
+
+.shadow-glow {
+  box-shadow: 0 0 0 1px var(--line), 0 14px 40px -16px color-mix(in srgb, var(--acc-a) 45%, transparent);
+}
+
+/* Save Area (iPhone) uchun qulaylik */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }

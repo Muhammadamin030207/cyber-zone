@@ -1,10 +1,11 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter, Orbitron } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations, getMessages } from 'next-intl/server';
 import '../globals.css';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
+import BottomTabBar from '@/components/layout/BottomTabBar';
 import AuthInit from '@/components/providers/AuthInit';
 
 const inter = Inter({ subsets: ['latin', 'latin-ext'] });
@@ -16,10 +17,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: 'home' });
   return {
-    title: 'Cyber-ZONE — Kompyuter xonalar platformasi',
+    title: 'CyberArena Hub — Kompyuter klub platformasi',
     description: t('heroSubtitle'),
+    manifest: '/manifest.json',
+    appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'CyberArena' },
   };
 }
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#0a0a0c',
+};
 
 export async function generateStaticParams() {
   return [{ locale: 'uz' }, { locale: 'ru' }, { locale: 'en' }];
@@ -30,7 +41,7 @@ export default async function RootLayout({ children, params }: Props) {
   const messages = await getMessages();
 
   return (
-    <html lang={locale} className="dark">
+    <html lang={locale} className="dark" data-theme="obsidian" suppressHydrationWarning>
       <head>
         <style>{`
           :root {
@@ -45,8 +56,9 @@ export default async function RootLayout({ children, params }: Props) {
         <NextIntlClientProvider locale={locale} messages={messages}>
           <AuthInit />
           <Header />
-          <main className="flex-1 grid-matrix">{children}</main>
+          <main className="flex-1 pb-20 md:pb-0">{children}</main>
           <Footer />
+          <BottomTabBar />
         </NextIntlClientProvider>
       </body>
     </html>

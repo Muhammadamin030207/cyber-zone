@@ -7,7 +7,8 @@
     "register": "Регистрация",
     "logout": "Выйти",
     "dashboard": "Кабинет",
-    "admin": "Админ панель"
+    "admin": "Админ панель",
+    "superAdmin": "Супер админ"
   },
   "common": {
     "loading": "Загрузка...",
@@ -61,7 +62,9 @@
     "viewRoom": "Открыть клуб",
     "bookBtn": "Забронировать",
     "reviews": "отзыв",
-    "specs": "Характеристики"
+    "specs": "Характеристики",
+    "filterDistrict": "Район",
+    "allDistricts": "Все районы"
   },
   "room": {
     "zones": "Зоны",
@@ -121,7 +124,11 @@
     "noAccount": "Нет аккаунта?",
     "haveAccount": "Есть аккаунт?",
     "invalid": "Неверный email или пароль",
-    "welcome": "Добро пожаловать!"
+    "welcome": "Добро пожаловать!",
+    "or": "или",
+    "googleSetup": "Google OAuth Client ID не настроен. Укажите NEXT_PUBLIC_GOOGLE_CLIENT_ID.",
+    "googleLoading": "Входим через Google...",
+    "googleError": "Ошибка входа через Google"
   },
   "dashboard": {
     "title": "Личный кабинет",
@@ -138,7 +145,8 @@
       "ACTIVE": "Активно",
       "COMPLETED": "Завершено",
       "CANCELLED": "Отменено"
-    }
+    },
+    "payNow": "Оплатить 30%"
   },
   "admin": {
     "title": "Админ панель",
@@ -152,6 +160,32 @@
     "stats": "Статистика",
     "createRoom": "Создать клуб",
     "noRoom": "У вас нет клуба. Создайте клуб!"
+  },
+  "superAdmin": {
+    "title": "Супер админ",
+    "accessDenied": "Эта страница доступна только супер админу",
+    "tabOverview": "Обзор",
+    "tabUsers": "Пользователи",
+    "tabRooms": "Клубы",
+    "statUsers": "Пользователи",
+    "statAdmins": "Админы",
+    "statRooms": "Клубы",
+    "statBookings": "Брони",
+    "statRevenue": "Общий доход",
+    "statActive": "Активные брони",
+    "recentRooms": "Последние клубы",
+    "noRooms": "Клубов нет",
+    "searchUsers": "Поиск...",
+    "allRoles": "Все роли",
+    "createAdmin": "Создать админа",
+    "password": "Пароль",
+    "noUsers": "Пользователей нет",
+    "name": "Имя",
+    "activate": "Активировать",
+    "deactivate": "Деактивировать",
+    "delete": "Удалить",
+    "createRoom": "Создать зал",
+    "districtSales": "Продажи по районам"
   },
   "news": {
     "title": "Новости",

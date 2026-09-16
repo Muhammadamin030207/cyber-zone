@@ -38,7 +38,8 @@ function toNumber(v: any): number {
 // ============ POST /api/bookings — USER: yangi bron (himoya + transaction) ============
 export const createBooking = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { roomId, zoneId, computerId, date, startTime, endTime, durationHours, notes, promoCode } = req.body;
+    const { roomId, zoneId, computerId, date, startTime, durationHours, notes, promoCode } = req.body;
+    let endTime = req.body.endTime as string | undefined;
 
     if (!roomId || !zoneId || !date || !startTime) {
       return badRequest(res, 'roomId, zoneId, date, startTime majburiy');
@@ -408,6 +409,13 @@ export const getAvailability = async (req: Request, res: Response, next: NextFun
         bookedComputers: bookedIds.size,
         availableComputers: availableComputers.length,
         computers: availableComputers.map((c) => ({ id: c.id, name: c.name, specs: c.specs })),
+        allComputers: zone.computers.map((c) => ({
+          id: c.id,
+          name: c.name,
+          specs: c.specs,
+          status: c.status,
+          canBook: c.status === 'AVAILABLE' && !bookedIds.has(c.id),
+        })),
       });
     }
 

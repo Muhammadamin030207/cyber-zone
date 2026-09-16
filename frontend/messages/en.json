@@ -7,7 +7,8 @@
     "register": "Register",
     "logout": "Logout",
     "dashboard": "Dashboard",
-    "admin": "Admin panel"
+    "admin": "Admin panel",
+    "superAdmin": "Super admin"
   },
   "common": {
     "loading": "Loading...",
@@ -61,7 +62,9 @@
     "viewRoom": "View zone",
     "bookBtn": "Book now",
     "reviews": "reviews",
-    "specs": "Specs"
+    "specs": "Specs",
+    "filterDistrict": "District",
+    "allDistricts": "All districts"
   },
   "room": {
     "zones": "Zones",
@@ -121,7 +124,11 @@
     "noAccount": "Don't have an account?",
     "haveAccount": "Already have an account?",
     "invalid": "Invalid email or password",
-    "welcome": "Welcome!"
+    "welcome": "Welcome!",
+    "or": "or",
+    "googleSetup": "Google OAuth Client ID not configured. Set NEXT_PUBLIC_GOOGLE_CLIENT_ID.",
+    "googleLoading": "Signing in with Google...",
+    "googleError": "Error signing in with Google"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -138,7 +145,8 @@
       "ACTIVE": "Active",
       "COMPLETED": "Completed",
       "CANCELLED": "Cancelled"
-    }
+    },
+    "payNow": "Pay 30%"
   },
   "admin": {
     "title": "Admin panel",
@@ -152,6 +160,32 @@
     "stats": "Statistics",
     "createRoom": "Create zone",
     "noRoom": "You don't have a zone yet. Create one!"
+  },
+  "superAdmin": {
+    "title": "Super Admin",
+    "accessDenied": "This page is only accessible to Super Admin",
+    "tabOverview": "Overview",
+    "tabUsers": "Users",
+    "tabRooms": "Rooms",
+    "statUsers": "Users",
+    "statAdmins": "Admins",
+    "statRooms": "Rooms",
+    "statBookings": "Bookings",
+    "statRevenue": "Total revenue",
+    "statActive": "Active bookings",
+    "recentRooms": "Recent rooms",
+    "noRooms": "No rooms",
+    "searchUsers": "Search...",
+    "allRoles": "All roles",
+    "createAdmin": "Create admin",
+    "password": "Password",
+    "noUsers": "No users",
+    "name": "Name",
+    "activate": "Activate",
+    "deactivate": "Deactivate",
+    "delete": "Delete",
+    "createRoom": "Create room",
+    "districtSales": "Sales by district"
   },
   "news": {
     "title": "News",

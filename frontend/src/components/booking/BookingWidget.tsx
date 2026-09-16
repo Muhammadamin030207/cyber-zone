@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  CalendarDays, Clock, Monitor, BadgePercent, Check, Loader2, Ticket, LogIn, Zap,
+  CalendarDays, Clock, BadgePercent, Check, Loader2, Ticket, LogIn, Zap,
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { Room, AvailabilityZone } from '@/lib/types';
 import { formatPrice, formatDate, toNumber, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
+import SeatMap from './SeatMap';
 
 interface Props {
   room: Room;
@@ -122,7 +123,7 @@ export default function BookingWidget({ room, date, onDateChange, availability }
 
       const { data } = await api.post('/api/bookings', payload);
       const bookingId = data.data?.id;
-      router.push(bookingId ? `/dashboard?booked=${bookingId}` : '/dashboard');
+      router.push(bookingId ? `/checkout/${bookingId}` : '/dashboard');
       setSuccess(true);
     } catch (err) {
       const msg = getApiErrorMessage(err, t('notAvailable'));
@@ -233,23 +234,11 @@ export default function BookingWidget({ room, date, onDateChange, availability }
               </label>
             </div>
             {!autoPc && (
-              <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto scrollbar-thin pr-1">
-                {selectedZone.computers.map((pc) => (
-                  <button
-                    key={pc.id}
-                    type="button"
-                    onClick={() => setComputerId(pc.id)}
-                    className={cn(
-                      'px-3 py-2 rounded-lg border text-xs font-medium transition-colors',
-                      computerId === pc.id
-                        ? 'border-neon-green/60 bg-neon-green/10 text-neon-green'
-                        : 'border-neon-cyan/15 bg-cyber-800/60 text-gray-300 hover:border-neon-cyan/40'
-                    )}
-                  >
-                    <span className="flex items-center gap-1"><Monitor size={12} /> {pc.name}</span>
-                  </button>
-                ))}
-              </div>
+              <SeatMap
+                computers={selectedZone.allComputers || selectedZone.computers.map((c) => ({ ...c, status: 'AVAILABLE', canBook: true }))}
+                selectedId={computerId}
+                onSelect={(id) => setComputerId(id)}
+              />
             )}
           </div>
         )}

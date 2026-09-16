@@ -7,7 +7,8 @@
     "register": "Ro'yxatdan o'tish",
     "logout": "Chiqish",
     "dashboard": "Kabinet",
-    "admin": "Admin panel"
+    "admin": "Admin panel",
+    "superAdmin": "Super admin"
   },
   "common": {
     "loading": "Yuklanmoqda...",
@@ -61,7 +62,9 @@
     "viewRoom": "Xonani ko'rish",
     "bookBtn": "Bron qilish",
     "reviews": "sharh",
-    "specs": "Xususiyatlar"
+    "specs": "Xususiyatlar",
+    "filterDistrict": "Tuman",
+    "allDistricts": "Barcha tumanlar"
   },
   "room": {
     "zones": "Zonalar",
@@ -121,7 +124,11 @@
     "noAccount": "Akkauntingiz yo'qmi?",
     "haveAccount": "Akkauntingiz bormi?",
     "invalid": "Email yoki parol noto'g'ri",
-    "welcome": "Xush kelibsiz!"
+    "welcome": "Xush kelibsiz!",
+    "or": "yoki",
+    "googleSetup": "Google OAuth Client ID o’rnatilmagan. NEXT_PUBLIC_GOOGLE_CLIENT_ID belgilang.",
+    "googleLoading": "Google orqali kirilmoqda...",
+    "googleError": "Google bilan kirishda xatolik"
   },
   "dashboard": {
     "title": "Shaxsiy kabinet",
@@ -138,7 +145,8 @@
       "ACTIVE": "Faol",
       "COMPLETED": "Yakunlangan",
       "CANCELLED": "Bekor qilingan"
-    }
+    },
+    "payNow": "To'lash 30%"
   },
   "admin": {
     "title": "Admin panel",
@@ -152,6 +160,32 @@
     "stats": "Statistika",
     "createRoom": "Xona yaratish",
     "noRoom": "Sizda xona yo'q. Xona yarating!"
+  },
+  "superAdmin": {
+    "title": "Super Admin",
+    "accessDenied": "Bu sahifaga faqat Super Admin kirishi mumkin",
+    "tabOverview": "Umumiy",
+    "tabUsers": "Foydalanuvchilar",
+    "tabRooms": "Xonalar",
+    "statUsers": "Foydalanuvchilar",
+    "statAdmins": "Adminlar",
+    "statRooms": "Xonalar",
+    "statBookings": "Bronlar",
+    "statRevenue": "Jami tushum",
+    "statActive": "Aktiv bronlar",
+    "recentRooms": "So'nggi xonalar",
+    "noRooms": "Xonalar yo'q",
+    "searchUsers": "Qidirish...",
+    "allRoles": "Barcha rollar",
+    "createAdmin": "Admin yaratish",
+    "password": "Parol",
+    "noUsers": "Foydalanuvchilar yo'q",
+    "name": "Ism",
+    "activate": "Faollashtirish",
+    "deactivate": "Yopish",
+    "delete": "O'chirish",
+    "createRoom": "Xona yaratish",
+    "districtSales": "Tumanlar bo'yicha savdo"
   },
   "news": {
     "title": "Yangiliklar",

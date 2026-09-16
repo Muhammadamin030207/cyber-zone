@@ -43,6 +43,8 @@ export interface Room {
   name: string;
   description?: string | null;
   address: string;
+  district?: string | null;
+  city?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   phone?: string | null;
@@ -130,6 +132,7 @@ export interface AvailabilityZone {
   bookedComputers: number;
   availableComputers: number;
   computers: Array<Pick<Computer, 'id' | 'name' | 'specs'>>;
+  allComputers?: Array<Pick<Computer, 'id' | 'name' | 'specs' | 'status'> & { canBook: boolean }>;
 }
 
 export interface NewsItem {

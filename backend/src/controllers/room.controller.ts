@@ -19,9 +19,10 @@ const ROOM_INCLUDE = {
 // ============ GET /api/rooms — PUBLIC: barcha xonalar (filtrlash bilan) ============
 export const getRooms = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { query, location, type, price_min, price_max, sort } = req.query as {
+    const { query, location, district, type, price_min, price_max, sort } = req.query as {
       query?: string;
       location?: string;
+      district?: string;
       type?: string;
       price_min?: string;
       price_max?: string;
@@ -35,6 +36,10 @@ export const getRooms = async (req: Request, res: Response, next: NextFunction) 
         { name: { contains: query, mode: 'insensitive' } },
         { address: { contains: query, mode: 'insensitive' } },
       ];
+    }
+
+    if (district) {
+      where.district = { contains: district, mode: 'insensitive' };
     }
 
     if (location) {
@@ -110,7 +115,7 @@ export const getRoomById = async (req: Request, res: Response, next: NextFunctio
 // ============ POST /api/rooms — ADMIN: yangi xona ============
 export const createRoom = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { name, description, address, latitude, longitude, phone, workingHours, timezone, images, status } = req.body;
+    const { name, description, address, district, city, latitude, longitude, phone, workingHours, timezone, images, status } = req.body;
 
     // 1 admin = 1 xona qoidasi
     const existing = await prisma.computerRoom.findUnique({
@@ -124,6 +129,8 @@ export const createRoom = async (req: AuthRequest, res: Response, next: NextFunc
         name,
         description,
         address,
+        district,
+        city: city || 'Toshkent',
         latitude,
         longitude,
         phone,
@@ -141,6 +148,98 @@ export const createRoom = async (req: AuthRequest, res: Response, next: NextFunc
   }
 };
 
+// ============ POST /api/rooms/super-admin — SUPER_ADMIN: xona + zona + kompyuter yaratish ============
+// Super admin yangi xona yaratadi va uni belgilangan ADMIN foydalanuvchiga biriktiradi
+export const createRoomBySuperAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const {
+      name,
+      description,
+      address,
+      district,
+      city,
+      latitude,
+      longitude,
+      phone,
+      workingHours,
+      ownerId,
+      zones,
+      status,
+    } = req.body;
+
+    if (!name || !address) return badRequest(res, 'Xona nomi va manzili majburiy');
+    if (!ownerId) return badRequest(res, 'Xonaga tayinlanadigan admin (ownerId) majburiy');
+
+    const owner = await prisma.user.findUnique({ where: { id: ownerId } });
+    if (!owner) return notFoundMsg(res, 'Admin foydalanuvchi topilmadi');
+    if (owner.role !== 'ADMIN') return badRequest(res, 'Faqat ADMIN roli xonaga egalik qilishi mumkin');
+
+    const existing = await prisma.computerRoom.findUnique({ where: { ownerId } });
+    if (existing) return badRequest(res, 'Bu admin allaqachon xonaga ega');
+
+    const room = await prisma.$transaction(async (tx) => {
+      const newRoom = await tx.computerRoom.create({
+        data: {
+          ownerId,
+          name,
+          description,
+          address,
+          district,
+          city: city || 'Toshkent',
+          latitude,
+          longitude,
+          phone,
+          workingHours: workingHours || { open: '09:00', close: '23:00' },
+          images: req.body.images || [],
+          status: status === 'ACTIVE' ? 'ACTIVE' : 'PENDING',
+        },
+      });
+
+      // Zonalar va kompyuterlar
+      if (Array.isArray(zones)) {
+        for (const z of zones) {
+          const zone = await tx.zone.create({
+            data: {
+              roomId: newRoom.id,
+              name: z.name || 'Umumiy zal',
+              type: z.type || 'GENERAL_HALL',
+              description: z.description,
+              capacity: Number(z.capacity) || 0,
+              pricePerHour: Number(z.pricePerHour) || 0,
+            },
+          });
+
+          const compNames: string[] = Array.isArray(z.computers) && z.computers.length
+            ? z.computers
+            : Array.from({ length: Number(z.computerCount) || 0 }, (_, i) => `PC-${i + 1}-${zone.name[0] || 'Z'}`);
+
+          await tx.computer.createMany({
+            data: compNames.map((cn: any) => ({
+              zoneId: zone.id,
+              name: typeof cn === 'string' ? cn : `PC-${cn}`,
+              specs: { cpu: 'Core i7', gpu: 'RTX 3060', ram: '16GB' },
+            })),
+          });
+
+          await tx.zone.update({
+            where: { id: zone.id },
+            data: { capacity: Number(z.capacity) || compNames.length },
+          });
+        }
+      }
+
+      return tx.computerRoom.findUnique({
+        where: { id: newRoom.id },
+        include: ROOM_INCLUDE,
+      });
+    });
+
+    return created(res, room, 'Xona va zonalar yaratildi');
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ============ PUT /api/rooms/:id — ADMIN: xonani yangilash ============
 export const updateRoom = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -150,12 +249,14 @@ export const updateRoom = async (req: AuthRequest, res: Response, next: NextFunc
       return forbidden(res, 'Faqat o\'z xonangizni tahrirlashingiz mumkin');
     }
 
-    const { name, description, address, latitude, longitude, phone, workingHours, timezone, images, status } = req.body;
+    const { name, description, address, district, city, latitude, longitude, phone, workingHours, timezone, images, status } = req.body;
 
     const data: any = {};
     if (name !== undefined) data.name = name;
     if (description !== undefined) data.description = description;
     if (address !== undefined) data.address = address;
+    if (district !== undefined) data.district = district;
+    if (city !== undefined) data.city = city;
     if (latitude !== undefined) data.latitude = latitude;
     if (longitude !== undefined) data.longitude = longitude;
     if (phone !== undefined) data.phone = phone;

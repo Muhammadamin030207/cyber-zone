@@ -3,6 +3,7 @@ import {
   getRooms,
   getRoomById,
   createRoom,
+  createRoomBySuperAdmin,
   updateRoom,
   deleteRoom,
   getRoomStats,
@@ -17,6 +18,9 @@ const router = Router();
 router.get('/', getRooms);
 router.get('/:id', getRoomById);
 router.get('/:id/stats', authenticate, getRoomStats);
+
+// SUPER_ADMIN — yangi xona yaratish va admin tayinlash
+router.post('/super-admin', authenticate, authorize('SUPER_ADMIN'), createRoomBySuperAdmin);
 
 router.post('/', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), createRoom);
 router.put('/:id', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), updateRoom);

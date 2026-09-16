@@ -59,6 +59,7 @@ enum PaymentMethod {
   PAYME
   CLICK
   UZCARD
+  HUMO
   CASH
 }
 
@@ -67,6 +68,20 @@ enum PaymentStatus {
   COMPLETED
   FAILED
   REFUNDED
+}
+
+enum BarItemCategory {
+  DRINK
+  FOOD
+  DESSERT
+}
+
+enum BarOrderStatus {
+  PENDING
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
 }
 
 enum NewsType {
@@ -98,6 +113,8 @@ model User {
   reviews      Review[]
   notifications Notification[]
   promoCodes   PromoCode[]
+  barOrders    BarOrder[]
+  chatMessages ChatMessage[]
 
   @@map("users")
 }
@@ -108,6 +125,8 @@ model ComputerRoom {
   name         String
   description  String?
   address      String
+  district     String?      // Toshkent tumani, masalan: "Mirzo Ulug'bek"
+  city         String       @default("Toshkent")
   latitude     Float?
   longitude    Float?
   phone        String?
@@ -124,6 +143,9 @@ model ComputerRoom {
   news         News[]
   reviews      Review[]
   promoCodes   PromoCode[]
+  barItems     BarItem[]
+  barOrders    BarOrder[]
+  chatMessages ChatMessage[]
 
   @@map("computer_rooms")
 }
@@ -188,6 +210,7 @@ model Booking {
   computer Computer?     @relation(fields: [computerId], references: [id])
   promoCode PromoCode?   @relation(fields: [promoCodeId], references: [id])
   payments Payment[]
+  barOrder BarOrder?
 
   @@map("bookings")
 }
@@ -231,6 +254,59 @@ model Payment {
   user    User    @relation(fields: [userId], references: [id])
 
   @@map("payments")
+}
+
+// ============ BAR (Gaming kafe) ============
+model BarItem {
+  id          String            @id @default(uuid())
+  roomId      String            @map("room_id")
+  name        String
+  description String?
+  price       Decimal           @db.Decimal(10, 2)
+  category    BarItemCategory   @default(DRINK)
+  imageUrl    String?           @map("image_url")
+  isAvailable Boolean           @default(true) @map("is_available")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  room ComputerRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@map("bar_items")
+}
+
+model BarOrder {
+  id          String          @id @default(uuid())
+  roomId      String          @map("room_id")
+  bookingId   String?         @unique @map("booking_id")
+  userId      String          @map("user_id")
+  seatNumber  String?         @map("seat_number") // kompyuter yoki stol raqami
+  items       Json            // [{ itemId, name, price, qty }]
+  totalPrice  Decimal         @map("total_price") @db.Decimal(10, 2)
+  status      BarOrderStatus  @default(PENDING)
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  room    ComputerRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  booking Booking?     @relation(fields: [bookingId], references: [id])
+  user    User         @relation(fields: [userId], references: [id])
+
+  @@map("bar_orders")
+}
+
+// ============ JONLI SUHBAT (Chat) ============
+model ChatMessage {
+  id         String   @id @default(uuid())
+  roomId     String   @map("room_id")
+  userId     String   @map("user_id") // yuboruvchi (USER yoki ADMIN/SUPER_ADMIN)
+  role       String   @default("USER") // USER | ADMIN | SUPER_ADMIN
+  message    String
+  isRead     Boolean  @default(false) @map("is_read")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  room ComputerRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id])
+
+  @@map("chat_messages")
 }
 
 model News {

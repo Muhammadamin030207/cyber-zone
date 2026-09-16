@@ -172,6 +172,26 @@ export const getSuperAdminStats = async (req: AuthRequest, res: Response, next: 
       include: { _count: { select: { bookings: true } } },
     });
 
+    // Tumanlar bo'yicha savdo (yakunlangan to'lovlar asosida)
+    const districtSales: any[] = await prisma.$queryRaw`
+      SELECT
+        COALESCE(r.district, 'Boshqa') AS district,
+        COUNT(DISTINCT b.id) AS booking_count,
+        COALESCE(SUM(p.amount), 0) AS revenue
+      FROM payments p
+      JOIN bookings b ON b.id = p.booking_id
+      JOIN computer_rooms r ON r.id = b.room_id
+      WHERE p.status = 'COMPLETED'
+      GROUP BY r.district
+      ORDER BY revenue DESC
+    `;
+
+    const districtStats = districtSales.map((d) => ({
+      district: d.district,
+      bookings: Number(d.booking_count),
+      revenue: Number(d.revenue),
+    }));
+
     return ok(res, {
       totalUsers,
       totalAdmins,
@@ -180,6 +200,7 @@ export const getSuperAdminStats = async (req: AuthRequest, res: Response, next: 
       totalRevenue: totalRevenue._sum.amount || 0,
       activeBookings,
       recentRooms,
+      districtStats,
     });
   } catch (err) {
     next(err);

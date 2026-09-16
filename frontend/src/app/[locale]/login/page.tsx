@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { Gamepad2, LogIn, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
+import GoogleButton from '@/components/auth/GoogleButton';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email kiriting').email('Email noto\u2019g\u2019ri'),
@@ -40,7 +41,8 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
     try {
       await login(values.email, values.password);
       const user = useAuthStore.getState().user;
-      router.push(user && user.role !== 'USER' ? '/admin' : '/dashboard');
+      if (user && user.role === 'SUPER_ADMIN') router.push('/super-admin');
+      else router.push(user && user.role !== 'USER' ? '/admin' : '/dashboard');
       router.refresh();
     } catch (err: any) {
       setError(err?.response?.data?.message || t('invalid'));
@@ -155,6 +157,14 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
                 {t('loginBtn')}
               </button>
             </form>
+
+            <div className="flex items-center gap-3 my-6">
+              <div className="h-px flex-1 bg-neon-cyan/15" />
+              <span className="text-xs text-gray-500">{t('or')}</span>
+              <div className="h-px flex-1 bg-neon-cyan/15" />
+            </div>
+
+            <GoogleButton />
           </div>
         </div>
       </div>

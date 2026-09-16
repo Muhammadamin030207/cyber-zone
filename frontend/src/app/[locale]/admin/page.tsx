@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  Settings, Monitor, Cpu, CalendarDays, BadgePercent, Newspaper, BarChart3,
+  Settings, Monitor, Cpu, CalendarDays, BadgePercent, Newspaper, BarChart3, MessageSquare,
   Plus, Pencil, Trash2, Loader2, AlertCircle, Check, ShieldCheck, Users, Zap,
   Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign,
 } from 'lucide-react';
@@ -11,14 +11,18 @@ import api, { getApiErrorMessage } from '@/lib/api';
 import type { Room, Zone, Computer, Booking, PromoCode, NewsItem, BookingStatus } from '@/lib/types';
 import { formatPrice, formatDate, formatDateTime, todayISO, zoneTypeLabel, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
+import BarAdmin from '@/components/admin/BarAdmin';
+import ChatAdmin from '@/components/admin/ChatAdmin';
 
-type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'promos' | 'news' | 'stats';
+type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'bar' | 'chat' | 'promos' | 'news' | 'stats';
 
 const TABS: { key: Tab; icon: any; label: string }[] = [
   { key: 'room', icon: Settings, label: 'Xona' },
   { key: 'zones', icon: Users, label: 'Zonalar' },
   { key: 'computers', icon: Monitor, label: 'Kompyuterlar' },
   { key: 'bookings', icon: CalendarDays, label: 'Bronlar' },
+  { key: 'bar', icon: Gamepad2, label: 'Gaming Bar' },
+  { key: 'chat', icon: MessageSquare, label: 'Chat' },
   { key: 'promos', icon: BadgePercent, label: 'Promo' },
   { key: 'news', icon: Newspaper, label: 'Yangiliklar' },
   { key: 'stats', icon: BarChart3, label: 'Statistika' },
@@ -80,7 +84,7 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
       </div>
 
       {/* Content */}
-      {!room && tab !== 'room' ? (
+      {!room && tab !== 'room' && tab !== 'bar' && tab !== 'chat' ? (
         <div className="text-center py-20">
           <Gamepad2 size={48} className="mx-auto mb-4 text-gray-600" />
           <p className="text-gray-400 text-lg mb-4">{t('noRoom')}</p>
@@ -96,6 +100,10 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
         <ComputersTab room={room} />
       ) : tab === 'bookings' && room ? (
         <BookingsTab room={room} />
+      ) : tab === 'bar' ? (
+        <BarAdmin />
+      ) : tab === 'chat' ? (
+        <ChatAdmin />
       ) : tab === 'promos' && room ? (
         <PromosTab room={room} />
       ) : tab === 'news' ? (

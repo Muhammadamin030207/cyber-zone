@@ -5,8 +5,9 @@ import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import {
   CalendarDays, Clock, MapPin, Loader2, CheckCircle2, XCircle, AlertCircle,
-  Wallet, BadgePercent, Monitor, CreditCard,
+  Wallet, BadgePercent, Monitor, CreditCard, Ticket,
 } from 'lucide-react';
+import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { Booking } from '@/lib/types';
 import { formatPrice, formatDate, formatDateTime, cn } from '@/lib/utils';
@@ -185,14 +186,39 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
                 </div>
 
                 {['PENDING', 'CONFIRMED'].includes(b.status) && (
-                  <button
-                    onClick={() => cancelBooking(b.id)}
-                    disabled={cancelling === b.id}
-                    className="mt-4 w-full py-2.5 rounded-xl border border-red-500/30 text-red-400 text-sm font-medium hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    {b.status === 'PENDING' && (
+                      <Link
+                        href={`/checkout/${b.id}`}
+                        className="py-2.5 rounded-xl neon-btn flex items-center justify-center gap-2 text-sm font-bold"
+                      >
+                        <Wallet size={14} />
+                        {t('payNow')}
+                      </Link>
+                    )}
+                    {b.status === 'CONFIRMED' && (
+                      <div className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-neon-cyan/30 text-neon-cyan text-sm font-medium">
+                        <Wallet size={14} /> 30% to'landi
+                      </div>
+                    )}
+                    <button
+                      onClick={() => cancelBooking(b.id)}
+                      disabled={cancelling === b.id}
+                      className="py-2.5 rounded-xl border border-red-500/30 text-red-400 text-sm font-medium hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {cancelling === b.id ? <Loader2 size={15} className="animate-spin" /> : <XCircle size={15} />}
+                      Bekor qilish
+                    </button>
+                  </div>
+                )}
+
+                {['CONFIRMED', 'ACTIVE', 'COMPLETED'].includes(b.status) && (
+                  <Link
+                    href={`/checkout/${b.id}`}
+                    className="mt-3 w-full py-2.5 rounded-xl border border-neon-cyan/25 text-neon-cyan text-sm font-medium hover:bg-neon-cyan/10 flex items-center justify-center gap-2"
                   >
-                    {cancelling === b.id ? <Loader2 size={15} className="animate-spin" /> : <XCircle size={15} />}
-                    Bekor qilish
-                  </button>
+                    <Ticket size={15} /> QR Chipta
+                  </Link>
                 )}
 
                 <p className="text-[11px] text-gray-600 mt-3">Yaratilgan: {formatDateTime(b.createdAt)}</p>

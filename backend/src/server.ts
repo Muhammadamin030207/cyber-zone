@@ -10,6 +10,9 @@ import promoRoutes from './routes/promo.routes';
 import paymentRoutes from './routes/payment.routes';
 import newsRoutes from './routes/news.routes';
 import userRoutes from './routes/user.routes';
+import notificationRoutes from './routes/notification.routes';
+import barRoutes from './routes/bar.routes';
+import chatRoutes from './routes/chat.routes';
 import { errorHandler, notFound } from './middlewares/error';
 import prisma from './lib/prisma';
 import { io } from './lib/socket';
@@ -22,6 +25,20 @@ io.attach(httpServer);
 
 io.on('connection', (socket) => {
   console.log('[SOCKET] Connected:', socket.id);
+
+  // User o'z xonasiga ulansin (faqat o'ziga tegishli xabarlarni olish uchun)
+  const userId = (socket.handshake.query as any).userId as string | undefined;
+  if (userId) socket.join(`user:${userId}`);
+
+  socket.on('register', (id: string) => {
+    if (id) socket.join(`user:${id}`);
+  });
+
+  // Chat: xona chatlariga qo'shilish (jonli yangilanish uchun)
+  socket.on('joinRoom', (roomId: string) => {
+    if (roomId) socket.join(`chat:room:${roomId}`);
+  });
+
   socket.on('disconnect', () => {
     console.log('[SOCKET] Disconnected:', socket.id);
   });
@@ -70,6 +87,9 @@ app.use('/api/promo', promoRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/bar', barRoutes);
+app.use('/api/chat', chatRoutes);
 
 // 404 va error handler
 app.use(notFound);

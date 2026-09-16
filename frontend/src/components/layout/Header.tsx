@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link, usePathname } from '@/i18n/navigation';
-import { Gamepad2, Menu, X, LogIn, UserPlus, LayoutDashboard } from 'lucide-react';
+import { Gamepad2, Menu, X, LogIn, UserPlus, LayoutDashboard, Crown } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import LanguageSwitcher from './LanguageSwitcher';
+import ThemeSwitcher from './ThemeSwitcher';
 
 export default function Header() {
   const t = useTranslations('nav');
@@ -49,8 +50,8 @@ export default function Header() {
           <div className="w-9 h-9 rounded-lg neon-btn flex items-center justify-center">
             <Gamepad2 size={20} />
           </div>
-          <span className="font-[--font-orbitron] text-lg font-bold tracking-widest neon-text">
-            CYBER<span className="text-white">-ZONE</span>
+          <span className="font-bold tracking-wider text-lg">
+            CYBER<span className="text-neon-cyan">ARENA</span>
           </span>
         </Link>
 
@@ -59,9 +60,19 @@ export default function Header() {
 
         {/* Actions */}
         <div className="hidden md:flex items-center gap-2">
+          <ThemeSwitcher />
           <LanguageSwitcher />
           {user ? (
             <>
+              {user.role === 'SUPER_ADMIN' && (
+                <Link
+                  href="/super-admin"
+                  className="px-3 py-2 text-sm font-medium rounded-lg text-yellow-300 hover:bg-yellow-400/10 flex items-center gap-1"
+                >
+                  <Crown size={16} />
+                  {t('superAdmin')}
+                </Link>
+              )}
               {user.role !== 'USER' && (
                 <Link
                   href="/admin"
@@ -106,6 +117,7 @@ export default function Header() {
 
         {/* Mobile toggle */}
         <div className="md:hidden flex items-center gap-2">
+          <ThemeSwitcher />
           <LanguageSwitcher />
           <button
             onClick={() => setMobileOpen((o) => !o)}
@@ -124,6 +136,9 @@ export default function Header() {
           <div className="h-px bg-neon-cyan/15 my-2" />
           {user ? (
             <>
+              {user.role === 'SUPER_ADMIN' && (
+                <Link href="/super-admin" onClick={() => setMobileOpen(false)} className="px-3 py-2 text-sm font-medium text-yellow-300">{t('superAdmin')}</Link>
+              )}
               {user.role !== 'USER' && (
                 <Link href="/admin" onClick={() => setMobileOpen(false)} className="px-3 py-2 text-sm font-medium text-neon-green">{t('admin')}</Link>
               )}

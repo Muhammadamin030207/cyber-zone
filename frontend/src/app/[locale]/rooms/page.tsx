@@ -7,6 +7,7 @@ import { useSearchParams } from 'next/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { Room } from '@/lib/types';
 import RoomCard from '@/components/rooms/RoomCard';
+import { TASHKENT_DISTRICTS } from '@/lib/constants';
 
 type SortKey = '' | 'price_asc' | 'newest';
 const ZONE_TYPES = ['GENERAL_HALL', 'VIP', 'CABIN'] as const;
@@ -23,6 +24,7 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
 
   const [query, setQuery] = useState(searchParams.get('q') || '');
   const [zoneType, setZoneType] = useState<string>(searchParams.get('type') || '');
+  const [district, setDistrict] = useState<string>(searchParams.get('district') || '');
   const [priceMin, setPriceMin] = useState(searchParams.get('min') || '');
   const [priceMax, setPriceMax] = useState(searchParams.get('max') || '');
   const [sort, setSort] = useState<SortKey>((searchParams.get('sort') as SortKey) || '');
@@ -35,6 +37,7 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
       const params: Record<string, string> = {};
       if (query) params.query = query;
       if (zoneType) params.type = zoneType;
+      if (district) params.district = district;
       if (priceMin) params.price_min = priceMin;
       if (priceMax) params.price_max = priceMax;
       if (sort) params.sort = sort;
@@ -47,7 +50,7 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
     } finally {
       setLoading(false);
     }
-  }, [query, zoneType, priceMin, priceMax, sort]);
+  }, [query, zoneType, district, priceMin, priceMax, sort]);
 
   useEffect(() => {
     fetchRooms();
@@ -58,7 +61,7 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
     fetchRooms();
   }
 
-  const hasFilters = zoneType || priceMin || priceMax || sort;
+  const hasFilters = zoneType || district || priceMin || priceMax || sort;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
@@ -102,6 +105,20 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
       {/* Filter panel */}
       {showFilters && (
         <div className="neo-card rounded-2xl p-5 mb-6 animate-fade-up grid sm:grid-cols-4 gap-4 items-end">
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">{tRooms('filterDistrict')}</label>
+            <select
+              value={district}
+              onChange={(e) => setDistrict(e.target.value)}
+              className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
+            >
+              <option value="">{tRooms('allDistricts')}</option>
+              {TASHKENT_DISTRICTS.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">{tRooms('filterType')}</label>
             <select
@@ -154,6 +171,7 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
                 type="button"
                 onClick={() => {
                   setZoneType('');
+                  setDistrict('');
                   setPriceMin('');
                   setPriceMax('');
                   setSort('');

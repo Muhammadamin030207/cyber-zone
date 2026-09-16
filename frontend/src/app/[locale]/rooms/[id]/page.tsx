@@ -12,6 +12,8 @@ import api, { getApiErrorMessage } from '@/lib/api';
 import type { Room, AvailabilityZone } from '@/lib/types';
 import { formatPrice, formatDate, todayISO, cn } from '@/lib/utils';
 import BookingWidget from '@/components/booking/BookingWidget';
+import BarOrdering from '@/components/bar/BarOrdering';
+import ChatPanel from '@/components/chat/ChatPanel';
 
 export default function RoomDetailPage({ params }: { params: Promise<{ locale: string }> }) {
   void params;
@@ -227,30 +229,36 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
             </div>
           )}
 
-          {/* Reviews */}
-          <div className="neo-card rounded-2xl p-6">
-            <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
-              <MessageSquare size={18} className="text-neon-green" /> {t('reviews')} ({room.reviews?.length || 0})
-            </h2>
-            {room.reviews?.length ? (
-              <div className="space-y-4">
-                {room.reviews.map((r) => (
-                  <div key={r.id} className="rounded-xl border border-neon-cyan/10 bg-cyber-800/40 p-4">
-                    <div className="flex items-center justify-between mb-1">
-                      <b className="text-sm">{r.user?.fullName || 'User'}</b>
-                      <span className="flex items-center gap-1 text-xs text-yellow-400">
-                        <Star size={12} className="fill-yellow-400" /> {r.rating}
-                      </span>
+{/* Reviews */}
+            <div className="neo-card rounded-2xl p-6">
+              <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
+                <MessageSquare size={18} className="text-neon-green" /> {t('reviews')} ({room.reviews?.length || 0})
+              </h2>
+              {room.reviews?.length ? (
+                <div className="space-y-4">
+                  {room.reviews.map((r) => (
+                    <div key={r.id} className="rounded-xl border border-neon-cyan/10 bg-cyber-800/40 p-4">
+                      <div className="flex items-center justify-between mb-1">
+                        <b className="text-sm">{r.user?.fullName || 'User'}</b>
+                        <span className="flex items-center gap-1 text-xs text-yellow-400">
+                          <Star size={12} className="fill-yellow-400" /> {r.rating}
+                        </span>
+                      </div>
+                      {r.comment && <p className="text-sm text-gray-400">{r.comment}</p>}
                     </div>
-                    {r.comment && <p className="text-sm text-gray-400">{r.comment}</p>}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">{t('noReviews')}</p>
-            )}
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">{t('noReviews')}</p>
+              )}
+            </div>
+
+            {/* Gaming Bar */}
+            <BarOrdering roomId={room.id} />
+
+            {/* Live Chat */}
+            <ChatPanel roomId={room.id} roomName={room.name} />
           </div>
-        </div>
 
         {/* Right: booking widget */}
         <div className="lg:sticky lg:top-20 h-fit">

@@ -4,12 +4,14 @@ import {
   getPaymentStatus,
   confirmPayment,
   getAllPayments,
+  payOnline,
 } from '../controllers/payment.controller';
 import { authenticate, authorize } from '../middlewares/auth';
 
 const router = Router();
 
 router.post('/create', authenticate, authorize('USER', 'ADMIN', 'SUPER_ADMIN'), createPayment);
+router.post('/:id/pay', authenticate, authorize('USER', 'ADMIN', 'SUPER_ADMIN'), payOnline);
 router.get('/:bookingId', authenticate, getPaymentStatus);
 router.post('/:id/confirm', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), confirmPayment);
 
