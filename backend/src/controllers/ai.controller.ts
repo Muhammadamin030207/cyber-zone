@@ -27,7 +27,7 @@ const INTRO = 'Men Cyber-Zone AI yordamchisiman 🎮';
 const HELP_HINT = 'Sizga: xonalar ro\'yxati, yaqindagi xonalar, narxlar, ish vaqti, bron va promo-kodlar bo\'yicha yordam bera olaman.';
 
 async function getRoomsData() {
-  return prisma.computerRoom.findMany({
+  const rooms = await prisma.computerRoom.findMany({
     where: { status: 'ACTIVE' },
     select: {
       id: true,
@@ -41,6 +41,10 @@ async function getRoomsData() {
     },
     orderBy: { createdAt: 'desc' },
   });
+  return rooms.map((r) => ({
+    ...r,
+    zones: r.zones.map((z) => ({ type: z.type, pricePerHour: Number(z.pricePerHour), capacity: z.capacity })),
+  }));
 }
 
 function formatPrice(n: number | string): string {
@@ -107,9 +111,9 @@ export const chat = async (req: Request, res: Response, next: NextFunction) => {
       }
       const list = promos
         .map((p) => {
-          const val = p.discountType === 'PERCENTAGE' ? `${p.discountValue}%` : `${formatPrice(p.discountValue)} so'm`;
+          const val = p.discountType === 'PERCENTAGE' ? `${p.discountValue}%` : `${formatPrice(Number(p.discountValue))} so'm`;
           const used = p.maxUses ? ` (qolgan: ${Math.max(0, p.maxUses - p.usedCount)})` : '';
-          return `• ${p.code} — ${val}${p.minBookingAmount ? ` (min. ${formatPrice(p.minBookingAmount)} so'm)` : ''}${used}`;
+          return `• ${p.code} — ${val}${p.minBookingAmount ? ` (min. ${formatPrice(Number(p.minBookingAmount))} so'm)` : ''}${used}`;
         })
         .join('\n');
       return ok(res, { reply: `Faol promo-kodlar:\n${list}\n\nBron qilishda kodni kiritishni unutmang!` });

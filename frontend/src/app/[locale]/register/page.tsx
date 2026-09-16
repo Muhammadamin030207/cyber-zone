@@ -9,6 +9,7 @@ import { Gamepad2, UserPlus, Mail, Lock, User as UserIcon, Phone, Eye, EyeOff, L
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
 import PhoneInput, { phoneToDigits, isValidUzbekPhone } from '@/components/auth/PhoneInput';
+import GoogleButton from '@/components/auth/GoogleButton';
 
 const registerSchema = z.object({
   fullName: z.string().min(3, 'Kamida 3 ta belgi'),

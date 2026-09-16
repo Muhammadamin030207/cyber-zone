@@ -84,7 +84,7 @@ export const getRooms = async (req: Request, res: Response, next: NextFunction) 
     if (sort === 'price_asc') orderBy = { zones: { _count: 'asc' } };
     if (sort === 'rating_asc') orderBy = { reviews: { _count: 'asc' } };
 
-    const cacheKey = `rooms:list:${JSON.stringify({ query, location, type, price_min, price_max, sort })}`;
+    const cacheKey = `rooms:list:${JSON.stringify({ query, location, district, type, price_min, price_max, sort })}`;
     const cached = await cacheGet<unknown>(cacheKey);
     if (cached) return ok(res, cached);
 

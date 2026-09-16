@@ -14,6 +14,7 @@ import userRoutes from './routes/user.routes';
 import notificationRoutes from './routes/notification.routes';
 import barRoutes from './routes/bar.routes';
 import chatRoutes from './routes/chat.routes';
+import aiRoutes from './routes/ai.routes';
 import { errorHandler, notFound } from './middlewares/error';
 import prisma from './lib/prisma';
 import { io } from './lib/socket';
@@ -47,7 +48,7 @@ io.on('connection', (socket) => {
 });
 
 // Redis alohida bog'lanish (caching uchun)
-redisClient.connect().catch((e) => console.warn('[REDIS]', e.message));
+redisClient.connect().catch((e: Error) => console.warn('[REDIS]', e.message));
 
 // Middlewares
 app.use(helmet());
@@ -119,6 +120,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/bar', barRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/ai', aiRoutes);
 
 // 404 va error handler
 app.use(notFound);
