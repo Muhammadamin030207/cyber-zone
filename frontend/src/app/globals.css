@@ -92,6 +92,67 @@ html[data-theme="ember"] {
   }
 }
 
+/* =========================================================
+   THEMES — Dark (default) | Halloween | Night
+   ========================================================= */
+
+:root,
+:root[data-theme='dark'] {
+  --cz-bg: #05050f;
+  --cz-bg-900: #0a0a18;
+  --cz-bg-800: #10102a;
+  --cz-bg-700: #16163a;
+  --cz-surface: #0d0d1f;
+  --cz-text: #e6e6f0;
+  --cz-cyan: #00d4ff;
+  --cz-magenta: #ff00ff;
+  --cz-green: #00ff88;
+  --cz-purple: #a855f7;
+  --cz-glow-rgb: 0, 212, 255;
+  --cz-sky: none;
+  --cz-grid: color-mix(in srgb, var(--cz-cyan) 5%, transparent);
+}
+
+:root[data-theme='halloween'] {
+  --cz-bg: #0d0804;
+  --cz-bg-900: #170d05;
+  --cz-bg-800: #23140a;
+  --cz-bg-700: #2f1a0c;
+  --cz-surface: #160e06;
+  --cz-text: #f6ecdb;
+  --cz-cyan: #ff9f1a;
+  --cz-magenta: #b026ff;
+  --cz-green: #39ff14;
+  --cz-purple: #ff6a00;
+  --cz-glow-rgb: 255, 159, 26;
+  --cz-sky: none;
+  --cz-grid: color-mix(in srgb, var(--cz-cyan) 6%, transparent);
+}
+
+:root[data-theme='night'] {
+  --cz-bg: #050a18;
+  --cz-bg-900: #0a1326;
+  --cz-bg-800: #101d3c;
+  --cz-bg-700: #18294f;
+  --cz-surface: #0a1326;
+  --cz-text: #e2e9ff;
+  --cz-cyan: #7db8ff;
+  --cz-magenta: #b08cff;
+  --cz-green: #6ee7ff;
+  --cz-purple: #9db4ff;
+  --cz-glow-rgb: 125, 185, 255;
+  --cz-sky:
+    radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,0.55) 40%, transparent 60%),
+    radial-gradient(1.5px 1.5px at 28% 62%, rgba(255,255,255,0.4) 40%, transparent 60%),
+    radial-gradient(1px 1px at 44% 28%, rgba(255,255,255,0.5) 40%, transparent 60%),
+    radial-gradient(1.5px 1.5px at 61% 74%, rgba(255,255,255,0.35) 40%, transparent 60%),
+    radial-gradient(1px 1px at 76% 22%, rgba(255,255,255,0.5) 40%, transparent 60%),
+    radial-gradient(1.5px 1.5px at 88% 60%, rgba(255,255,255,0.4) 40%, transparent 60%),
+    radial-gradient(1px 1px at 93% 12%, rgba(200,220,255,0.55) 40%, transparent 60%),
+    radial-gradient(1px 1px at 8% 82%, rgba(200,220,255,0.45) 40%, transparent 60%);
+  --cz-grid: color-mix(in srgb, var(--cz-cyan) 5%, transparent);
+}
+
 :root {
   --background: var(--bg-0);
   --foreground: var(--fg);
@@ -104,6 +165,7 @@ html[data-theme="ember"] {
 
 html {
   scroll-behavior: smooth;
+  background: var(--cz-bg);
 }
 
 body {

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../lib/prisma';
+import { cacheGet, cacheSet, cacheDel } from '../lib/redis';
 import { AuthRequest } from '../types';
 import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/response';
 
@@ -15,6 +16,20 @@ const ROOM_INCLUDE = {
     },
   },
 };
+
+const LIST_TTL = 60;
+const DETAIL_TTL = 300;
+
+function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const toRad = (x: number) => (x * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
 
 // ============ GET /api/rooms — PUBLIC: barcha xonalar (filtrlash bilan) ============
 export const getRooms = async (req: Request, res: Response, next: NextFunction) => {
@@ -69,6 +84,10 @@ export const getRooms = async (req: Request, res: Response, next: NextFunction) 
     if (sort === 'price_asc') orderBy = { zones: { _count: 'asc' } };
     if (sort === 'rating_asc') orderBy = { reviews: { _count: 'asc' } };
 
+    const cacheKey = `rooms:list:${JSON.stringify({ query, location, type, price_min, price_max, sort })}`;
+    const cached = await cacheGet<unknown>(cacheKey);
+    if (cached) return ok(res, cached);
+
     const rooms = await prisma.computerRoom.findMany({
       where,
       include: {
@@ -80,7 +99,55 @@ export const getRooms = async (req: Request, res: Response, next: NextFunction) 
       orderBy,
     });
 
+    await cacheSet(cacheKey, rooms, LIST_TTL);
+
     return ok(res, rooms);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ GET /api/rooms/nearby — PUBLIC: lokatsiya bo'yicha eng yaqin xonalar ============
+export const getNearbyRooms = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { lat, lng, radius = '10' } = req.query as { lat?: string; lng?: string; radius?: string };
+    const latN = Number(lat);
+    const lngN = Number(lng);
+    const radiusN = Number(radius) || 10;
+
+    if (!Number.isFinite(latN) || !Number.isFinite(lngN)) {
+      return badRequest(res, 'lat va lng talab qilinadi');
+    }
+
+    const rooms = await prisma.computerRoom.findMany({
+      where: { status: 'ACTIVE' },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        address: true,
+        latitude: true,
+        longitude: true,
+        phone: true,
+        images: true,
+        createdAt: true,
+        zones: { select: { id: true, type: true, name: true, pricePerHour: true, capacity: true } },
+        _count: { select: { reviews: true } },
+      },
+    });
+
+    const result = rooms
+      .map((room) => {
+        const distanceKm =
+          room.latitude != null && room.longitude != null
+            ? Math.round(haversine(latN, lngN, room.latitude, room.longitude) * 10) / 10
+            : null;
+        return { ...room, distanceKm };
+      })
+      .filter((room) => room.distanceKm === null || room.distanceKm <= radiusN)
+      .sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+
+    return ok(res, result);
   } catch (err) {
     next(err);
   }
@@ -89,6 +156,10 @@ export const getRooms = async (req: Request, res: Response, next: NextFunction) 
 // ============ GET /api/rooms/:id — PUBLIC: bitta xona ============
 export const getRoomById = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const cacheKey = `rooms:detail:${req.params.id}`;
+    const cached = await cacheGet<unknown>(cacheKey);
+    if (cached) return ok(res, cached);
+
     const room = await prisma.computerRoom.findUnique({
       where: { id: req.params.id },
       include: ROOM_INCLUDE,
@@ -102,15 +173,24 @@ export const getRoomById = async (req: Request, res: Response, next: NextFunctio
       _count: true,
     });
 
-    return ok(res, {
+    const payload = {
       ...room,
       avgRating: avgRating._avg.rating || 0,
       ratingCount: avgRating._count,
-    });
+    };
+
+    await cacheSet(cacheKey, payload, DETAIL_TTL);
+
+    return ok(res, payload);
   } catch (err) {
     next(err);
   }
 };
+
+async function invalidateRoomCaches(roomId?: string) {
+  await cacheDel('rooms:list:*');
+  if (roomId) await cacheDel(`rooms:detail:${roomId}`);
+}
 
 // ============ POST /api/rooms — ADMIN: yangi xona ============
 export const createRoom = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -142,6 +222,7 @@ export const createRoom = async (req: AuthRequest, res: Response, next: NextFunc
       include: ROOM_INCLUDE,
     });
 
+    await invalidateRoomCaches(room.id);
     return created(res, room, 'Kompyuter xona yaratildi');
   } catch (err) {
     next(err);
@@ -271,6 +352,7 @@ export const updateRoom = async (req: AuthRequest, res: Response, next: NextFunc
       include: ROOM_INCLUDE,
     });
 
+    await invalidateRoomCaches(updated.id);
     return ok(res, updated, 'Kompyuter xona yangilandi');
   } catch (err) {
     next(err);
@@ -287,6 +369,7 @@ export const deleteRoom = async (req: AuthRequest, res: Response, next: NextFunc
     }
 
     await prisma.computerRoom.delete({ where: { id: req.params.id } });
+    await invalidateRoomCaches(req.params.id);
     return ok(res, null, 'Kompyuter xona o\'chirildi');
   } catch (err) {
     next(err);

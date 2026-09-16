@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getRooms,
+  getNearbyRooms,
   getRoomById,
   createRoom,
   createRoomBySuperAdmin,
@@ -16,6 +17,7 @@ const router = Router();
 
 // ============ XONALAR ============
 router.get('/', getRooms);
+router.get('/nearby', getNearbyRooms);
 router.get('/:id', getRoomById);
 router.get('/:id/stats', authenticate, getRoomStats);
 

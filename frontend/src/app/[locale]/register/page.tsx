@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Gamepad2, UserPlus, Mail, Lock, User as UserIcon, Phone, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
@@ -33,6 +33,7 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
 
   const {
     register: field,
+    control,
     handleSubmit,
     watch,
     setValue,
@@ -191,8 +192,17 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
                 {submitting ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
                 {t('registerBtn')}
               </button>
-            </form>
-          </div>
+</form>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3 my-6">
+                <div className="h-px flex-1 bg-white/10" />
+                <span className="text-xs text-gray-500 font-medium">{t('or') || 'yoki'}</span>
+                <div className="h-px flex-1 bg-white/10" />
+              </div>
+
+              <GoogleButton />
+            </div>
         </div>
       </div>
     </div>

@@ -49,6 +49,11 @@ export default async function RootLayout({ children, params }: Props) {
             --font-inter: ${inter.style.fontFamily};
           }
         `}</style>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('cyber-zone-theme');if(t==='halloween'||t==='night'||t==='dark'){document.documentElement.dataset.theme=t;}}catch(e){}document.documentElement.style.colorScheme='dark';})();`,
+          }}
+        />
       </head>
       <body
         className={`${inter.className} antialiased min-h-screen flex flex-col`}

@@ -200,5 +200,29 @@
     "quickLinks": "Quick links",
     "contact": "Contact",
     "rights": "All rights reserved"
+  },
+  "superAdmin": {
+    "title": "Super Admin",
+    "accessDenied": "Super Admin only",
+    "tabOverview": "Overview",
+    "tabUsers": "Users",
+    "tabRooms": "Rooms",
+    "statUsers": "Users",
+    "statAdmins": "Admins",
+    "statRooms": "Rooms",
+    "statBookings": "Total bookings",
+    "statRevenue": "Revenue",
+    "statActive": "Active bookings",
+    "recentRooms": "Recent rooms",
+    "noRooms": "No rooms yet",
+    "searchUsers": "Search (name, email, phone)...",
+    "allRoles": "All roles",
+    "createAdmin": "Create admin",
+    "password": "Password",
+    "noUsers": "No users found",
+    "name": "Name",
+    "activate": "Activate",
+    "deactivate": "Close",
+    "delete": "Delete"
   }
 }
