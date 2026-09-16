@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -43,6 +43,20 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
     resolver: zodResolver(registerSchema),
     defaultValues: { fullName: '', email: '', phone: '', password: '' },
   });
+
+  // Google bilan kirishda bazada topilmagan user -> avtoto'ldirish
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('google_prefill');
+      if (!raw) return;
+      const profile = JSON.parse(raw);
+      if (profile.fullName) setValue('fullName', profile.fullName);
+      if (profile.email) setValue('email', profile.email);
+      sessionStorage.removeItem('google_prefill');
+    } catch {
+      /* ignore */
+    }
+  }, [setValue]);
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitting(true);

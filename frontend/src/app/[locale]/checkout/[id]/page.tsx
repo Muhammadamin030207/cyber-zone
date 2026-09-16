@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Loader2, CheckCircle2, CreditCard, Wallet, Banknote, Smartphone, AlertCircle,
-  ArrowRight, Landmark, BadgePercent, Clock, MapPin, Monitor, ChevronLeft,
+  ArrowRight, Landmark, BadgePercent, Clock, MapPin, Monitor, ChevronLeft, X, ShieldCheck, Zap,
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -13,14 +13,15 @@ import { formatPrice, formatDate, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
 import TicketQR from '@/components/booking/TicketQR';
 
-type PayMethod = 'PAYME' | 'CLICK' | 'UZCARD' | 'HUMO' | 'CASH';
+type PayMethod = 'PAYME' | 'CLICK' | 'UZCARD' | 'HUMO' | 'UZUM' | 'CASH';
 
-const METHODS: { id: PayMethod; label: string; sub: string; icon: any; color: string }[] = [
-  { id: 'PAYME', label: 'Payme', sub: 'Telefon ilovasi', icon: Smartphone, color: 'bg-[#00C7F0]/10 text-[#22d3ee] border-[#00C7F0]/30' },
-  { id: 'CLICK', label: 'Click', sub: 'Tez va oson', icon: Smartphone, color: 'bg-[#ED1C24]/10 text-[#ff5a60] border-[#ED1C24]/30' },
-  { id: 'UZCARD', label: 'Uzcard', sub: 'Bank kartasi', icon: CreditCard, color: 'bg-[#2456A6]/10 text-[#4f83c9] border-[#2456A6]/40' },
-  { id: 'HUMO', label: 'Humo', sub: 'Bank kartasi', icon: CreditCard, color: 'bg-[#0066B3]/10 text-[#3b9be0] border-[#0066B3]/40' },
-  { id: 'CASH', label: 'Kassada', sub: '30% joyida to\'lash', icon: Banknote, color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+const METHODS: { id: PayMethod; label: string; sub: string; icon: any; color: string; demoCard: string }[] = [
+  { id: 'PAYME', label: 'Payme', sub: 'Telefon ilovasi', icon: Smartphone, color: 'bg-[#00C7F0]/10 text-[#22d3ee] border-[#00C7F0]/30', demoCard: '8600 0119 5555 2000' },
+  { id: 'CLICK', label: 'Click', sub: 'Tez va oson', icon: Zap, color: 'bg-[#ED1C24]/10 text-[#ff5a60] border-[#ED1C24]/30', demoCard: '8600 0490 1234 5678' },
+  { id: 'UZUM', label: 'Uzum Bank', sub: 'Raqamli bank', icon: Wallet, color: 'bg-[#7000FF]/15 text-[#a86bff] border-[#7000FF]/40', demoCard: '9860 2090 8899 7766' },
+  { id: 'UZCARD', label: 'Uzcard', sub: 'Bank kartasi', icon: CreditCard, color: 'bg-[#2456A6]/10 text-[#4f83c9] border-[#2456A6]/40', demoCard: '8600 0030 1122 3344' },
+  { id: 'HUMO', label: 'Humo', sub: 'Bank kartasi', icon: CreditCard, color: 'bg-[#0066B3]/10 text-[#3b9be0] border-[#0066B3]/40', demoCard: '9860 0101 2233 4455' },
+  { id: 'CASH', label: 'Kassada', sub: '30% joyida to\'lash', icon: Banknote, color: 'bg-amber-500/10 text-amber-400 border-amber-500/30', demoCard: '' },
 ];
 
 export default function CheckoutPage({ params }: { params: Promise<{ locale: string; id: string }> }) {
@@ -39,6 +40,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(false);
   const [cashNotified, setCashNotified] = useState(false);
+  const [appModal, setAppModal] = useState<PayMethod | null>(null);
+  const [modalSuccess, setModalSuccess] = useState(false);
 
   useEffect(() => {
     api
@@ -79,12 +82,25 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
         });
         setBooking({ ...booking, status: 'CONFIRMED' });
         setPaid(true);
+        setModalSuccess(true);
+        setTimeout(() => {
+          setAppModal(null);
+          setModalSuccess(false);
+        }, 1400);
       }
     } catch (err) {
       setError(getApiErrorMessage(err, 'To\'lovda xatolik yuz berdi'));
     } finally {
       setPaying(false);
     }
+  }
+
+  function openApp(m: PayMethod, cardHolderName: string) {
+    const meta = METHODS.find((x) => x.id === m);
+    setCardNumber(meta?.demoCard || '');
+    setCardHolder(cardHolderName);
+    setModalSuccess(false);
+    setAppModal(m);
   }
 
   if (loading) {
@@ -212,32 +228,15 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
           </div>
 
           {method !== 'CASH' ? (
-            <div className="neo-card rounded-2xl p-5 mb-5 space-y-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Landmark size={16} className="text-neon-cyan" />
-                <h3 className="font-semibold text-sm">Karta ma'lumotlari</h3>
-                <span className="ml-auto text-[10px] text-gray-500 flex items-center gap-1">
-                  <Wallet size={11} /> Simulyatsiya — real chegirma bo'lmaydi
-                </span>
-              </div>
+            <div className="neo-card rounded-2xl p-5 mb-5 flex items-center gap-4">
+              <span className={cn('p-3 rounded-xl border shrink-0', METHODS.find((m) => m.id === method)?.color)}>
+                <Wallet size={22} />
+              </span>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Karta raqami</label>
-                <input
-                  value={cardNumber}
-                  onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, '').slice(0, 16).replace(/(\d{4})(?=\d)/g, '$1 '))}
-                  placeholder="8600 1234 5678 9101"
-                  inputMode="numeric"
-                  className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Karta egasi</label>
-                <input
-                  value={cardHolder}
-                  onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
-                  placeholder="ISMLA KARIMOVA"
-                  className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-                />
+                <h3 className="font-semibold text-sm">{METHODS.find((m) => m.id === method)?.label} ilovasida to\'lash</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Karta raqami va summa avtomatik to'ldiriladi — siz faqat tasdiqlaysiz
+                </p>
               </div>
             </div>
           ) : (
@@ -252,8 +251,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
           )}
 
           <button
-            onClick={payNow}
-            disabled={paying || (method !== 'CASH' && cardNumber.replace(/\D/g, '').length < 16)}
+            onClick={() => (method === 'CASH' ? payNow() : openApp(method, user?.fullName?.toUpperCase() || ''))}
+            disabled={paying}
             className="w-full py-3.5 rounded-xl neon-btn flex items-center justify-center gap-2 font-bold disabled:opacity-40"
           >
             {paying ? (
@@ -281,6 +280,83 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
             Qolgan 70% joyda — Kabinetga o'tish
           </Link>
         </>
+      )}
+
+      {/* ===== To'lov-app simulyatsiya modali ===== */}
+      {appModal && booking && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          {modalSuccess ? (
+            <div className="neo-card rounded-3xl w-full max-w-sm p-10 text-center animate-float">
+              <CheckCircle2 size={64} className="mx-auto text-neon-green mb-4" />
+              <h3 className="text-xl font-bold mb-1">To'lov amalga oshdi!</h3>
+              <p className="text-sm text-gray-400">Broningiz tasdiqlandi. Tilakda!</p>
+            </div>
+          ) : (
+            <div className="neo-card rounded-3xl w-full max-w-sm overflow-hidden">
+              {/* App header */}
+              <div className={cn('p-4 flex items-center gap-3', METHODS.find((m) => m.id === appModal)?.color as any)}>
+                <span className="p-2.5 rounded-xl bg-black/20">
+                  {METHODS.find((m) => m.id === appModal)?.icon && (() => {
+                    const Ico = METHODS.find((m) => m.id === appModal)!.icon;
+                    return <Ico size={24} />;
+                  })()}
+                </span>
+                <div className="flex-1">
+                  <p className="font-bold leading-tight">{METHODS.find((m) => m.id === appModal)?.label} · {formatPrice(advance)} so\'m</p>
+                  <p className="text-xs opacity-80 flex items-center gap-1"><ShieldCheck size={11} /> Ilovada tasdiqlang</p>
+                </div>
+                <button onClick={() => setAppModal(null)} className="p-1.5 rounded-lg bg-black/20 hover:bg-black/30">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-5">
+                <p className="text-[11px] text-gray-500 uppercase tracking-wider flex items-center gap-1 mb-3">
+                  <Landmark size={11} /> QUVVATCHI · Cyber-ZONE
+                </p>
+
+                <div className="rounded-xl bg-cyber-800/60 border border-white/5 px-4 py-3 mb-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] text-gray-500">To\'lov summasi</p>
+                    <p className="text-2xl font-extrabold neon-text">{formatPrice(advance)} so\'m</p>
+                  </div>
+                  <Smartphone size={22} className="text-gray-500" />
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Karta raqami</label>
+                    <input
+                      value={cardNumber}
+                      onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, '').slice(0, 16).replace(/(\d{4})(?=\d)/g, '$1 '))}
+                      placeholder="8600 0000 0000 0000"
+                      inputMode="numeric"
+                      className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none tracking-wider"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Karta egasi</label>
+                    <input
+                      value={cardHolder}
+                      onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
+                      placeholder="ISMLA KARIMOVA"
+                      className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={payNow}
+                  disabled={paying || cardNumber.replace(/\D/g, '').length < 16}
+                  className="w-full mt-5 py-3 rounded-xl neon-btn flex items-center justify-center gap-2 font-bold disabled:opacity-40"
+                >
+                  {paying ? <><Loader2 size={18} className="animate-spin" /> To'lanmoqda...</> : <><ShieldCheck size={18} /> Tasdiqlash va to\'lash</>}
+                </button>
+                <p className="text-center text-[10px] text-gray-600 mt-2">Ushbu to\'lov simulyatsiya — real mablag\' yechilmaydi</p>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

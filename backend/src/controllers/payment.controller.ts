@@ -79,7 +79,7 @@ export const payOnline = async (req: AuthRequest, res: Response, next: NextFunct
     if (payment.userId !== req.user!.userId) return forbidden(res, 'Bu to\'lov sizniki emas');
     if (payment.status !== 'PENDING') return badRequest(res, 'Bu to\'lov allaqachon yakunlangan');
 
-    const onlineMethods = ['PAYME', 'CLICK', 'UZCARD', 'HUMO'];
+    const onlineMethods = ['PAYME', 'CLICK', 'UZCARD', 'HUMO', 'UZUM'];
     const method = payment.method as string;
     if (!method || !onlineMethods.includes(method)) {
       return badRequest(res, 'Kassa to\'lovi faqat admin tomonidan tasdiqlanadi');

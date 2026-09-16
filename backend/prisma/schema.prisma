@@ -60,6 +60,7 @@ enum PaymentMethod {
   CLICK
   UZCARD
   HUMO
+  UZUM
   CASH
 }
 

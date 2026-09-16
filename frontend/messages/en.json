@@ -64,7 +64,8 @@
     "reviews": "reviews",
     "specs": "Specs",
     "filterDistrict": "District",
-    "allDistricts": "All districts"
+    "allDistricts": "All districts",
+    "sum": "so'm"
   },
   "room": {
     "zones": "Zones",
@@ -109,7 +110,8 @@
     "create": "Book now",
     "created": "Booking created!",
     "freeComputers": "free PCs",
-    "notAvailable": "Time is busy or no free PCs"
+    "notAvailable": "Time is busy or no free PCs",
+    "sum": "so'm"
   },
   "auth": {
     "loginTitle": "Sign in",
@@ -163,46 +165,6 @@
   },
   "superAdmin": {
     "title": "Super Admin",
-    "accessDenied": "This page is only accessible to Super Admin",
-    "tabOverview": "Overview",
-    "tabUsers": "Users",
-    "tabRooms": "Rooms",
-    "statUsers": "Users",
-    "statAdmins": "Admins",
-    "statRooms": "Rooms",
-    "statBookings": "Bookings",
-    "statRevenue": "Total revenue",
-    "statActive": "Active bookings",
-    "recentRooms": "Recent rooms",
-    "noRooms": "No rooms",
-    "searchUsers": "Search...",
-    "allRoles": "All roles",
-    "createAdmin": "Create admin",
-    "password": "Password",
-    "noUsers": "No users",
-    "name": "Name",
-    "activate": "Activate",
-    "deactivate": "Deactivate",
-    "delete": "Delete",
-    "createRoom": "Create room",
-    "districtSales": "Sales by district"
-  },
-  "news": {
-    "title": "News",
-    "readMore": "Read more",
-    "promotion": "Promotion",
-    "banner": "Banner",
-    "news": "News",
-    "noNews": "No news yet"
-  },
-  "footer": {
-    "tagline": "Modern platform for managing gaming zones",
-    "quickLinks": "Quick links",
-    "contact": "Contact",
-    "rights": "All rights reserved"
-  },
-  "superAdmin": {
-    "title": "Super Admin",
     "accessDenied": "Super Admin only",
     "tabOverview": "Overview",
     "tabUsers": "Users",
@@ -224,5 +186,19 @@
     "activate": "Activate",
     "deactivate": "Close",
     "delete": "Delete"
+  },
+  "news": {
+    "title": "News",
+    "readMore": "Read more",
+    "promotion": "Promotion",
+    "banner": "Banner",
+    "news": "News",
+    "noNews": "No news yet"
+  },
+  "footer": {
+    "tagline": "Modern platform for managing gaming zones",
+    "quickLinks": "Quick links",
+    "contact": "Contact",
+    "rights": "All rights reserved"
   }
 }

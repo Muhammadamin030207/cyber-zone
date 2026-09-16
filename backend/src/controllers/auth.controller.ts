@@ -83,7 +83,7 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
     const payload = ticket.getPayload();
     if (!payload) return badRequest(res, 'Token yaroqsiz');
 
-    const { email, sub: googleId, name, email_verified } = payload;
+    const { email, sub: googleId, name, email_verified, picture } = payload;
 
     if (!email_verified) return badRequest(res, 'Email tasdiqlanmagan');
 
@@ -100,13 +100,14 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
           data: { googleId },
         });
       } else {
-        // Yangi user yaratamiz
-        user = await prisma.user.create({
-          data: {
-            email: email!,
-            googleId,
-            fullName: name || email?.split('@')[0] || 'Google User',
-            role: 'USER',
+        // Bazada ro'yhatdan o'tmagan foydalanuvchi — avtomatik akkaunt yaratilmaydi.
+        // Register sahifasiga maydonlar avtoto'ldirilgan holda yo'naltiramiz.
+        return ok(res, {
+          pendingRegister: true,
+          profile: {
+            fullName: name || email?.split('@')[0] || '',
+            email,
+            avatarUrl: picture || null,
           },
         });
       }

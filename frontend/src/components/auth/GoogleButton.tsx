@@ -45,7 +45,14 @@ export default function GoogleButton() {
           setBusy(true);
           setError(null);
           try {
-            await googleLogin(response.credential);
+            const res = await googleLogin(response.credential);
+            const data = res?.data?.data;
+            if (data?.pendingRegister) {
+              // Bazada bunday user yo'q → ro'yhatdan o'tishga (avtoto'ldirilgan holda)
+              sessionStorage.setItem('google_prefill', JSON.stringify(data.profile || {}));
+              router.push(`/register?google=prefill`);
+              return;
+            }
             const user = useAuthStore.getState().user;
             if (user?.role === 'SUPER_ADMIN') router.push('/super-admin');
             else if (user?.role !== 'USER') router.push('/admin');

@@ -11,7 +11,7 @@ interface AuthState {
   initialized: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  googleLogin: (idToken: string) => Promise<void>;
+  googleLogin: (idToken: string) => Promise<{ data?: { data?: { pendingRegister?: boolean; profile?: any; user?: User } } } | undefined>;
   register: (data: { email: string; password: string; fullName: string; phone?: string; language?: string }) => Promise<void>;
   logout: () => void;
   setAuth: (auth: AuthResponse) => void;
@@ -69,10 +69,12 @@ export const useAuthStore = create<AuthState>()(
       googleLogin: async (idToken) => {
         set({ loading: true, error: null });
         try {
-          const { data } = await api.post<{ success: boolean; data: AuthResponse }>('/api/auth/login/google', {
+          const res = await api.post<{ success: boolean; data: AuthResponse & { pendingRegister?: boolean; profile?: any } }>('/api/auth/login/google', {
             token: idToken,
           });
-          get().setAuth(data.data);
+          if (res.data?.data?.pendingRegister) return res;
+          if (res.data?.data?.user) get().setAuth(res.data.data);
+          return res;
         } catch (err) {
           set({ error: getApiErrorMessage(err, 'Google bilan kirishda xatolik') });
           throw err;

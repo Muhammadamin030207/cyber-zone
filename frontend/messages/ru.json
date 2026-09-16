@@ -64,7 +64,8 @@
     "reviews": "отзыв",
     "specs": "Характеристики",
     "filterDistrict": "Район",
-    "allDistricts": "Все районы"
+    "allDistricts": "Все районы",
+    "sum": "so'm"
   },
   "room": {
     "zones": "Зоны",
@@ -109,7 +110,8 @@
     "create": "Забронировать",
     "created": "Бронь создана!",
     "freeComputers": "свободных ПК",
-    "notAvailable": "Время занято или нет свободных ПК"
+    "notAvailable": "Время занято или нет свободных ПК",
+    "sum": "so'm"
   },
   "auth": {
     "loginTitle": "Вход в систему",
@@ -162,46 +164,6 @@
     "noRoom": "У вас нет клуба. Создайте клуб!"
   },
   "superAdmin": {
-    "title": "Супер админ",
-    "accessDenied": "Эта страница доступна только супер админу",
-    "tabOverview": "Обзор",
-    "tabUsers": "Пользователи",
-    "tabRooms": "Клубы",
-    "statUsers": "Пользователи",
-    "statAdmins": "Админы",
-    "statRooms": "Клубы",
-    "statBookings": "Брони",
-    "statRevenue": "Общий доход",
-    "statActive": "Активные брони",
-    "recentRooms": "Последние клубы",
-    "noRooms": "Клубов нет",
-    "searchUsers": "Поиск...",
-    "allRoles": "Все роли",
-    "createAdmin": "Создать админа",
-    "password": "Пароль",
-    "noUsers": "Пользователей нет",
-    "name": "Имя",
-    "activate": "Активировать",
-    "deactivate": "Деактивировать",
-    "delete": "Удалить",
-    "createRoom": "Создать зал",
-    "districtSales": "Продажи по районам"
-  },
-  "news": {
-    "title": "Новости",
-    "readMore": "Подробнее",
-    "promotion": "Акция",
-    "banner": "Реклама",
-    "news": "Новость",
-    "noNews": "Новостей пока нет"
-  },
-  "footer": {
-    "tagline": "Современная платформа для управления компьютерными клубами",
-    "quickLinks": "Быстрые ссылки",
-    "contact": "Контакты",
-    "rights": "Все права защищены"
-  },
-  "superAdmin": {
     "title": "Супер Админ",
     "accessDenied": "Только для Супер Админа",
     "tabOverview": "Обзор",
@@ -224,5 +186,19 @@
     "activate": "Активировать",
     "deactivate": "Закрыть",
     "delete": "Удалить"
+  },
+  "news": {
+    "title": "Новости",
+    "readMore": "Подробнее",
+    "promotion": "Акция",
+    "banner": "Реклама",
+    "news": "Новость",
+    "noNews": "Новостей пока нет"
+  },
+  "footer": {
+    "tagline": "Современная платформа для управления компьютерными клубами",
+    "quickLinks": "Быстрые ссылки",
+    "contact": "Контакты",
+    "rights": "Все права защищены"
   }
 }

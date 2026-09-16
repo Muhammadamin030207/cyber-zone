@@ -31,6 +31,60 @@ function haversine(lat1: number, lon1: number, lat2: number, lon2: number): numb
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+// ============ YORDAMCHI: fuzzy qidiruv (Levenshtein — 1-2 ta xato harfga chidamli) ============
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const dp = Array.from({ length: m + 1 }, (_, i) => {
+    const row = new Array(n + 1);
+    row[0] = i;
+    return row;
+  });
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+  }
+  return dp[m][n];
+}
+
+function normalizeText(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/o'|oʻ|о|ө/g, 'o')
+    .replace(/g'|gʻ|ғ/g, 'g')
+    .replace(/sh|ç/g, 'sh')
+    .replace(/ch|č/g, 'ch')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function fuzzyMatches(query: string, candidate: string): boolean {
+  const q = normalizeText(query);
+  const c = normalizeText(candidate);
+  if (!q || !c) return false;
+  if (c.includes(q)) return true;
+
+  const qWords = q.split(' ').filter(Boolean);
+  const cWords = c.split(' ').filter(Boolean);
+  if (!qWords.length) return false;
+
+  // Har bir so'z kandidat so'zlaridan biri bilan mos kelishi kerak (2 tagacha xato)
+  return qWords.every((qw) => {
+    if (qw.length < 3) return cWords.some((w) => w.startsWith(qw));
+    const limit = qw.length < 5 ? 1 : 2;
+    return cWords.some((w) => w.startsWith(qw) || levenshtein(qw, w) <= limit);
+  });
+}
+
 // ============ GET /api/rooms — PUBLIC: barcha xonalar (filtrlash bilan) ============
 export const getRooms = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -51,6 +105,26 @@ export const getRooms = async (req: Request, res: Response, next: NextFunction) 
         { name: { contains: query, mode: 'insensitive' } },
         { address: { contains: query, mode: 'insensitive' } },
       ];
+    }
+
+    if (query && !district && !type && !price_min && !price_max) {
+      // Birinchi bo'lib aniq (contains) natijani tekshiramiz
+      const exact = await prisma.computerRoom.findFirst({ where });
+      if (!exact) {
+        // Aniq natija yo'q → fuzzy: barcha faol xonalar orasidan yaqin moslik
+        const all = await prisma.computerRoom.findMany({
+          where: { status: 'ACTIVE' },
+          select: { id: true, name: true, address: true },
+        });
+        const fuzzyIds = all
+          .filter((r) => fuzzyMatches(String(query), r.name) || fuzzyMatches(String(query), r.address))
+          .slice(0, 10)
+          .map((r) => r.id);
+        if (fuzzyIds.length) {
+          where.id = { in: fuzzyIds };
+          where.OR = undefined;
+        }
+      }
     }
 
     if (district) {

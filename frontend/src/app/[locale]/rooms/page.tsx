@@ -2,12 +2,15 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { Search, SlidersHorizontal, X, Building2, MapPin } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { Search, SlidersHorizontal, X, Building2, MapPin, LayoutGrid, Map } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { Room } from '@/lib/types';
 import RoomCard from '@/components/rooms/RoomCard';
 import { TASHKENT_DISTRICTS } from '@/lib/constants';
+
+const RoomsMap = dynamic(() => import('@/components/rooms/RoomsMap'), { ssr: false });
 
 type SortKey = '' | 'price_asc' | 'newest';
 const ZONE_TYPES = ['GENERAL_HALL', 'VIP', 'CABIN'] as const;
@@ -29,6 +32,7 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
   const [priceMax, setPriceMax] = useState(searchParams.get('max') || '');
   const [sort, setSort] = useState<SortKey>((searchParams.get('sort') as SortKey) || '');
   const [showFilters, setShowFilters] = useState(false);
+  const [view, setView] = useState<'list' | 'map'>('list');
 
   const fetchRooms = useCallback(async () => {
     setLoading(true);
@@ -100,6 +104,22 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
           <SlidersHorizontal size={16} /> Filters
           {hasFilters && <span className="w-2 h-2 rounded-full bg-neon-cyan" />}
         </button>
+        <div className="flex rounded-xl border border-neon-cyan/15 overflow-hidden shrink-0">
+          <button
+            type="button"
+            onClick={() => setView('list')}
+            className={`px-3 py-2.5 flex items-center gap-1.5 text-sm font-medium transition-colors ${view === 'list' ? 'bg-neon-cyan/15 text-neon-cyan' : 'bg-cyber-800 text-gray-400 hover:text-neon-cyan'}`}
+          >
+            <LayoutGrid size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setView('map')}
+            className={`px-3 py-2.5 flex items-center gap-1.5 text-sm font-medium transition-colors ${view === 'map' ? 'bg-amber-400/15 text-amber-300' : 'bg-cyber-800 text-gray-400 hover:text-amber-300'}`}
+          >
+            <Map size={15} />
+          </button>
+        </div>
       </form>
 
       {/* Filter panel */}
@@ -204,6 +224,8 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
           <MapPin size={48} className="mx-auto mb-4 text-gray-600" />
           <p className="text-gray-400 text-lg">{tRooms('empty')}</p>
         </div>
+      ) : view === 'map' ? (
+        <RoomsMap rooms={rooms} />
       ) : (
         <>
           <p className="text-sm text-gray-500 mb-4">{rooms.length} {tRooms('title').toLowerCase()}</p>
