@@ -13,8 +13,8 @@ const router = Router();
 router.post('/messages', authenticate, sendSupport);
 router.get('/messages', authenticate, getSupportMessages);
 
-// SUPER_ADMIN: barcha murojaatlar
-router.get('/threads', authenticate, authorize('SUPER_ADMIN'), getSupportThreads);
-router.delete('/threads/:userId', authenticate, authorize('SUPER_ADMIN'), clearSupportThread);
+// SUPER_ADMIN/ADMIN: barcha murojaatlar
+router.get('/threads', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), getSupportThreads);
+router.delete('/threads/:userId', authenticate, authorize('SUPER_ADMIN', 'ADMIN'), clearSupportThread);
 
 export default router;

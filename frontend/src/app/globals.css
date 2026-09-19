@@ -176,22 +176,6 @@ html[data-theme="aurora"] {
   border-color: var(--line);
 }
 
-/* ---- Sharp corners: border-radius o'chiq, faqat ma'noli doiralar qoladi ---- */
-*,
-*::before,
-*::after {
-  border-radius: 0 !important;
-}
-.rounded-full,
-.avatar,
-.orb,
-.chip,
-.scrollbar-thin::-webkit-scrollbar-thumb,
-html::-webkit-scrollbar-thumb,
-input[type='range']::-webkit-slider-thumb {
-  border-radius: 9999px !important;
-}
-
 html {
   scroll-behavior: smooth;
   background: var(--cz-bg);

@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import {
   Settings, Monitor, Cpu, CalendarDays, BadgePercent, Newspaper, BarChart3, MessageSquare,
   Plus, Pencil, Trash2, Loader2, AlertCircle, Check, ShieldCheck, Users, Zap,
-  Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw,
+  Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { Room, Zone, Computer, Booking, PromoCode, NewsItem, BookingStatus } from '@/lib/types';
@@ -13,9 +13,10 @@ import { formatPrice, formatDate, formatDateTime, todayISO, zoneTypeLabel, cn } 
 import { useAuthStore } from '@/store/auth';
 import BarAdmin from '@/components/admin/BarAdmin';
 import ChatAdmin from '@/components/admin/ChatAdmin';
+import SupportChat from '@/components/support/SupportChat';
 import Logo from '@/components/brand/Logo';
 
-type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'bar' | 'chat' | 'promos' | 'news' | 'stats';
+type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'bar' | 'chat' | 'support' | 'promos' | 'news' | 'stats';
 
 const TABS: { key: Tab; icon: any; label: string }[] = [
   { key: 'room', icon: Settings, label: 'Xona' },
@@ -24,6 +25,7 @@ const TABS: { key: Tab; icon: any; label: string }[] = [
   { key: 'bookings', icon: CalendarDays, label: 'Bronlar' },
   { key: 'bar', icon: Gamepad2, label: 'Gaming Bar' },
   { key: 'chat', icon: MessageSquare, label: 'Chat' },
+  { key: 'support', icon: LifeBuoy, label: 'Murojaatlar' },
   { key: 'promos', icon: BadgePercent, label: 'Promo' },
   { key: 'news', icon: Newspaper, label: 'Yangiliklar' },
   { key: 'stats', icon: BarChart3, label: 'Statistika' },
@@ -104,7 +106,7 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
       </div>
 
       {/* Content */}
-      {!room && tab !== 'room' && tab !== 'bar' && tab !== 'chat' ? (
+      {!room && tab !== 'room' && tab !== 'bar' && tab !== 'chat' && tab !== 'support' ? (
         <div className="text-center py-20">
           <div className="w-16 h-16 mx-auto mb-4 neo-card rounded-2xl flex items-center justify-center animate-floaty">
             <Logo size={38} />
@@ -126,6 +128,8 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
         <BarAdmin />
       ) : tab === 'chat' ? (
         <ChatAdmin />
+      ) : tab === 'support' ? (
+        <SupportChat mode="admin" />
       ) : tab === 'promos' && room ? (
         <PromosTab room={room} />
       ) : tab === 'news' ? (

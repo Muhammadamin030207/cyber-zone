@@ -9,10 +9,12 @@ const SUPPORT_INCLUDE = {
   sender: { select: { id: true, fullName: true, avatarUrl: true, role: true } },
 };
 
+const STAFF_ROLES = ['SUPER_ADMIN', 'ADMIN'];
+
 /**
  * POST /api/support/messages — xabar yuborish (foydalanuvchi/admin ↔ super_admin)
  * - USER/ADMIN o'z thread'iga yozadi (super_admin'ga murojaat)
- * - SUPER_ADMIN body.userId orqali berilgan thread'ga javob yozadi
+ * - SUPER_ADMIN/ADMIN body.userId orqali berilgan thread'ga javob yozadi
  */
 export const sendSupport = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -22,15 +24,16 @@ export const sendSupport = async (req: AuthRequest, res: Response, next: NextFun
     if (text.length > 1000) return badRequest(res, 'Xabar 1000 ta belgidan oshmasligi kerak');
 
     const me = req.user!;
+    const isStaff = STAFF_ROLES.includes(me.role);
     let threadUserId = me.userId;
 
-    if (me.role === 'SUPER_ADMIN') {
+    if (isStaff) {
       if (!userId) return badRequest(res, 'Javob yozish uchun userId kerak');
       const target = await prisma.user.findUnique({ where: { id: String(userId) } });
       if (!target) return notFoundMsg(res, 'Foydalanuvchi topilmadi');
       threadUserId = target.id;
     } else {
-      // Foydalanuvchi/admin o'z murojaati — super_admin'ga
+      // Foydalanuvchi o'z murojaati — super_admin'ga
       threadUserId = me.userId;
     }
 
@@ -62,10 +65,11 @@ export const sendSupport = async (req: AuthRequest, res: Response, next: NextFun
 export const getSupportMessages = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const me = req.user!;
+    const isStaff = STAFF_ROLES.includes(me.role);
     const { userId } = req.query as { userId?: string };
 
     let threadUserId = me.userId;
-    if (me.role === 'SUPER_ADMIN' && userId) {
+    if (isStaff && userId) {
       threadUserId = String(userId);
       const target = await prisma.user.findUnique({ where: { id: threadUserId } });
       if (!target) return notFoundMsg(res, 'Foydalanuvchi topilmadi');
@@ -95,7 +99,7 @@ export const getSupportMessages = async (req: AuthRequest, res: Response, next: 
  */
 export const getSupportThreads = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    if (req.user!.role !== 'SUPER_ADMIN') return forbidden(res, 'Faqat super_admin uchun');
+    if (!STAFF_ROLES.includes(req.user!.role)) return forbidden(res, 'Faqat super_admin/admin uchun');
 
     const msgs = await prisma.supportMessage.findMany({
       include: { user: { select: { id: true, fullName: true, email: true, phone: true, role: true } } },
@@ -127,7 +131,7 @@ export const getSupportThreads = async (req: AuthRequest, res: Response, next: N
  */
 export const clearSupportThread = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    if (req.user!.role !== 'SUPER_ADMIN') return forbidden(res, 'Faqat super_admin uchun');
+    if (!STAFF_ROLES.includes(req.user!.role)) return forbidden(res, 'Faqat super_admin/admin uchun');
     await prisma.supportMessage.deleteMany({ where: { userId: req.params.userId } });
     return ok(res, null, 'Murojaat tozalandi');
   } catch (err) {

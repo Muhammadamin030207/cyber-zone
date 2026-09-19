@@ -43,7 +43,7 @@ export default function SupportChat({ mode = 'user' }: { mode?: 'user' | 'admin'
   const [err, setErr] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
-  const isAdminMode = mode === 'admin' && me?.role === 'SUPER_ADMIN';
+  const isAdminMode = mode === 'admin' && ['SUPER_ADMIN', 'ADMIN'].includes(me?.role || '');
 
   const merge = (list: SupportMsg[], incoming: SupportMsg | SupportMsg[]) =>
     Array.from(new Map([...list, ...(Array.isArray(incoming) ? incoming : [incoming])].map((m) => [m.id, m])).values())
