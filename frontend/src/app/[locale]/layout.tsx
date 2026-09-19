@@ -64,7 +64,7 @@ export default async function RootLayout({ children, params }: Props) {
         `}</style>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('cyber-zone-theme')||localStorage.getItem('cyber-arena-theme')||'obsidian';var all=['obsidian','midnight','ember','halloween','cyberpunk','aurora','nova','neon-halloween','slate','ocean','rose','mint'];if(all.indexOf(t)===-1)t='obsidian';document.documentElement.dataset.theme=t;}catch(e){}document.documentElement.style.colorScheme='dark';})();`,
+            __html: `(function(){try{var t=localStorage.getItem('cyber-zone-theme')||localStorage.getItem('cyber-arena-theme')||'obsidian';var all=['obsidian','midnight','cyberpunk','aurora'];if(all.indexOf(t)===-1)t='obsidian';document.documentElement.dataset.theme=t;}catch(e){}document.documentElement.style.colorScheme='dark';})();`,
           }}
         />
         <link rel="dns-prefetch" href="https://accounts.google.com" />

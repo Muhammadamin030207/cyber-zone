@@ -5,16 +5,9 @@ import { Palette, Check } from 'lucide-react';
 
 const THEMES = [
   { id: 'obsidian', name: 'Obsidian', swatch: 'bg-emerald-500', desc: 'Zumrad + Oltin' },
-  { id: 'midnight', name: 'Midnight', swatch: 'bg-indigo-500', desc: 'Indigo + Apelsin' },
-  { id: 'ember', name: 'Ember', swatch: 'bg-orange-500', desc: 'Olov + Teal' },
-  { id: 'neon-halloween', name: 'Neon Halloween', swatch: 'bg-[#ff8a00]', desc: 'Qovoq + Neon binafsha' },
-  { id: 'cyberpunk', name: 'Cyberpunk', swatch: 'bg-pink-500', desc: 'Siyan + Magenta' },
-  { id: 'aurora', name: 'Aurora', swatch: 'bg-cyan-400', desc: 'Muz siyan + Yalpiz' },
-  { id: 'nova', name: 'Modern', swatch: 'bg-indigo-400', desc: 'Toza premium zinc' },
-  { id: 'slate', name: 'Modern Slate', swatch: 'bg-sky-400', desc: 'Sovuq koʻk-kulrang' },
-  { id: 'ocean', name: 'Modern Ocean', swatch: 'bg-teal-400', desc: 'Dengiz ranglari' },
-  { id: 'rose', name: 'Modern Rose', swatch: 'bg-rose-400', desc: 'Atirgul + Oltin' },
-  { id: 'mint', name: 'Modern Mint', swatch: 'bg-emerald-300', desc: 'Yalpiz + Laym' },
+  { id: 'midnight', name: 'Midnight', swatch: 'bg-indigo-500', desc: 'Indigo + Amber' },
+  { id: 'cyberpunk', name: 'Cyberpunk', swatch: 'bg-cyan-400', desc: 'Siyan + Magenta' },
+  { id: 'aurora', name: 'Aurora', swatch: 'bg-sky-400', desc: 'Muz siyan + Yalpiz' },
 ] as const;
 
 type ThemeId = (typeof THEMES)[number]['id'];

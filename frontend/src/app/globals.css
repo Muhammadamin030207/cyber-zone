@@ -1,13 +1,15 @@
 @import "tailwindcss";
 
 /* ============================================================
-   CYBERARENA HUB — Premium Obsidian Dark Design System
-   Apple / Linear / Vercel uslubidagi chuqur toza qora
-   Aksentlar: Zumrad (#10B981) + Oltin (#F59E0B)
-   3 mavzu: obsidian (default), midnight, ember
+   CYBERARENA HUB — Sharp "no radius" Dark Design System
+   Aksentlar: zumrad + oltin
+   4 ideal mavzu: obsidian (default), midnight, cyberpunk, aurora
    ============================================================ */
 
 /* ---- Accent & background CSS-markerlar (runtime theme) ---- */
+/* 4 ta ideal tema: obsidian (zumrad+oltin), midnight (indigo+amber),
+   cyberpunk (siyan+magenta), aurora (muz siyan+yalpiz) */
+
 :root,
 html[data-theme="obsidian"] {
   --acc-a: #10b981;          /* zumrad / primary */
@@ -28,186 +30,49 @@ html[data-theme="obsidian"] {
 html[data-theme="midnight"] {
   --acc-a: #6366f1;          /* indigo */
   --acc-a-soft: #818cf8;
-  --acc-b: #fb923c;          /* apelsin */
-  --acc-b-soft: #fdba74;
-  --bg-0: #0c0c10;
-  --bg-1: #121217;
-  --bg-2: #1a1a21;
-  --bg-3: #22222b;
-  --line: rgba(255, 255, 255, 0.07);
-  --line-strong: rgba(255, 255, 255, 0.13);
-  --fg: #f4f4f5;
-  --fg-mut: #a1a1aa;
-  --fg-dim: #71717a;
-}
-
-html[data-theme="ember"] {
-  --acc-a: #f97316;          /* olov rang */
-  --acc-a-soft: #fb923c;
-  --acc-b: #14b8a6;          /* teal */
-  --acc-b-soft: #2dd4bf;
-  --bg-0: #0b0a09;
-  --bg-1: #141210;
-  --bg-2: #1d1a17;
-  --bg-3: #252220;
+  --acc-b: #f59e0b;          /* amber */
+  --acc-b-soft: #fbbf24;
+  --bg-0: #0b0b12;
+  --bg-1: #11111a;
+  --bg-2: #191925;
+  --bg-3: #21202e;
   --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.14);
-  --fg: #f4f4f5;
-  --fg-mut: #a3a3a3;
-  --fg-dim: #737373;
-}
-
-html[data-theme="halloween"] {
-  --acc-a: #ff7700;          /* neon qovoq */
-  --acc-a-soft: #ffa142;
-  --acc-b: #a855f7;          /* sirli binafsha */
-  --acc-b-soft: #c084fc;
-  --bg-0: #0a0604;           /* chuqur tungi qora */
-  --bg-1: #140e0a;
-  --bg-2: #1e150f;
-  --bg-3: #271c15;
-  --line: rgba(255, 119, 0, 0.12);
-  --line-strong: rgba(255, 119, 0, 0.22);
-  --fg: #fbf6f0;
-  --fg-mut: #b8a89c;
-  --fg-dim: #7f6e62;
+  --line-strong: rgba(255, 255, 255, 0.15);
+  --fg: #f4f4f9;
+  --fg-mut: #a1a1b3;
+  --fg-dim: #71718a;
 }
 
 html[data-theme="cyberpunk"] {
-  --acc-a: #06b6d4;          /* electric cyan */
-  --acc-a-soft: #22d3ee;
-  --acc-b: #ec4899;          /* electric magenta */
-  --acc-b-soft: #f472b6;
-  --bg-0: #070711;
-  --bg-1: #0e0e1e;
-  --bg-2: #16162d;
-  --bg-3: #1f1e3c;
-  --line: rgba(6, 182, 212, 0.14);
-  --line-strong: rgba(236, 72, 153, 0.22);
-  --fg: #f1f5f9;
-  --fg-mut: #94a3b8;
-  --fg-dim: #64748b;
+  --acc-a: #00d4ff;          /* electric cyan */
+  --acc-a-soft: #4de1ff;
+  --acc-b: #f033ff;          /* electric magenta */
+  --acc-b-soft: #f66fff;
+  --bg-0: #070710;
+  --bg-1: #0d0d1a;
+  --bg-2: #15152a;
+  --bg-3: #1e1e3c;
+  --line: rgba(0, 212, 255, 0.14);
+  --line-strong: rgba(240, 51, 255, 0.25);
+  --fg: #eef4ff;
+  --fg-mut: #93a3c8;
+  --fg-dim: #64708f;
 }
 
 html[data-theme="aurora"] {
-  --acc-a: #0ea5e9;          /* sky cyan */
-  --acc-a-soft: #38bdf8;
-  --acc-b: #10b981;          /* nordic emerald */
-  --acc-b-soft: #34d399;
-  --bg-0: #060a0f;
-  --bg-1: #0c141d;
-  --bg-2: #131e2b;
-  --bg-3: #1b2939;
-  --line: rgba(14, 165, 233, 0.12);
-  --line-strong: rgba(16, 185, 129, 0.20);
-  --fg: #f0fdf4;
-  --fg-mut: #94a3b8;
-  --fg-dim: #64748b;
-}
-
-/* ============================================================
-   NEON HALLOWEEN — neon qovoq + zaharli yashil + sirli binafsha
-   ============================================================ */
-html[data-theme="neon-halloween"] {
-  --acc-a: #ff8800;          /* neon qovoq */
-  --acc-a-soft: #ffad42;
-  --acc-b: #d231ff;          /* neon binafsha */
-  --acc-b-soft: #e26aff;
-  --bg-0: #0a0512;           /* chuqur binafsha-qora tun */
-  --bg-1: #120a1c;
-  --bg-2: #1a1028;
-  --bg-3: #241636;
-  --line: rgba(255, 136, 0, 0.14);
-  --line-strong: rgba(210, 49, 255, 0.24);
-  --fg: #fdf3e3;
-  --fg-mut: #cbb9a7;
-  --fg-dim: #8a7a6b;
-}
-
-/* ============================================================
-   MODERN — toza, premium, Linear/Vercel uslubi (zinc + indigo)
-   ============================================================ */
-html[data-theme="nova"] {
-  --acc-a: #6366f1;          /* indigo */
-  --acc-a-soft: #818cf8;
-  --acc-b: #22d3ee;          /* electric cyan */
-  --acc-b-soft: #67e8f9;
-  --bg-0: #09090b;           /* zinc-950 */
-  --bg-1: #0e0e11;
-  --bg-2: #16161b;
-  --bg-3: #1e1e24;
-  --line: rgba(255, 255, 255, 0.07);
-  --line-strong: rgba(255, 255, 255, 0.13);
-  --fg: #fafafa;
-  --fg-mut: #a1a1aa;
-  --fg-dim: #71717a;
-}
-
-/* ============================================================
-   MODERN VARIANTS (4): slate / ocean / rose / mint
-   ============================================================ */
-html[data-theme="slate"] {
-  --acc-a: #38bdf8;          /* sky */
+  --acc-a: #38bdf8;          /* muz siyan */
   --acc-a-soft: #7dd3fc;
-  --acc-b: #818cf8;          /* periwinkle */
-  --acc-b-soft: #a5b4fc;
-  --bg-0: #07090c;
-  --bg-1: #0d1016;
-  --bg-2: #151a23;
-  --bg-3: #1d232f;
-  --line: rgba(148, 163, 184, 0.12);
-  --line-strong: rgba(148, 163, 184, 0.20);
-  --fg: #eef2f7;
-  --fg-mut: #94a3b8;
-  --fg-dim: #64748b;
-}
-
-html[data-theme="ocean"] {
-  --acc-a: #2dd4bf;          /* teal */
-  --acc-a-soft: #5eead4;
-  --acc-b: #60a5fa;          /* soft blue */
-  --acc-b-soft: #93c5fd;
-  --bg-0: #05131b;           /* chuqur kechki dengiz */
-  --bg-1: #0a1a26;
-  --bg-2: #102330;
-  --bg-3: #172d3d;
-  --line: rgba(45, 212, 191, 0.12);
-  --line-strong: rgba(96, 165, 250, 0.20);
-  --fg: #e8f7f7;
-  --fg-mut: #9db8c2;
-  --fg-dim: #6f8a95;
-}
-
-html[data-theme="rose"] {
-  --acc-a: #fb7185;          /* rose */
-  --acc-a-soft: #fda4af;
-  --acc-b: #fbbf24;          /* gold */
-  --acc-b-soft: #fcd34d;
-  --bg-0: #0d0a0c;
-  --bg-1: #151013;
-  --bg-2: #1e181c;
-  --bg-3: #282025;
-  --line: rgba(251, 113, 133, 0.12);
-  --line-strong: rgba(251, 191, 36, 0.20);
-  --fg: #fdf4f5;
-  --fg-mut: #b3a3a8;
-  --fg-dim: #7d6d72;
-}
-
-html[data-theme="mint"] {
-  --acc-a: #34d399;          /* mint */
-  --acc-a-soft: #6ee7b7;
-  --acc-b: #a3e635;          /* lime */
-  --acc-b-soft: #bef264;
-  --bg-0: #07100b;
-  --bg-1: #0c1a13;
-  --bg-2: #142518;
-  --bg-3: #1c3122;
-  --line: rgba(52, 211, 153, 0.12);
-  --line-strong: rgba(163, 230, 53, 0.20);
-  --fg: #effbf3;
-  --fg-mut: #a3b8aa;
-  --fg-dim: #70867a;
+  --acc-b: #10b981;          /* yalpiz zumrad */
+  --acc-b-soft: #34d399;
+  --bg-0: #060b14;
+  --bg-1: #0c1420;
+  --bg-2: #131e2c;
+  --bg-3: #1b2b3c;
+  --line: rgba(56, 189, 248, 0.12);
+  --line-strong: rgba(16, 185, 129, 0.20);
+  --fg: #eef7fb;
+  --fg-mut: #9db8c9;
+  --fg-dim: #69808f;
 }
 
 @theme inline {
@@ -282,43 +147,22 @@ html[data-theme="mint"] {
   --cz-grid: color-mix(in srgb, var(--cz-cyan) 5%, transparent);
 }
 
-:root[data-theme='halloween'] {
-  --cz-bg: #0d0804;
-  --cz-bg-900: #170d05;
-  --cz-bg-800: #23140a;
-  --cz-bg-700: #2f1a0c;
-  --cz-surface: #160e06;
-  --cz-text: #f6ecdb;
-  --cz-cyan: #ff9f1a;
-  --cz-magenta: #b026ff;
-  --cz-green: #39ff14;
-  --cz-purple: #ff6a00;
-  --cz-glow-rgb: 255, 159, 26;
+:root[data-theme='obsidian'],
+:root[data-theme='midnight'],
+:root[data-theme='cyberpunk'],
+:root[data-theme='aurora'] {
+  --cz-bg: var(--bg-0);
+  --cz-bg-900: var(--bg-1);
+  --cz-bg-800: var(--bg-2);
+  --cz-bg-700: var(--bg-3);
+  --cz-surface: var(--bg-1);
+  --cz-text: var(--fg);
+  --cz-cyan: var(--acc-a);
+  --cz-magenta: var(--acc-b);
+  --cz-green: var(--acc-a-soft);
+  --cz-purple: var(--acc-b-soft);
+  --cz-glow-rgb: 0, 212, 255;
   --cz-sky: none;
-  --cz-grid: color-mix(in srgb, var(--cz-cyan) 6%, transparent);
-}
-
-:root[data-theme='night'] {
-  --cz-bg: #050a18;
-  --cz-bg-900: #0a1326;
-  --cz-bg-800: #101d3c;
-  --cz-bg-700: #18294f;
-  --cz-surface: #0a1326;
-  --cz-text: #e2e9ff;
-  --cz-cyan: #7db8ff;
-  --cz-magenta: #b08cff;
-  --cz-green: #6ee7ff;
-  --cz-purple: #9db4ff;
-  --cz-glow-rgb: 125, 185, 255;
-  --cz-sky:
-    radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,0.55) 40%, transparent 60%),
-    radial-gradient(1.5px 1.5px at 28% 62%, rgba(255,255,255,0.4) 40%, transparent 60%),
-    radial-gradient(1px 1px at 44% 28%, rgba(255,255,255,0.5) 40%, transparent 60%),
-    radial-gradient(1.5px 1.5px at 61% 74%, rgba(255,255,255,0.35) 40%, transparent 60%),
-    radial-gradient(1px 1px at 76% 22%, rgba(255,255,255,0.5) 40%, transparent 60%),
-    radial-gradient(1.5px 1.5px at 88% 60%, rgba(255,255,255,0.4) 40%, transparent 60%),
-    radial-gradient(1px 1px at 93% 12%, rgba(200,220,255,0.55) 40%, transparent 60%),
-    radial-gradient(1px 1px at 8% 82%, rgba(200,220,255,0.45) 40%, transparent 60%);
   --cz-grid: color-mix(in srgb, var(--cz-cyan) 5%, transparent);
 }
 
@@ -330,6 +174,22 @@ html[data-theme="mint"] {
 
 * {
   border-color: var(--line);
+}
+
+/* ---- Sharp corners: border-radius o'chiq, faqat ma'noli doiralar qoladi ---- */
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+}
+.rounded-full,
+.avatar,
+.orb,
+.chip,
+.scrollbar-thin::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb,
+input[type='range']::-webkit-slider-thumb {
+  border-radius: 9999px !important;
 }
 
 html {
