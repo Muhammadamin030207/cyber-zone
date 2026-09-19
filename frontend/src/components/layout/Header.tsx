@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link, usePathname } from '@/i18n/navigation';
-import { Gamepad2, Menu, X, LogIn, UserPlus, LayoutDashboard, Crown } from 'lucide-react';
+import { Menu, X, LogIn, LayoutDashboard, Crown, MessageSquare } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import LanguageSwitcher from './LanguageSwitcher';
 import ThemeSwitcher from './ThemeSwitcher';
@@ -31,10 +31,10 @@ export default function Header() {
         key={l.href}
         href={l.href}
         onClick={() => setMobileOpen(false)}
-        className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+        className={`px-3.5 py-2 text-sm font-medium rounded-lg transition-colors ${
           isActive(l.href)
-            ? 'text-neon-cyan bg-neon-cyan/10'
-            : 'text-gray-300 hover:text-white hover:bg-white/5'
+            ? 'text-neon-cyan bg-neon-cyan/10 border border-neon-cyan/20'
+            : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent'
         }`}
       >
         {l.label}
@@ -43,6 +43,11 @@ export default function Header() {
     </>
   );
 
+  const userInitial = (() => {
+    const name = user?.fullName || 'U';
+    return name.trim()[0]?.toUpperCase() || 'U';
+  })();
+
   return (
     <header className="sticky top-0 z-50 glass border-b border-neon-cyan/15">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
@@ -50,7 +55,7 @@ export default function Header() {
         <Link href="/" className="flex items-center gap-2 group">
           <Logo size={34} />
           <span className="font-[--font-orbitron] font-bold tracking-widest text-lg">
-            CYBER<span className="text-neon-cyan">ARENA</span>
+            CYBER<span className="text-neon-cyan">-ZONE</span>
           </span>
         </Link>
 
@@ -82,10 +87,28 @@ export default function Header() {
                 </Link>
               )}
               <Link
-                href="/dashboard"
-                className={`px-3 py-2 text-sm font-medium rounded-lg flex items-center gap-1 ${isActive('/dashboard') ? 'text-neon-cyan bg-neon-cyan/10' : 'text-gray-300 hover:text-white hover:bg-white/5'}`}
+                href="/chat"
+                title="Xabarlar"
+                aria-label="Xabarlar"
+                className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                  isActive('/chat')
+                    ? 'text-neon-cyan bg-neon-cyan/15 border border-neon-cyan/30'
+                    : 'text-gray-200 bg-cyber-800 border border-white/10 hover:border-neon-cyan/40'
+                }`}
               >
-                {t('dashboard')}
+                <MessageSquare size={16} />
+              </Link>
+              <Link
+                href="/dashboard"
+                title={t('dashboard')}
+                aria-label={t('dashboard')}
+                className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm transition-colors ${
+                  isActive('/dashboard')
+                    ? 'text-neon-cyan bg-neon-cyan/15 border border-neon-cyan/30'
+                    : 'text-gray-200 bg-cyber-800 border border-white/10 hover:border-neon-cyan/40'
+                }`}
+              >
+                {userInitial}
               </Link>
               <button
                 onClick={logout}
@@ -98,17 +121,10 @@ export default function Header() {
             <>
               <Link
                 href="/login"
-                className="px-3 py-2 text-sm font-medium rounded-lg text-gray-300 hover:text-white hover:bg-white/5 flex items-center gap-1"
+                className="px-4 py-2 text-sm font-bold rounded-xl neon-btn flex items-center gap-1"
               >
                 <LogIn size={16} />
                 {t('login')}
-              </Link>
-              <Link
-                href="/register"
-                className="px-4 py-2 text-sm font-bold rounded-lg neon-btn flex items-center gap-1"
-              >
-                <UserPlus size={16} />
-                {t('register')}
               </Link>
             </>
           )}
@@ -141,6 +157,7 @@ export default function Header() {
               {user.role === 'ADMIN' && (
                 <Link href="/admin" onClick={() => setMobileOpen(false)} className="px-3 py-2 text-sm font-medium text-neon-green">{t('admin')}</Link>
               )}
+              <Link href="/chat" onClick={() => setMobileOpen(false)} className="px-3 py-2 text-sm font-medium text-gray-300 flex items-center gap-2"><MessageSquare size={16} /> Xabarlar</Link>
               <Link href="/dashboard" onClick={() => setMobileOpen(false)} className="px-3 py-2 text-sm font-medium text-gray-300">{t('dashboard')}</Link>
               <button onClick={() => { logout(); setMobileOpen(false); }} className="px-3 py-2 text-sm font-medium text-red-400 text-left">
                 {t('logout')}
@@ -148,8 +165,7 @@ export default function Header() {
             </>
           ) : (
             <>
-              <Link href="/login" onClick={() => setMobileOpen(false)} className="px-3 py-2 text-sm font-medium text-gray-300">{t('login')}</Link>
-              <Link href="/register" onClick={() => setMobileOpen(false)} className="px-4 py-2 text-sm font-bold rounded-lg neon-btn text-center">{t('register')}</Link>
+              <Link href="/login" onClick={() => setMobileOpen(false)} className="px-4 py-2 text-sm font-bold rounded-lg neon-btn text-center">{t('login')}</Link>
             </>
           )}
         </div>

@@ -10,6 +10,14 @@ import { ok, badRequest, unauthorized, notFoundMsg } from '../utils/response';
 
 const googleClient = new OAuth2Client(config.google.clientId);
 
+/** Telefon raqamni yagona formaga keltiradi: "+998 90 123 45 67" yoki "998901234567" -> "+998901234567" */
+function normalizePhone(p: string): string | null {
+  const digits = String(p).replace(/\D/g, '');
+  if (/^998\d{9}$/.test(digits)) return '+998' + digits.slice(3);
+  if (/^\d{9}$/.test(digits)) return '+998' + digits;
+  return null;
+}
+
 // ============ REGISTER (USER) ============
 // googleToken berilganda parvoz qilib, parol ixtiyoriy (avtomatik random parol qo'yiladi)
 export const register = async (req: Request, res: Response, next: NextFunction) => {
@@ -28,7 +36,8 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     if (password && String(password).length < 6) {
       return badRequest(res, "Parol kamida 6 ta belgidan iborat bo'lishi kerak");
     }
-    if (phone && !/^\+998\d{9}$/.test(String(phone).replace(/[\s-]/g, ''))) {
+    const phoneNorm = phone ? normalizePhone(String(phone)) : null;
+    if (phone !== undefined && phone !== null && phone !== '' && !phoneNorm) {
       return badRequest(res, "Telefon +998 XX XXX XX XX formatda bo'lishi kerak");
     }
 
@@ -69,7 +78,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         email,
         passwordHash,
         fullName,
-        phone: phone || null,
+        phone: phoneNorm || null,
         language: language || 'uz',
         role: 'USER',
         googleId,
@@ -265,7 +274,13 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
 
     const data: any = {};
     if (fullName !== undefined) data.fullName = fullName;
-    if (phone !== undefined) data.phone = phone;
+    if (phone !== undefined && phone !== '' && phone !== null) {
+      const phoneNorm = normalizePhone(String(phone));
+      if (!phoneNorm) return badRequest(res, "Telefon +998 XX XXX XX XX formatda bo'lishi kerak");
+      data.phone = phoneNorm;
+    } else if (phone === null || phone === '') {
+      data.phone = null;
+    }
     if (language !== undefined) data.language = language;
     if (avatarUrl !== undefined) data.avatarUrl = avatarUrl;
 

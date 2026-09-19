@@ -13,6 +13,7 @@ import { formatPrice, formatDate, formatDateTime, todayISO, zoneTypeLabel, cn } 
 import { useAuthStore } from '@/store/auth';
 import BarAdmin from '@/components/admin/BarAdmin';
 import ChatAdmin from '@/components/admin/ChatAdmin';
+import Logo from '@/components/brand/Logo';
 
 type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'bar' | 'chat' | 'promos' | 'news' | 'stats';
 
@@ -72,7 +73,7 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
-        <div className="neo-card rounded-2xl h-96 animate-pulse" />
+        <div className="skeleton rounded-2xl h-96" />
       </div>
     );
   }
@@ -80,7 +81,7 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
       <h1 className="text-3xl font-extrabold tracking-tight mb-6 flex items-center gap-3">
-        <ShieldCheck size={28} className="text-neon-green" /> {t('title')}
+        <span className="w-11 h-11 neo-card rounded-xl flex items-center justify-center"><Logo size={26} /></span> {t('title')}
       </h1>
 
       {/* Tabs */}
@@ -105,7 +106,9 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
       {/* Content */}
       {!room && tab !== 'room' && tab !== 'bar' && tab !== 'chat' ? (
         <div className="text-center py-20">
-          <Gamepad2 size={48} className="mx-auto mb-4 text-gray-600" />
+          <div className="w-16 h-16 mx-auto mb-4 neo-card rounded-2xl flex items-center justify-center animate-floaty">
+            <Logo size={38} />
+          </div>
           <p className="text-gray-400 text-lg mb-4">{t('noRoom')}</p>
           <button onClick={() => setTab('room')} className="px-6 py-3 rounded-xl neon-btn text-sm font-bold">
             <Plus size={16} className="inline mr-1" /> {t('createRoom')}

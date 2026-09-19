@@ -3,11 +3,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
-import { Search, SlidersHorizontal, X, Building2, MapPin, LayoutGrid, Map } from 'lucide-react';
+import { Search, SlidersHorizontal, X, Building2, LayoutGrid, Map, ArrowUpDown } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { Room } from '@/lib/types';
 import RoomCard from '@/components/rooms/RoomCard';
+import Logo from '@/components/brand/Logo';
 import { TASHKENT_DISTRICTS } from '@/lib/constants';
 
 const RoomsMap = dynamic(() => import('@/components/rooms/RoomsMap'), { ssr: false });
@@ -67,19 +68,39 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
 
   const hasFilters = zoneType || district || priceMin || priceMax || sort;
 
+  function clearAll() {
+    setZoneType('');
+    setDistrict('');
+    setPriceMin('');
+    setPriceMax('');
+    setSort('');
+    setQuery('');
+  }
+
+  const activeChips: string[] = [];
+  if (zoneType) activeChips.push(zoneType === 'GENERAL_HALL' ? 'General' : zoneType);
+  if (district) activeChips.push(district);
+  if (priceMin) activeChips.push(`${priceMin} so‘mdan`);
+  if (priceMax) activeChips.push(`gacha ${priceMax}`);
+  if (sort === 'price_asc') activeChips.push('Arzon');
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
-          <Building2 size={28} className="text-neon-cyan" />
-          <h1 className="text-3xl font-extrabold tracking-tight">{tRooms('title')}</h1>
+          <div className="w-11 h-11 rounded-xl border border-neon-cyan/30 bg-neon-cyan/10 flex items-center justify-center shadow-glow">
+            <Building2 size={22} className="text-neon-cyan" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight">{tRooms('title')}</h1>
+            <p className="text-gray-400">{tRooms('subtitle')}</p>
+          </div>
         </div>
-        <p className="text-gray-400">{tRooms('subtitle')}</p>
       </div>
 
-      {/* Search + Filter toggle */}
-      <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 mb-4">
+      {/* Search + toolbar */}
+      <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 mb-3">
         <div className="flex-1 flex items-center gap-2 px-3 glass rounded-xl neon-border">
           <Search size={18} className="text-neon-cyan shrink-0" />
           <input
@@ -121,6 +142,39 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
           </button>
         </div>
       </form>
+
+      {/* Sort segmented */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <span className="text-xs text-gray-500 flex items-center gap-1 uppercase tracking-wider">
+          <ArrowUpDown size={12} /> Tartib:
+        </span>
+        {((['', 'price_asc'] as SortKey[])).map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setSort(s)}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+              sort === s
+                ? 'border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan'
+                : 'border-neon-cyan/15 text-gray-400 hover:text-neon-cyan'
+            }`}
+          >
+            {s === '' ? tRooms('sortNewest') : tRooms('sortCheap')}
+          </button>
+        ))}
+
+        {activeChips.length > 0 && (
+          <>
+            <div className="h-4 w-px bg-neon-cyan/20 mx-1" />
+            {activeChips.map((chip, i) => (
+              <span key={i} className="chip chip-success text-xs">{chip}</span>
+            ))}
+            <button onClick={clearAll} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 font-medium">
+              <X size={12} /> Tozalash
+            </button>
+          </>
+        )}
+      </div>
 
       {/* Filter panel */}
       {showFilters && (
@@ -177,29 +231,14 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
             />
           </div>
 
-          <div className="flex gap-2">
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortKey)}
-              className="glass-input flex-1 rounded-xl px-3 py-2.5 text-sm outline-none"
-            >
-              <option value="">{tRooms('sortNewest')}</option>
-              <option value="price_asc">{tRooms('sortCheap')}</option>
-            </select>
+          <div className="sm:col-span-4 flex justify-end">
             {hasFilters && (
               <button
                 type="button"
-                onClick={() => {
-                  setZoneType('');
-                  setDistrict('');
-                  setPriceMin('');
-                  setPriceMax('');
-                  setSort('');
-                }}
-                className="px-3 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10"
-                title="Clear"
+                onClick={clearAll}
+                className="px-4 py-2 rounded-xl border border-red-500/30 text-red-400 text-sm font-medium hover:bg-red-500/10 flex items-center gap-1.5"
               >
-                <X size={16} />
+                <X size={14} /> Hammasini tozalash
               </button>
             )}
           </div>
@@ -215,20 +254,30 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
 
       {loading ? (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="neo-card rounded-2xl h-80 animate-pulse" />
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="skeleton rounded-2xl h-80" />
           ))}
         </div>
       ) : rooms.length === 0 ? (
-        <div className="text-center py-20">
-          <MapPin size={48} className="mx-auto mb-4 text-gray-600" />
-          <p className="text-gray-400 text-lg">{tRooms('empty')}</p>
+        <div className="text-center py-20 neo-card rounded-2xl">
+          <div className="w-16 h-16 mx-auto mb-4 neo-card rounded-2xl flex items-center justify-center animate-floaty">
+            <Logo size={38} />
+          </div>
+          <p className="text-gray-400 text-lg max-w-md mx-auto">{tRooms('empty')}</p>
+          <button
+            onClick={clearAll}
+            className="mt-5 inline-flex items-center gap-2 px-6 py-2.5 rounded-xl neon-btn text-sm font-bold"
+          >
+            <X size={16} /> Filtrlarni tozalash
+          </button>
         </div>
       ) : view === 'map' ? (
         <RoomsMap rooms={rooms} />
       ) : (
         <>
-          <p className="text-sm text-gray-500 mb-4">{rooms.length} {tRooms('title').toLowerCase()}</p>
+          <p className="text-sm text-gray-500 mb-4">
+            <b className="text-neon-cyan">{rooms.length}</b> {tRooms('title').toLowerCase()}
+          </p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {rooms.map((room) => (
               <RoomCard key={room.id} room={room} />

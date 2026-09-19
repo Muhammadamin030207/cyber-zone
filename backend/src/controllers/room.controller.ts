@@ -11,6 +11,7 @@ const ROOM_INCLUDE = {
     },
   },
   reviews: {
+    orderBy: { createdAt: 'desc' as const },
     include: {
       user: { select: { id: true, fullName: true, avatarUrl: true } },
     },
@@ -461,6 +462,47 @@ export const deleteRoom = async (req: AuthRequest, res: Response, next: NextFunc
     await prisma.computerRoom.delete({ where: { id: req.params.id } });
     await invalidateRoomCaches(req.params.id);
     return ok(res, null, 'Kompyuter xona o\'chirildi');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ POST /api/rooms/:id/reviews — USER: izoh qoldirish ============
+export const createReview = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { rating, comment } = req.body;
+    const ratingNum = Number(rating);
+    if (!Number.isInteger(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+      return badRequest(res, 'Baholash 1 dan 5 gacha bo\'lishi kerak');
+    }
+    if (comment !== undefined && String(comment).trim().length > 500) {
+      return badRequest(res, 'Izoh 500 ta belgidan oshmasligi kerak');
+    }
+
+    const room = await prisma.computerRoom.findUnique({ where: { id: req.params.id } });
+    if (!room) return notFoundMsg(res, 'Kompyuter xona topilmadi');
+
+    // Foydalanuvchi faqat bitta izoh qoldiradi — qayta yozsa yangilaymiz
+    const existing = await prisma.review.findFirst({
+      where: { userId: req.user!.userId, roomId: room.id },
+    });
+
+    const review = existing
+      ? await prisma.review.update({
+          where: { id: existing.id },
+          data: { rating: ratingNum, comment: comment !== undefined ? String(comment).trim() : existing.comment },
+        })
+      : await prisma.review.create({
+          data: {
+            userId: req.user!.userId,
+            roomId: room.id,
+            rating: ratingNum,
+            comment: comment !== undefined ? String(comment).trim() : null,
+          },
+        });
+
+    await invalidateRoomCaches(room.id);
+    return created(res, review, 'Rahmat! Izohingiz qoldirildi');
   } catch (err) {
     next(err);
   }

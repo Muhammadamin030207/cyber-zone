@@ -17,10 +17,23 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: 'home' });
   return {
-    title: 'CyberArena Hub — Kompyuter klub platformasi',
+    title: 'Cyber-ZONE — Kompyuter klub platformasi',
     description: t('heroSubtitle'),
     manifest: '/manifest.json',
-    appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'CyberArena' },
+    appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Cyber-ZONE' },
+    icons: {
+      icon: [
+        { url: '/icons/icon-192.png', type: 'image/png', sizes: '192x192' },
+        { url: '/icons/icon-512.png', type: 'image/png', sizes: '512x512' },
+        { url: '/icons/icon-512.svg', type: 'image/svg+xml' },
+      ],
+      apple: [{ url: '/icons/apple-touch-icon.png', type: 'image/png', sizes: '180x180' }],
+    },
+    openGraph: {
+      title: 'Cyber-ZONE — Kompyuter klub platformasi',
+      description: t('heroSubtitle'),
+      type: 'website',
+    },
   };
 }
 

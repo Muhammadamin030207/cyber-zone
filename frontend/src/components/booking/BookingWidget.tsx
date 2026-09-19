@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  CalendarDays, Clock, BadgePercent, Check, Loader2, Ticket, LogIn, Zap,
+  CalendarDays, Clock, BadgePercent, Check, Loader2, Ticket, Zap, ShieldCheck,
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -34,6 +34,7 @@ export default function BookingWidget({ room, date, onDateChange, availability }
   const [autoPc, setAutoPc] = useState(true);
   const [startTime, setStartTime] = useState('14:00');
   const [endTime, setEndTime] = useState('18:00');
+  const [timeError, setTimeError] = useState<string | null>(null);
   const [promoCode, setPromoCode] = useState('');
   const [promo, setPromo] = useState<PromoCheck | null>(null);
   const [promoApplied, setPromoApplied] = useState(false);
@@ -58,6 +59,20 @@ export default function BookingWidget({ room, date, onDateChange, availability }
     const [eh, em] = endTime.split(':').map(Number);
     return Math.max(0, eh + em / 60 - (sh + sm / 60));
   }, [startTime, endTime]);
+
+  const timeOk = durationHours > 0;
+
+  function applyDuration(hours: number) {
+    const [sh, sm] = startTime.split(':').map(Number);
+    const total = sh * 60 + sm + hours * 60;
+    const eh = Math.floor(total / 60) % 24;
+    const em = total % 60;
+    const next = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+    setEndTime(next);
+    setTimeError(null);
+  }
+
+  const DURATIONS = [1, 2, 3, 4, 6];
 
   const baseTotal = pricePerHour * durationHours;
 
@@ -103,8 +118,9 @@ export default function BookingWidget({ room, date, onDateChange, availability }
       router.push(`/login?redirect=${encodeURIComponent(`/rooms/${room.id}`)}`);
       return;
     }
-    if (!zoneId || durationHours <= 0) {
+    if (!zoneId || !timeOk) {
       setError(t('notAvailable'));
+      if (!timeOk) setTimeError('Tugash vaqti boshlanish vaqtidan keyin bo‘lishi kerak.');
       return;
     }
     setSubmitting(true);
@@ -137,6 +153,8 @@ export default function BookingWidget({ room, date, onDateChange, availability }
     }
   }
 
+  const isStaff = !!user && (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN');
+
   return (
     <div className="neo-card rounded-2xl overflow-hidden">
       <div className="bg-gradient-to-r from-neon-cyan/10 via-transparent to-neon-magenta/10 border-b border-neon-cyan/15 px-5 py-4">
@@ -148,6 +166,24 @@ export default function BookingWidget({ room, date, onDateChange, availability }
         </p>
       </div>
 
+      {isStaff ? (
+        <div className="p-6 text-center">
+          <div className="w-14 h-14 mx-auto mb-4 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 flex items-center justify-center">
+            <ShieldCheck size={26} className="text-yellow-400" />
+          </div>
+          <p className="font-bold text-lg mb-1">Siz xodim sifatida kirdingiz</p>
+          <p className="text-sm text-gray-400 leading-relaxed">
+            Bron qilish faqat foydalanuvchilar uchun. Siz bronlarni{' '}
+            {user?.role === 'SUPER_ADMIN' ? 'boshqaruv panelidan' : 'admin panelidan'} boshqarasiz.
+          </p>
+          <Link
+            href={user?.role === 'SUPER_ADMIN' ? '/super-admin' : '/admin'}
+            className="inline-flex items-center gap-2 mt-5 px-6 py-2.5 rounded-xl neon-btn text-sm font-bold"
+          >
+            <ShieldCheck size={15} /> Boshqaruv paneli
+          </Link>
+        </div>
+      ) : (
       <div className="p-5 space-y-4">
         {success && (
           <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-neon-green/10 border border-neon-green/30 text-sm text-neon-green">
@@ -201,10 +237,15 @@ export default function BookingWidget({ room, date, onDateChange, availability }
                       : 'border-neon-cyan/15 bg-cyber-800/60 text-gray-300 hover:border-neon-cyan/40'
                   )}
                 >
-                  <span className="font-medium">{z.name} <span className="text-xs text-gray-500">({z.type})</span></span>
-                  <span className="text-xs">
-                    <b className="text-neon-green">{z.availableComputers}</b>
-                    <span className="text-gray-500">/{z.totalComputers} {t('freeComputers')}</span>
+                  <span className="flex-1 font-medium">{z.name}</span>
+                  <span className="text-xs flex items-center gap-2">
+                    <span className="text-gray-500">{formatPrice(z.pricePerHour)} so‘m/soat</span>
+                    <span className={`px-1.5 py-0.5 rounded-md font-bold ${
+                      z.availableComputers === 0 ? 'bg-red-500/15 text-red-400' : 'bg-neon-green/10 text-neon-green'
+                    }`}>
+                      {z.availableComputers}
+                      <span className="font-normal text-gray-500">/{z.totalComputers}</span>
+                    </span>
                   </span>
                 </button>
               ))}
@@ -244,29 +285,57 @@ export default function BookingWidget({ room, date, onDateChange, availability }
         )}
 
         {/* Vaqt */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
-              {t('startTime')}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider">
+              {t('duration')}
             </label>
-            <input
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-            />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
-              {t('endTime')}
-            </label>
-            <input
-              type="time"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-            />
+          <div className="flex gap-2 mb-3">
+            {DURATIONS.map((h) => (
+              <button
+                key={h}
+                type="button"
+                onClick={() => applyDuration(h)}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                  Math.round(durationHours) === h
+                    ? 'border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan'
+                    : 'border-neon-cyan/15 text-gray-400 hover:border-neon-cyan/40 hover:text-neon-cyan'
+                }`}
+              >
+                {h} soat
+              </button>
+            ))}
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
+                {t('startTime')}
+              </label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => { setStartTime(e.target.value); setTimeError(null); }}
+                className={`glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none ${!timeOk ? 'border-red-500/50' : ''}`}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
+                {t('endTime')}
+              </label>
+              <input
+                type="time"
+                value={endTime}
+                onChange={(e) => { setEndTime(e.target.value); setTimeError(null); }}
+                className={`glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none ${!timeOk ? 'border-red-500/50' : ''}`}
+              />
+            </div>
+          </div>
+          {!timeOk && (
+            <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
+              Tugash vaqti boshlanish vaqtidan keyin bo‘lishi kerak.
+            </p>
+          )}
         </div>
 
         {/* Promo */}
@@ -303,50 +372,52 @@ export default function BookingWidget({ room, date, onDateChange, availability }
         </div>
 
         {/* Xulosa */}
-        <div className="rounded-xl border border-neon-cyan/15 bg-cyber-800/60 p-4 space-y-2 text-sm">
+        <div className="rounded-xl border border-neon-cyan/15 bg-gradient-to-b from-cyber-800/80 to-cyber-800/40 p-4 space-y-2 text-sm">
           <div className="flex items-center justify-between text-gray-400">
-            <span>{t('duration')} ({durationHours.toFixed(1)} {t('hoursTotal')})</span>
-            <span className="flex items-center gap-1"><Clock size={12} /> {startTime} — {endTime}</span>
+            <span className="flex items-center gap-1.5"><Clock size={13} className="text-neon-cyan" /> {t('duration')}</span>
+            <span className="text-gray-300 font-medium">{durationHours.toFixed(1)} {t('hoursTotal')} · {startTime} — {endTime}</span>
           </div>
           {date && (
             <div className="flex items-center justify-between text-gray-400">
-              <span>{t('date')}</span>
-              <span>{formatDate(date)}</span>
+              <span className="flex items-center gap-1.5"><CalendarDays size={13} className="text-neon-cyan" /> {t('date')}</span>
+              <span className="text-gray-300 font-medium">{formatDate(date)}</span>
             </div>
           )}
-          <div className="h-px bg-neon-cyan/10 my-1" />
-          <div className="flex items-center justify-between">
+          <div className="h-px bg-gradient-to-r from-transparent via-neon-cyan/20 to-transparent my-1" />
+          <div className="flex items-center justify-between text-gray-400">
             <span>{t('price')}</span>
             <span>{formatPrice(baseTotal)} {t('sum')}</span>
           </div>
           {discount > 0 && (
-            <div className="flex items-center justify-between text-neon-green">
+            <div className="flex items-center justify-between text-neon-green font-medium">
               <span>{t('discount')}</span>
               <span>-{formatPrice(discount)}</span>
             </div>
           )}
-          <div className="flex items-center justify-between font-bold text-lg">
-            <span>{t('finalPrice')}</span>
-            <span className="neon-text">{formatPrice(finalTotal)} {t('sum')}</span>
+          <div className="flex items-center justify-between text-lg">
+            <span className="text-gray-300 font-semibold">{t('finalPrice')}</span>
+            <span className="neon-text font-extrabold">{formatPrice(finalTotal)} {t('sum')}</span>
           </div>
-          <div className="flex items-center justify-between text-neon-cyan">
-            <span>{t('advance')}</span>
-            <span>{formatPrice(advance)} {t('sum')}</span>
-          </div>
-          <div className="flex items-center justify-between text-gray-400">
-            <span>{t('remaining')}</span>
-            <span>{formatPrice(remaining)} {t('sum')}</span>
+          <div className="px-3 py-2 rounded-lg bg-neon-cyan/5 border border-neon-cyan/15 space-y-1">
+            <div className="flex items-center justify-between text-neon-cyan font-medium">
+              <span>{t('advance')}</span>
+              <span>{formatPrice(advance)} {t('sum')}</span>
+            </div>
+            <div className="flex items-center justify-between text-gray-400">
+              <span>{t('remaining')}</span>
+              <span>{formatPrice(remaining)} {t('sum')}</span>
+            </div>
           </div>
         </div>
 
         {/* Submit */}
         <button
           onClick={submit}
-          disabled={submitting || availability.length === 0}
-          className="w-full py-3 rounded-xl neon-btn flex items-center justify-center gap-2 font-bold disabled:opacity-50"
+          disabled={submitting || availability.length === 0 || !timeOk}
+          className="w-full py-3.5 rounded-xl neon-btn flex items-center justify-center gap-2 font-bold text-base disabled:opacity-50"
         >
-          {submitting ? <Loader2 size={18} className="animate-spin" /> : user ? <CalendarDays size={18} /> : <LogIn size={18} />}
-          {user ? t('create') : t('create')}
+          {submitting ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
+          {t('create')} · {formatPrice(finalTotal)} {t('sum')}
         </button>
 
         {!user && (
@@ -357,7 +428,8 @@ export default function BookingWidget({ room, date, onDateChange, availability }
             uchun tizimga kiring
           </p>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

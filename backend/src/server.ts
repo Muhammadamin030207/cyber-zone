@@ -15,6 +15,7 @@ import notificationRoutes from './routes/notification.routes';
 import barRoutes from './routes/bar.routes';
 import chatRoutes from './routes/chat.routes';
 import aiRoutes from './routes/ai.routes';
+import supportRoutes from './routes/support.routes';
 import { errorHandler, notFound } from './middlewares/error';
 import prisma from './lib/prisma';
 import { io } from './lib/socket';
@@ -40,6 +41,16 @@ io.on('connection', (socket) => {
   // Chat: xona chatlariga qo'shilish (jonli yangilanish uchun)
   socket.on('joinRoom', (roomId: string) => {
     if (roomId) socket.join(`chat:room:${roomId}`);
+  });
+
+  // Support: super_admin xonasi — yangi murojaatlar avtomatik keladi
+  socket.on('joinSupport', () => {
+    socket.join('support:sadmin');
+  });
+
+  // Support: alohida thread kuzatuvi (user/admin/super_admin)
+  socket.on('joinSupportThread', (threadUserId: string) => {
+    if (threadUserId) socket.join(`support:${threadUserId}`);
   });
 
   socket.on('disconnect', () => {
@@ -121,6 +132,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/bar', barRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/support', supportRoutes);
 
 // 404 va error handler
 app.use(notFound);

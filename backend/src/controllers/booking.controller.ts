@@ -24,6 +24,10 @@ function timeToMinutes(t: string): number {
 // ============ POST /api/bookings — USER: yangi bron (himoya + transaction) ============
 export const createBooking = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    if (req.user!.role !== 'USER') {
+      return forbidden(res, 'Bron faqat foydalanuvchilar uchun. Admin bron qila olmaydi');
+    }
+
     const { roomId, zoneId, computerId, date, startTime, durationHours, notes, promoCode } = req.body;
     let endTime = req.body.endTime as string | undefined;
 

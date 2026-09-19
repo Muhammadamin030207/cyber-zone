@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import {
   Crown, Users, Building2, CalendarDays, CircleDollarSign, Activity,
   Search, Plus, Trash2, Loader2, Check, ShieldOff, ShieldCheck,
-  KeyRound, MapPin, X, PlusCircle, Wallet, Banknote,
+  KeyRound, MapPin, X, PlusCircle, Wallet, Banknote, MessageSquare,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { User, Room } from '@/lib/types';
@@ -14,8 +14,10 @@ import { useAuthStore } from '@/store/auth';
 import { TASHKENT_DISTRICTS } from '@/lib/constants';
 import { Coffee } from 'lucide-react';
 import BarAll from '@/components/super-admin/BarAll';
+import SupportChat from '@/components/support/SupportChat';
+import Logo from '@/components/brand/Logo';
 
-type Tab = 'overview' | 'users' | 'rooms' | 'bar' | 'payments';
+type Tab = 'overview' | 'users' | 'rooms' | 'bar' | 'payments' | 'support';
 
 export default function SuperAdminPage({ params }: { params: Promise<{ locale: string }> }) {
   void params;
@@ -39,12 +41,13 @@ export default function SuperAdminPage({ params }: { params: Promise<{ locale: s
     { key: 'rooms' as Tab, icon: Building2, label: t('tabRooms') },
     { key: 'bar' as Tab, icon: Coffee, label: 'Gaming Bar' },
     { key: 'payments' as Tab, icon: Wallet, label: 'To\'lovlar' },
+    { key: 'support' as Tab, icon: MessageSquare, label: 'Murojaatlar' },
   ];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
       <h1 className="text-3xl font-extrabold tracking-tight mb-6 flex items-center gap-3">
-        <Crown size={28} className="text-yellow-400" /> {t('title')}
+        <span className="w-11 h-11 neo-card rounded-xl flex items-center justify-center"><Logo size={26} /></span> {t('title')}
       </h1>
 
       <div className="flex items-center gap-1 mb-6 overflow-x-auto scrollbar-thin pb-2">
@@ -65,7 +68,7 @@ export default function SuperAdminPage({ params }: { params: Promise<{ locale: s
         ))}
       </div>
 
-      {tab === 'overview' ? <OverviewTab /> : tab === 'users' ? <UsersTab /> : tab === 'rooms' ? <RoomsTab /> : tab === 'payments' ? <PaymentsTab /> : <BarAll />}
+      {tab === 'overview' ? <OverviewTab /> : tab === 'users' ? <UsersTab /> : tab === 'rooms' ? <RoomsTab /> : tab === 'payments' ? <PaymentsTab /> : tab === 'support' ? <SupportChat mode="admin" /> : <BarAll />}
     </div>
   );
 }
@@ -83,7 +86,7 @@ function OverviewTab() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{[1, 2, 3, 4, 5, 6].map((i) => <div key={i} className="neo-card rounded-2xl h-32 animate-pulse" />)}</div>;
+  if (loading) return <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{[1, 2, 3, 4, 5, 6].map((i) => <div key={i} className="skeleton rounded-2xl h-32" />)}</div>;
   if (!stats) return <p className="text-gray-500 text-center py-20">Ma'lumot yo'q</p>;
 
   const cards = [

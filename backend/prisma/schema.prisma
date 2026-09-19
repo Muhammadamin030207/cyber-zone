@@ -116,6 +116,8 @@ model User {
   promoCodes   PromoCode[]
   barOrders    BarOrder[]
   chatMessages ChatMessage[]
+  supportThread SupportMessage[] @relation("SupportThread")
+  supportSent   SupportMessage[] @relation("SupportSender")
 
   @@map("users")
 }
@@ -308,6 +310,23 @@ model ChatMessage {
   user User         @relation(fields: [userId], references: [id])
 
   @@map("chat_messages")
+}
+
+// ===================== SUPPORT =====================
+model SupportMessage {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id") // murojaat qilgan foydalanuvchi
+  senderId  String?  @map("sender_id") // yuboruvchi (admin/super_admin javobi yoki nol)
+  message   String
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User  @relation("SupportThread", fields: [userId], references: [id], onDelete: Cascade)
+  sender User? @relation("SupportSender", fields: [senderId], references: [id])
+
+  @@index([userId])
+  @@index([senderId])
+  @@map("support_messages")
 }
 
 model News {

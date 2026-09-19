@@ -16,7 +16,8 @@ const router = Router();
 router.get('/rooms/:roomId/availability', getAvailability);
 
 // ============ USER ============
-router.post('/', authenticate, authorize('USER', 'ADMIN', 'SUPER_ADMIN'), createBooking);
+// Bron faqat USER rolidagi foydalanuvchilarga ruxsat — admin/super_admin bron qilmaydi
+router.post('/', authenticate, authorize('USER'), createBooking);
 router.get('/', authenticate, getMyBookings);
 router.get('/:id', authenticate, getBookingById);
 router.put('/:id/cancel', authenticate, cancelBooking);

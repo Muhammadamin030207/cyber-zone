@@ -53,19 +53,29 @@ export const sendMessage = async (req: AuthRequest, res: Response, next: NextFun
       },
     });
 
-    // Qarama-qarshi tarafga jonli yetkazish
-    const otherParty = req.user!.role === 'USER' ? room.ownerId : msg.userId;
-    io.to(`user:${otherParty}`).emit('chat:new', { roomId: room.id, message: msg });
+    // Jonli yetkazish: xonaga qo'shilgan barchaga + qarama-qarshi tarafga
+    // (egasi emas yozsa -> egasiga, egasi yozsa -> oxirgi USER qatnashuvchiga)
     io.to(`chat:room:${room.id}`).emit('chat:room:new', { roomId: room.id, message: msg });
 
-    await prisma.notification.create({
-      data: {
-        userId: otherParty,
-        title: 'Yangi chat xabari',
-        message: `${msg.user.fullName}: ${msg.message.slice(0, 60)}`,
-        type: 'bar',
-      },
-    }).catch(() => { /* notification muhim emas */ });
+    let notifyUserId = room.ownerId;
+    if (msg.userId === room.ownerId) {
+      const lastUserMsg = await prisma.chatMessage.findFirst({
+        where: { roomId: room.id, userId: { not: room.ownerId }, role: 'USER' },
+        orderBy: { createdAt: 'desc' },
+      });
+      notifyUserId = lastUserMsg?.userId || room.ownerId;
+    }
+    if (notifyUserId !== msg.userId) {
+      io.to(`user:${notifyUserId}`).emit('chat:new', { roomId: room.id, message: msg });
+      await prisma.notification.create({
+        data: {
+          userId: notifyUserId,
+          title: 'Yangi chat xabari',
+          message: `${msg.user.fullName}: ${msg.message.slice(0, 60)}`,
+          type: 'bar',
+        },
+      }).catch(() => { /* notification muhim emas */ });
+    }
 
     return created(res, msg);
   } catch (err) {

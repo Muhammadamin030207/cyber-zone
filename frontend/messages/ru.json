@@ -114,6 +114,9 @@
     "sum": "so'm"
   },
   "auth": {
+    "googleBtn": "Войти через Google",
+    "googleLogin": "Войти через Google",
+    "googleSignup": "Регистрация через Google",
     "loginTitle": "Вход в систему",
     "registerTitle": "Регистрация",
     "email": "Email",
@@ -122,7 +125,6 @@
     "phone": "Телефон (необязательно)",
     "registerBtn": "Зарегистрироваться",
     "loginBtn": "Войти",
-    "googleBtn": "Войти через Google",
     "noAccount": "Нет аккаунта?",
     "haveAccount": "Есть аккаунт?",
     "invalid": "Неверный email или пароль",

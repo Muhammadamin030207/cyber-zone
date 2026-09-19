@@ -12,6 +12,7 @@ import api, { getApiErrorMessage } from '@/lib/api';
 import type { Booking } from '@/lib/types';
 import { formatPrice, formatDate, formatDateTime, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
+import Logo from '@/components/brand/Logo';
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
@@ -68,24 +69,59 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
   const historyBookings = bookings.filter((b) => !isActiveStatus(b.status));
   const shown = tab === 'active' ? activeBookings : historyBookings;
 
+  const totalPaidAll = bookings.reduce(
+    (acc, b) => acc + (b.payments || []).filter((p) => p.status === 'COMPLETED').reduce((a, p) => a + Number(p.amount), 0),
+    0
+  );
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight">{t('title')}</h1>
-          <p className="text-gray-400 mt-1">
-            {user?.fullName} · {user?.email}
-          </p>
+      <div className="mb-8">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl neo-card flex items-center justify-center shadow-glow">
+            <span className="avatar" style={{ width: '2.75rem', height: '2.75rem', fontSize: '1.1rem' }}>
+              {(user?.fullName || 'U')[0]?.toUpperCase() || 'U'}
+            </span>
+          </div>
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight">{t('title')}</h1>
+            <p className="text-gray-400 mt-0.5">{user?.fullName} · {user?.email}</p>
+          </div>
         </div>
-        <div className="flex items-center gap-3 text-sm">
-          <div className="neo-card rounded-xl px-4 py-2.5 text-neon-cyan">
-            <Wallet size={14} className="inline mr-1" />
-            {activeBookings.length} {t('upcoming')}
-          </div>
-          <div className="neo-card rounded-xl px-4 py-2.5 text-gray-400">
-            {bookings.length} {t('myBookings')}
-          </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-3 sm:gap-4 mt-6">
+          {[
+            {
+              icon: CalendarDays,
+              value: activeBookings.length,
+              label: t('upcoming'),
+              color: 'text-neon-cyan border-neon-cyan/30 bg-neon-cyan/10',
+            },
+            {
+              icon: Wallet,
+              value: `${formatPrice(totalPaidAll)}`,
+              label: 'To\'langan',
+              color: 'text-neon-green border-neon-green/30 bg-neon-green/10',
+            },
+            {
+              icon: Ticket,
+              value: bookings.length,
+              label: t('history'),
+              color: 'text-neon-magenta border-neon-magenta/30 bg-neon-magenta/10',
+            },
+          ].map((s) => (
+            <div key={s.label} className="neo-card rounded-2xl p-4 flex items-center gap-3">
+              <span className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 ${s.color}`}>
+                <s.icon size={20} />
+              </span>
+              <div className="min-w-0">
+                <div className="text-xl font-bold truncate">{s.value}</div>
+                <div className="text-[11px] text-gray-500 uppercase tracking-wider">{s.label}</div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -120,16 +156,18 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
       {loading ? (
         <div className="grid md:grid-cols-2 gap-6">
           {[1, 2].map((i) => (
-            <div key={i} className="neo-card rounded-2xl h-52 animate-pulse" />
+            <div key={i} className="skeleton rounded-2xl h-52" />
           ))}
         </div>
       ) : shown.length === 0 ? (
-        <div className="text-center py-20">
-          <CalendarDays size={48} className="mx-auto mb-4 text-gray-600" />
-          <p className="text-gray-400">{t('noBookings')}</p>
-          {tab === 'history' && activeBookings.length === 0 && (
-            <p className="text-sm text-gray-600 mt-1">{bookings.length === 0 ? t('history') : ''}</p>
-          )}
+        <div className="text-center py-20 neo-card rounded-2xl">
+          <div className="w-16 h-16 mx-auto mb-4 neo-card rounded-2xl flex items-center justify-center animate-floaty">
+            <Logo size={38} />
+          </div>
+          <p className="text-gray-400 text-lg">{t('noBookings')}</p>
+          <Link href="/rooms" className="inline-flex items-center gap-2 mt-5 px-6 py-2.5 rounded-xl neon-btn text-sm font-bold">
+            <Monitor size={16} /> Xonalar
+          </Link>
         </div>
       ) : (
         <div className="grid md:grid-cols-2 gap-6">
@@ -138,8 +176,11 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
             const totalPaid = paidPayments.reduce((a, p) => a + Number(p.amount), 0);
             const remainingDue = Math.max(0, Number(b.finalPrice) - totalPaid);
             return (
-              <div key={b.id} className="neo-card rounded-2xl p-5">
-                <div className="flex items-start justify-between mb-3">
+              <div key={b.id} className="neo-card card-hover rounded-2xl p-5 relative overflow-hidden">
+                <div className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full ${
+                  b.status === 'CANCELLED' ? 'bg-red-500/60' : b.status === 'COMPLETED' ? 'bg-gray-500/50' : b.status === 'ACTIVE' ? 'bg-neon-green' : b.status === 'CONFIRMED' ? 'bg-neon-cyan' : 'bg-yellow-500'
+                }`} />
+                <div className="flex items-start justify-between mb-3 pl-2">
                   <div>
                     <h3 className="font-bold text-lg">{b.room?.name || 'Xona'}</h3>
                     <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
@@ -147,7 +188,8 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
                       <span className="text-gray-600">· {b.zone?.name}</span>
                     </p>
                   </div>
-                  <span className={cn('px-2.5 py-1 text-xs font-bold rounded-lg border', STATUS_STYLE[b.status])}>
+                  <span className={cn('px-2.5 py-1 text-xs font-bold rounded-lg border flex items-center gap-1', STATUS_STYLE[b.status])}>
+                    {b.status === 'ACTIVE' && <span className="w-1.5 h-1.5 rounded-full bg-neon-green animate-pulse" />}
                     {t(`bookingStatus.${b.status}`)}
                   </span>
                 </div>

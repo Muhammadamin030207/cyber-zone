@@ -4,10 +4,10 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   MessageSquare, Send, Loader2, ArrowLeft, Trash2, ShieldCheck, Monitor, CheckCheck,
 } from 'lucide-react';
-import api, { getApiErrorMessage } from '@/lib/api';
+import api from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
-import { cn } from '@/lib/utils';
+import { cn, mergeChatMessages } from '@/lib/utils';
 
 interface ChatRoom {
   id: string;
@@ -36,7 +36,6 @@ export default function ChatAdmin() {
   const boxRef = useRef<HTMLDivElement>(null);
 
   const loadRooms = useCallback(async () => {
-    setLoading(true);
     try {
       const { data } = await api.get('/api/chat/admin/rooms');
       setRooms(data.data || []);
@@ -44,7 +43,15 @@ export default function ChatAdmin() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { loadRooms(); }, [loadRooms]);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get('/api/chat/admin/rooms')
+      .then(({ data }) => { if (!cancelled) setRooms(data.data || []); })
+      .catch(() => { /* skip */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   const openRoom = useCallback(async (room: ChatRoom) => {
     setActive(room);
@@ -63,11 +70,13 @@ export default function ChatAdmin() {
     socket.emit('register', user.id);
     const handler = (payload: { roomId: string; message: Msg }) => {
       if (active && payload.roomId === active.id) {
-        setMessages((m) => (m.some((x) => x.id === payload.message.id) ? m : [...m, payload.message]));
+        setMessages((m) => mergeChatMessages(m, payload.message));
         // o'qilgan deb belgilash
         setRooms((rs) => rs.map((r) => (r.id === payload.roomId ? { ...r, unread: 0 } : r)));
       } else {
-        setRooms((rs) => rs.map((r) => (r.id === payload.roomId ? { ...r, unread: r.unread + 1 } : r)));
+        // Boshqa room'ga xabar kelsa, sonni qo'lda oshirmaymiz (double-count bug)
+        // — serverdan aniq qiymatni qayta olib, faqat yangi chatlar ro'yxatini ko'rsatamiz
+        loadRooms();
       }
     };
     socket.on('chat:new', handler);
@@ -75,6 +84,31 @@ export default function ChatAdmin() {
     return () => {
       socket.off('chat:new', handler);
       socket.off('chat:room:new', handler);
+    };
+  }, [active, user, loadRooms]);
+
+  // Polling fallback — socket ulana olmasa ham xabarlar va o'qilmaganlar jonli yangilanadi
+  useEffect(() => {
+    if (!user) return;
+    const refreshRooms = async () => {
+      try {
+        const { data } = await api.get('/api/chat/admin/rooms');
+        setRooms(data.data || []);
+      } catch { /* skip */ }
+    };
+    const refreshActive = async () => {
+      if (!active) return;
+      try {
+        const { data } = await api.get(`/api/chat/rooms/${active.id}/messages`);
+        setMessages((m) => mergeChatMessages(m, data.data || []));
+      } catch { /* skip */ }
+    };
+    refreshRooms();
+    const roomsTimer = window.setInterval(refreshRooms, 8000);
+    const msgTimer = window.setInterval(refreshActive, 4000);
+    return () => {
+      window.clearInterval(roomsTimer);
+      window.clearInterval(msgTimer);
     };
   }, [active, user]);
 
@@ -87,7 +121,7 @@ export default function ChatAdmin() {
     setSending(true);
     try {
       const { data } = await api.post(`/api/chat/rooms/${active.id}/messages`, { message: text });
-      setMessages((m) => [...m, data.data]);
+      setMessages((m) => mergeChatMessages(m, data.data));
       setText('');
     } catch { /* skip */ }
     setSending(false);
@@ -119,7 +153,7 @@ export default function ChatAdmin() {
           {loading ? (
             <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-16 rounded-xl bg-cyber-800 animate-pulse" />)}</div>
           ) : rooms.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-10">Hozircha suhbat yo'q</p>
+            <p className="text-sm text-gray-500 text-center py-10">Hozircha suhbat yo&apos;q</p>
           ) : (
             <div className="space-y-1.5 max-h-[440px] overflow-y-auto scrollbar-thin pr-1">
               {rooms.map((r) => (
@@ -167,7 +201,7 @@ export default function ChatAdmin() {
 
               <div ref={boxRef} className="flex-1 overflow-y-auto scrollbar-thin py-3 space-y-2.5">
                 {messages.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-12">Hali xabar yo'q</p>
+                  <p className="text-sm text-gray-500 text-center py-12">Hali xabar yo&apos;q</p>
                 ) : (
                   messages.map((m) => {
                     const mine = m.user.id === user?.id;

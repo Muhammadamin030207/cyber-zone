@@ -114,6 +114,9 @@
     "sum": "so'm"
   },
   "auth": {
+    "googleBtn": "Continue with Google",
+    "googleLogin": "Continue with Google",
+    "googleSignup": "Sign up with Google",
     "loginTitle": "Sign in",
     "registerTitle": "Sign up",
     "email": "Email",
@@ -122,7 +125,6 @@
     "phone": "Phone (optional)",
     "registerBtn": "Sign up",
     "loginBtn": "Sign in",
-    "googleBtn": "Continue with Google",
     "noAccount": "Don't have an account?",
     "haveAccount": "Already have an account?",
     "invalid": "Invalid email or password",

@@ -12,6 +12,7 @@ import type { Booking } from '@/lib/types';
 import { formatPrice, formatDate, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
 import TicketQR from '@/components/booking/TicketQR';
+import SplashLoader from '@/components/ui/SplashLoader';
 
 type PayMethod = 'PAYME' | 'CLICK' | 'UZCARD' | 'HUMO' | 'UZUM' | 'CASH';
 
@@ -105,9 +106,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
 
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-16 flex flex-col items-center">
-        <Loader2 size={32} className="animate-spin text-neon-cyan" />
-        <p className="text-gray-500 mt-3 text-sm">Bron yuklanmoqda...</p>
+      <div className="max-w-2xl mx-auto px-4 py-16">
+        <SplashLoader label="Bron yuklanmoqda..." />
       </div>
     );
   }

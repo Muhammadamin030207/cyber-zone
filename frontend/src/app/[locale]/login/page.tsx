@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { LogIn, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
+import { LogIn, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, Zap } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
 import GoogleButton from '@/components/auth/GoogleButton';
@@ -56,9 +56,11 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
     <div className="min-h-screen grid lg:grid-cols-2 items-stretch">
       {/* ===== Brand panel ===== */}
       <div className="relative hidden lg:flex flex-col justify-between p-10 overflow-hidden">
-        <div className="absolute inset-0 grid-matrix opacity-50" />
-        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-neon-cyan/10 blur-3xl" />
-        <div className="absolute bottom-0 -left-24 w-96 h-96 rounded-full bg-neon-magenta/10 blur-3xl" />
+        <div className="absolute inset-0 bg-aurora" />
+        <div className="absolute inset-0 grid-matrix opacity-30" />
+        <div className="orb w-80 h-80 bg-neon-cyan/15 -top-10 -right-10 animate-floaty" />
+        <div className="orb w-72 h-72 bg-neon-magenta/10 bottom-20 -left-12 animate-floaty" style={{ animationDelay: '2s' }} />
+        <div className="orb w-56 h-56 bg-neon-purple/10 top-1/3 -right-16 animate-floaty" style={{ animationDelay: '3.5s' }} />
 
         <div className="relative flex items-center gap-3">
           <Logo size={44} />
@@ -68,11 +70,18 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
         </div>
 
         <div className="relative">
-          <LogIn size={48} className="text-neon-cyan mb-6 animate-float" />
+          <div className="w-16 h-16 rounded-2xl border border-neon-cyan/30 bg-neon-cyan/10 flex items-center justify-center mb-6 shadow-glow animate-floaty">
+            <LogIn size={28} className="text-neon-cyan" />
+          </div>
           <h2 className="text-3xl font-extrabold tracking-tight mb-3">{t('welcome')}</h2>
           <p className="text-gray-400 max-w-md leading-relaxed">
             {t('loginTitle')} va kompyuter xonangizni boshqaring.
           </p>
+          <div className="flex flex-wrap gap-2 mt-6">
+            <span className="chip chip-success"><Zap size={12} /> 24/7 bron</span>
+            <span className="chip chip-warn">Online to'lov</span>
+            <span className="chip">O'zbek · Русский · English</span>
+          </div>
         </div>
 
         <div className="relative text-xs text-gray-500">
@@ -91,14 +100,10 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
             </span>
           </div>
 
-          <div className="neo-card rounded-2xl p-8">
+          <div className="neo-card rounded-2xl p-8 animate-fade-up relative overflow-hidden">
+            <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-neon-cyan to-transparent" />
             <h1 className="text-2xl font-extrabold tracking-tight mb-1">{t('loginTitle')}</h1>
-            <p className="text-sm text-gray-400 mb-6">
-              {t('noAccount')}{' '}
-              <Link href="/register" className="text-neon-cyan hover:underline font-medium">
-                {t('registerTitle')}
-              </Link>
-            </p>
+            <p className="text-sm text-gray-400 mb-6">Hisobingiz bilan kiring va xonalarni bron qiling.</p>
 
             {error && (
               <div className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
@@ -162,6 +167,17 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
             </div>
 
             <GoogleButton mode="signin" />
+
+            {/* Ro'yxatdan o'tish — kichkina tugma (Google akkauntingiz bo'lmasa) */}
+            <div className="mt-5 text-center">
+              <span className="text-xs text-gray-500">Google akkauntingiz yo&apos;qmi? </span>
+              <Link
+                href="/register"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-neon-cyan hover:underline"
+              >
+                {t('registerTitle')}
+              </Link>
+            </div>
           </div>
         </div>
       </div>

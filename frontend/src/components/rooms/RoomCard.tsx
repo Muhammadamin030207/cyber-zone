@@ -18,16 +18,16 @@ export default function RoomCard({ room }: { room: Room }) {
   return (
     <Link
       href={`/rooms/${room.id}`}
-      className="neo-card rounded-2xl overflow-hidden flex flex-col"
+      className="neo-card card-hover rounded-2xl overflow-hidden flex flex-col group"
     >
       {/* Image */}
       <div className="relative h-48 bg-gradient-to-br from-cyber-800 to-cyber-950 overflow-hidden">
         <div className="absolute inset-0 grid-matrix opacity-50" />
         {img ? (
-          <Image src={img} alt={room.name} fill className="object-cover" sizes="(max-width:768px) 100vw, 33vw" />
+          <Image src={img} alt={room.name} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width:768px) 100vw, 33vw" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
-            <Monitor size={64} className="text-neon-cyan/40" />
+            <Monitor size={64} className="text-neon-cyan/40 group-hover:text-neon-cyan/70 transition-colors" />
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-cyber-950 via-transparent" />

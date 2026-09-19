@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { Newspaper, Megaphone, Image as ImageIcon, CalendarDays, Loader2, AlertCircle } from 'lucide-react';
+import { Newspaper, Image as ImageIcon, CalendarDays, AlertCircle } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { NewsItem } from '@/lib/types';
 import { formatDate, cn } from '@/lib/utils';
+import Logo from '@/components/brand/Logo';
 
 const TYPE_STYLE: Record<string, string> = {
   NEWS: 'border-neon-cyan/40 text-neon-cyan bg-neon-cyan/10',
@@ -75,12 +76,14 @@ export default function NewsPage({ params }: { params: Promise<{ locale: string 
       {loading ? (
         <div className="space-y-4">
           {[1, 2].map((i) => (
-            <div key={i} className="neo-card rounded-2xl h-36 animate-pulse" />
+            <div key={i} className="skeleton rounded-2xl h-36" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-20">
-          <Newspaper size={48} className="mx-auto mb-4 text-gray-600" />
+        <div className="text-center py-20 neo-card rounded-2xl">
+          <div className="w-16 h-16 mx-auto mb-4 neo-card rounded-2xl flex items-center justify-center animate-floaty">
+            <Logo size={38} />
+          </div>
           <p className="text-gray-400">{t('noNews')}</p>
         </div>
       ) : (

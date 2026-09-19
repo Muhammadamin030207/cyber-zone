@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
-import { MessageSquare, Send, Loader2, LogIn, ShieldCheck, User } from 'lucide-react';
+import { MessageSquare, Send, Loader2, LogIn, ShieldCheck } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
-import { cn } from '@/lib/utils';
+import { cn, mergeChatMessages } from '@/lib/utils';
 
 interface Msg {
   id: string;
@@ -27,19 +27,18 @@ export default function ChatPanel({ roomId, roomName }: { roomId: string; roomNa
   const [err, setErr] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(async () => {
-    if (!user) { setLoading(false); return; }
-    setLoading(true);
-    try {
-      const { data } = await api.get(`/api/chat/rooms/${roomId}/messages`);
-      setMessages(data.data || []);
-    } catch { /* skip */ }
-    setLoading(false);
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    api
+      .get(`/api/chat/rooms/${roomId}/messages`)
+      .then(({ data }) => { if (!cancelled) setMessages(data.data || []); })
+      .catch(() => { /* skip */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [roomId, user]);
 
-  useEffect(() => { load(); }, [load]);
-
-  // Jonli yangilanishlar
+  // Jonli yangilanishlar (socket uchun)
   useEffect(() => {
     if (!user) return;
     const socket = getSocket();
@@ -47,7 +46,7 @@ export default function ChatPanel({ roomId, roomName }: { roomId: string; roomNa
     socket.emit('joinRoom', roomId);
     const handler = (payload: { roomId: string; message: Msg }) => {
       if (payload.roomId !== roomId) return;
-      setMessages((m) => (m.some((x) => x.id === payload.message.id) ? m : [...m, payload.message]));
+      setMessages((m) => mergeChatMessages(m, payload.message));
     };
     socket.on('chat:room:new', handler);
     socket.on('chat:new', handler);
@@ -56,6 +55,18 @@ export default function ChatPanel({ roomId, roomName }: { roomId: string; roomNa
       socket.off('chat:new', handler);
       socket.emit('leaveRoom', roomId);
     };
+  }, [roomId, user]);
+
+  // Polling fallback — refresh'siz (socket ulana olmasa ham) xabarlar kelib turishi uchun
+  useEffect(() => {
+    if (!user) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const { data } = await api.get(`/api/chat/rooms/${roomId}/messages`);
+        setMessages((m) => mergeChatMessages(m, data.data || []));
+      } catch { /* skip */ }
+    }, 4000);
+    return () => window.clearInterval(timer);
   }, [roomId, user]);
 
   useEffect(() => {
@@ -68,7 +79,7 @@ export default function ChatPanel({ roomId, roomName }: { roomId: string; roomNa
     setErr(null);
     try {
       const { data } = await api.post(`/api/chat/rooms/${roomId}/messages`, { message: text });
-      setMessages((m) => [...m, data.data]);
+      setMessages((m) => mergeChatMessages(m, data.data));
       setText('');
     } catch (e) {
       setErr(getApiErrorMessage(e));
@@ -106,7 +117,7 @@ export default function ChatPanel({ roomId, roomName }: { roomId: string; roomNa
         {loading ? (
           <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-10 rounded-lg bg-cyber-800 animate-pulse w-3/5" />)}</div>
         ) : messages.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-12">Xabar yo'q. Birinchi bo'lib yozing! 💬</p>
+          <p className="text-sm text-gray-500 text-center py-12">Xabar yo&apos;q. Birinchi bo&apos;lib yozing! 💬</p>
         ) : (
           messages.map((m) => {
             const mine = m.user.id === user.id;

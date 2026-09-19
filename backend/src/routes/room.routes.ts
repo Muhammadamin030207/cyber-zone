@@ -9,6 +9,7 @@ import {
   updateRoom,
   deleteRoom,
   getRoomStats,
+  createReview,
 } from '../controllers/room.controller';
 import { getZones, createZone, updateZone, deleteZone } from '../controllers/zone.controller';
 import { createComputer, updateComputer, updateComputerStatus, deleteComputer, getComputersByZone } from '../controllers/computer.controller';
@@ -23,6 +24,9 @@ router.get('/nearby', getNearbyRooms);
 router.get('/all', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), getAllRooms);
 router.get('/:id', getRoomById);
 router.get('/:id/stats', authenticate, getRoomStats);
+
+// Izohlar (xona baholash) — auth qilingan foydalanuvchilar
+router.post('/:id/reviews', authenticate, createReview);
 
 // SUPER_ADMIN — yangi xona yaratish va admin tayinlash
 router.post('/super-admin', authenticate, authorize('SUPER_ADMIN'), createRoomBySuperAdmin);

@@ -57,3 +57,16 @@ export function toNumber(v: any): number {
 export function cn(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(' ');
 }
+
+export function mergeChatMessages<T extends { id: string; createdAt: string }>(
+  existing: T[],
+  incoming: T[] | T
+): T[] {
+  const map = new Map<string, T>();
+  for (const m of existing) map.set(m.id, m);
+  const arr = Array.isArray(incoming) ? incoming : [incoming];
+  for (const m of arr) if (m && m.id) map.set(m.id, m);
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+}

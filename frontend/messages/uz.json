@@ -114,6 +114,9 @@
     "sum": "so'm"
   },
   "auth": {
+    "googleBtn": "Google bilan kirish",
+    "googleLogin": "Google orqali kirish",
+    "googleSignup": "Google orqali ro'yxatdan o'tish",
     "loginTitle": "Tizimga kirish",
     "registerTitle": "Ro'yxatdan o'tish",
     "email": "Email",
@@ -122,7 +125,6 @@
     "phone": "Telefon (ixtiyoriy)",
     "registerBtn": "Ro'yxatdan o'tish",
     "loginBtn": "Kirish",
-    "googleBtn": "Google bilan kirish",
     "noAccount": "Akkauntingiz yo'qmi?",
     "haveAccount": "Akkauntingiz bormi?",
     "invalid": "Email yoki parol noto'g'ri",

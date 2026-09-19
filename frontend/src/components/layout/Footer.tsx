@@ -1,6 +1,7 @@
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
-import { Gamepad2, MapPin, Phone, Mail } from 'lucide-react';
+import { MapPin, Phone, Mail } from 'lucide-react';
+import Logo from '@/components/brand/Logo';
 
 export default function Footer() {
   const t = useTranslations('footer');
@@ -13,12 +14,14 @@ export default function Footer() {
           {/* Brand */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 rounded-lg neon-btn flex items-center justify-center">
-                <Gamepad2 size={18} />
-              </div>
-              <span className="font-bold tracking-widest neon-text">CYBER-ZONE</span>
+              <Logo size={34} />
+              <span className="font-[--font-orbitron] font-bold tracking-widest neon-text">CYBER-ZONE</span>
             </div>
             <p className="text-sm text-gray-400">{t('tagline')}</p>
+            <div className="flex gap-2 mt-4">
+              <span className="chip"><span className="w-2 h-2 rounded-full bg-neon-green animate-pulse" /> 24/7 ochiq</span>
+              <span className="chip chip-success">3 til</span>
+            </div>
           </div>
 
           {/* Links */}
