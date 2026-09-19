@@ -2,61 +2,116 @@ import { Request, Response, NextFunction } from 'express';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../types';
 import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/response';
+import { toNumber, round2, isValidAmount } from '../utils/money';
 import { io } from '../lib/socket';
+import { Prisma } from '@prisma/client';
 
-// ============ YORDAMCHI: CASH to'lovda adminni xabardor qilish ============
-async function notifyRoomOwner(ownerId: string, bookingId: string, amount: number) {
-  await prisma.notification.create({
-    data: {
-      userId: ownerId,
-      title: 'Yangi kassa to\'lovi kutilmoqda',
-      message: `${amount} so'm miqdoridagi 30% to'lov kassada. Bronni tasdiqlashingiz kerak.`,
-      type: 'payment',
-    },
+type TxClient = Prisma.TransactionClient;
+
+// ============ YORDAMCHILAR ============
+
+function paidAmount(payments: Array<{ amount: any; status: string }>, status: string): number {
+  let sum = 0;
+  for (const p of payments) {
+    if (p.status === status) sum = round2(sum + round2(toNumber(p.amount)));
+  }
+  return round2(sum);
+}
+
+/**
+ * To'lovni COMPLETED qiladi va qancha to'langaniga qarab bronni CONFIRMED ga olib keladi.
+ * Qoida: bron faqat 30% avans to'liq to'langandagina tasdiqlanadi.
+ */
+async function settlePayment(tx: TxClient, id: string) {
+  const paid = await tx.payment.update({
+    where: { id },
+    data: { status: 'COMPLETED', paidAt: new Date() },
   });
-  io.emit('notification_new', { userId: ownerId, type: 'payment' });
-  io.to(`user:${ownerId}`).emit('notification_new', { userId: ownerId, type: 'payment' });
+
+  const payments = await tx.payment.findMany({
+    where: { bookingId: paid.bookingId, status: 'COMPLETED' },
+    select: { amount: true, status: true },
+  });
+  const totalPaid = paidAmount(payments, 'COMPLETED');
+
+  const booking = await tx.booking.findUnique({
+    where: { id: paid.bookingId },
+    select: { advanceAmount: true, finalPrice: true, status: true, roomId: true, id: true },
+  });
+  if (!booking) return { paid, booking: null, totalPaid };
+
+  const advance = round2(toNumber(booking.advanceAmount));
+  const shouldConfirm = booking.status === 'PENDING' && totalPaid >= advance - 0.004;
+
+  const updatedBooking = shouldConfirm
+    ? await tx.booking.update({
+        where: { id: booking.id },
+        data: { status: 'CONFIRMED' },
+        include: { room: { select: { id: true, ownerId: true } } },
+      })
+    : null;
+
+  return { paid, booking: updatedBooking, totalPaid };
 }
 
 // ============ POST /api/payments/create — USER: to'lov yaratish ============
 export const createPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { bookingId, amount, method } = req.body;
+    const amt = round2(toNumber(amount));
 
-    if (!bookingId || !amount) {
-      return badRequest(res, 'bookingId va amount majburiy');
-    }
+    if (!bookingId || method === undefined) return badRequest(res, 'bookingId va method majburiy');
+    if (!isValidAmount(amt)) return badRequest(res, 'To\'lov miqdori noto\'g\'ri');
 
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { room: true },
+      include: { room: true, payments: true },
     });
     if (!booking) return notFoundMsg(res, 'Bron topilmadi');
     if (booking.userId !== req.user!.userId) return forbidden(res, 'Bu bron sizniki emas');
-    if (booking.status === 'CANCELLED') return badRequest(res, 'Bekor qilingan bron uchun to\'lov mumkin emas');
+    if (booking.status === 'CANCELLED' || booking.status === 'COMPLETED') {
+      return badRequest(res, 'Bu bron uchun to\'lov mumkin emas');
+    }
 
-    // Advance qancha to'langanligini hisoblaymiz
-    const paidAdvance = await prisma.payment.aggregate({
-      where: { bookingId, type: 'ADVANCE', status: 'COMPLETED' },
-      _sum: { amount: true },
-    });
-    const advanceOwed = Number(booking.advanceAmount.toString()) - (Number(paidAdvance._sum.amount || 0));
-    const isAdvance = Number(amount) <= advanceOwed + 0.01;
+    const finalPrice = round2(toNumber(booking.finalPrice));
+    const advanceAmount = round2(toNumber(booking.advanceAmount));
+    const totalPaid = paidAmount(booking.payments, 'COMPLETED');
+    const remainingDue = round2(finalPrice - totalPaid);
+
+    // Ortiqcha to'lovni qat'iy rad etamiz (0.01 tiyinga tolerance bilan)
+    if (remainingDue <= 0.004) return badRequest(res, 'Bron to\'liq to\'langan');
+    if (amt > remainingDue + 0.004) return badRequest(res, `To\'lov miqdori qoldiqdan oshmaydi. Qoldiq: ${remainingDue} so'm`);
+
+    const advancePaid = paidAmount(booking.payments.filter((p) => p.type === 'ADVANCE'), 'COMPLETED');
+    const advanceOwed = round2(advanceAmount - advancePaid);
+    const after = round2(totalPaid + amt);
+
+    // Tipani aniqlash: oxirgi qoldiq to'lovi => REMAINING, avans yetarli => ADVANCE
+    const isAdvance = after < finalPrice - 0.004 && amt <= advanceOwed + 0.004;
 
     const payment = await prisma.payment.create({
       data: {
         bookingId,
         userId: req.user!.userId,
-        amount,
+        amount: amt,
         type: isAdvance ? 'ADVANCE' : 'REMAINING',
-        method: method || null,
+        method,
         status: 'PENDING',
       },
     });
 
     // CASH to'lov — admin kassada qabul qiladi (xabarnoma yuboramiz)
-    if (isAdvance && method === 'CASH') {
-      await notifyRoomOwner(booking.room.ownerId, booking.id, Number(amount));
+    if (method === 'CASH') {
+      await prisma.notification.create({
+        data: {
+          userId: booking.room.ownerId,
+          title: 'Yangi kassa to\'lovi kutilmoqda',
+          message: `${amt.toLocaleString('ru-RU')} so'm ${isAdvance ? 'avans' : 'qoldiq'} to'lov kassada. Tasdiqlash kerak.`,
+          type: 'payment',
+        },
+      });
+      io.emit('notification_new', { userId: booking.room.ownerId, type: 'payment' });
+      io.to(`user:${booking.room.ownerId}`).emit('notification_new', { userId: booking.room.ownerId, type: 'payment' });
     }
 
     return created(res, payment, 'To\'lov yaratildi');
@@ -65,8 +120,7 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
   }
 };
 
-// ============ POST /api/payments/:id/pay — USER: onlayn to'lovni simulyatsiya qilish ============
-// Payme / Click / Uzcard / Humo — kartani "AI" avtomatik taniydi va to'lovni tasdiqlaydi
+// ============ POST /api/payments/:id/pay — USER: onlayn to'lov (PSP simulyatsiya) ============
 export const payOnline = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { cardNumber, cardHolder } = req.body || {};
@@ -90,31 +144,25 @@ export const payOnline = async (req: AuthRequest, res: Response, next: NextFunct
     if (digits && !/^\d+$/.test(digits)) {
       return badRequest(res, 'Karta raqami noto\'g\'ri');
     }
+    void cardHolder;
 
-    // "AI" avtomatik tanib olish — simulyatsiya: har doim muvaffaqiyatli
     const transactionId = `TXN-${method}-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
     const updated = await prisma.$transaction(async (tx) => {
-      const paid = await tx.payment.update({
+      // transactionId'ni avval yozamiz, so'ng hisobni qayta hisoblash
+      await tx.payment.update({
         where: { id: payment.id },
-        data: {
-          status: 'COMPLETED',
-          paidAt: new Date(),
-          transactionId,
-        },
+        data: { transactionId },
       });
-
-      // Advance to'landi → bron tasdiqlanadi
-      if (payment.type === 'ADVANCE') {
-        const booking = await tx.booking.update({
-          where: { id: payment.bookingId },
-          data: { status: 'CONFIRMED' },
-          include: { room: { select: { id: true, ownerId: true } } },
+      const res = await settlePayment(tx, payment.id);
+      if (res.booking) {
+        io.emit('booking_status_changed', {
+          roomId: payment.booking.roomId,
+          bookingId: payment.bookingId,
+          type: 'CONFIRMED',
         });
-        io.emit('booking_status_changed', { roomId: payment.booking.roomId, bookingId: payment.bookingId, type: 'CONFIRMED' });
-        return { paid, booking };
       }
-      return { paid, booking: null };
+      return res;
     });
 
     return ok(res, updated, 'To\'lov muvaffaqiyatli yakunlandi');
@@ -135,16 +183,23 @@ export const getPaymentStatus = async (req: AuthRequest, res: Response, next: Ne
       orderBy: { createdAt: 'desc' },
     });
 
-    const totalPaid = payments.filter((p) => p.status === 'COMPLETED').reduce((sum, p) => sum + Number(p.amount.toString()), 0);
+    const finalPrice = round2(toNumber(booking.finalPrice));
+    const totalPaid = paidAmount(payments, 'COMPLETED');
+    const advancePaid = paidAmount(payments.filter((p) => p.type === 'ADVANCE'), 'COMPLETED');
+    const remainingPaid = paidAmount(payments.filter((p) => p.type === 'REMAINING'), 'COMPLETED');
+    const remainingDue = round2(Math.max(0, finalPrice - totalPaid));
 
     return ok(res, {
       bookingId: booking.id,
+      bookingStatus: booking.status,
       totalPrice: booking.finalPrice,
       advanceAmount: booking.advanceAmount,
-      advancePaid: payments.filter((p) => p.type === 'ADVANCE' && p.status === 'COMPLETED').reduce((s, p) => s + Number(p.amount.toString()), 0),
       remainingAmount: booking.remainingAmount,
-      remainingPaid: payments.filter((p) => p.type === 'REMAINING' && p.status === 'COMPLETED').reduce((s, p) => s + Number(p.amount.toString()), 0),
+      advancePaid,
+      remainingPaid,
       totalPaid,
+      remainingDue,
+      isFullyPaid: remainingDue <= 0.004,
       payments,
     });
   } catch (err) {
@@ -164,44 +219,55 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
     if (payment.booking.room.ownerId !== req.user!.userId && req.user!.role !== 'SUPER_ADMIN') {
       return forbidden(res);
     }
-    if (payment.status === 'COMPLETED') return badRequest(res, 'To\'lov allaqachon tasdiqlangan');
-
-    const updated = await prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: 'COMPLETED',
-        paidAt: new Date(),
-      },
-    });
-
-    // Advance to'lov to'langanda bronni CONFIRMED qilamiz
-    if (payment.type === 'ADVANCE') {
-      await prisma.booking.update({
-        where: { id: payment.bookingId },
-        data: { status: 'CONFIRMED' },
-      });
+    if (payment.status !== 'PENDING') return badRequest(res, 'Bu to\'lov allaqachon yakunlangan');
+    if (payment.method && payment.method !== 'CASH') {
+      return badRequest(res, 'Onlayn to\'lovni admin emas, foydalanuvchi yakunlaydi');
     }
 
-    return ok(res, updated, 'To\'lov tasdiqlandi');
+    const txResult = await prisma.$transaction(async (tx) => {
+      const result = await settlePayment(tx, payment.id);
+      if (result.booking) {
+        io.emit('booking_status_changed', {
+          roomId: payment.booking.roomId,
+          bookingId: payment.bookingId,
+          type: 'CONFIRMED',
+        });
+      }
+      return result;
+    });
+
+    return ok(res, txResult.paid, 'To\'lov tasdiqlandi');
   } catch (err) {
     next(err);
   }
 };
 
-// ============ GET /api/admin/payments — SUPER_ADMIN: barcha to'lovlar ============
+// ============ GET /api/payments — SUPER_ADMIN: barcha to'lovlar ============
 export const getAllPayments = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { limit, offset } = req.query as { limit?: string; offset?: string };
-    const payments = await prisma.payment.findMany({
-      include: {
-        booking: { select: { id: true, finalPrice: true, status: true, room: { select: { name: true } } } },
-        user: { select: { id: true, fullName: true, email: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: Number(limit) || 50,
-      skip: Number(offset) || 0,
-    });
-    return ok(res, payments);
+    const { limit, offset, status } = req.query as { limit?: string; offset?: string; status?: string };
+    const where: any = {};
+    if (status) where.status = status.toUpperCase();
+
+    const [payments, total, revenue] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        include: {
+          booking: { select: { id: true, finalPrice: true, status: true, room: { select: { name: true } } } },
+          user: { select: { id: true, fullName: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: Number(limit) || 50,
+        skip: Number(offset) || 0,
+      }),
+      prisma.payment.count({ where }),
+      prisma.payment.aggregate({
+        where: { status: 'COMPLETED' },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    return ok(res, { payments, total, revenue: round2(toNumber(revenue._sum.amount || 0)) });
   } catch (err) {
     next(err);
   }

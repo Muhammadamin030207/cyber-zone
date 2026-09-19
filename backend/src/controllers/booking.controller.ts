@@ -3,6 +3,7 @@ import prisma from '../lib/prisma';
 import { AuthRequest } from '../types';
 import { io } from '../lib/socket';
 import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/response';
+import { toNumber, round2 } from '../utils/money';
 import { Prisma } from '@prisma/client';
 
 const BOOKING_INCLUDE = {
@@ -14,25 +15,10 @@ const BOOKING_INCLUDE = {
   payments: true,
 };
 
-// ============ YORDAMCHI: "HH:mm" → daqiqa ============
+// ============ YORDAMCHI: narx hisoblash (tiyingacha aniq) ============
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
-}
-
-// ============ YORDAMCHI: vaqt to'qnashuvini tekshirish ============
-// [start, end) — tugash vaqti yangi boshlanish vaqtiga teng bo'lsa ziddiyat emas
-function overlaps(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
-  const aS = timeToMinutes(aStart);
-  const aE = timeToMinutes(aEnd);
-  const bS = timeToMinutes(bStart);
-  const bE = timeToMinutes(bEnd);
-  return aS < bE && bS < aE;
-}
-
-// ============ YORDAMCHI: narx hisoblash (Decimal xavfsiz) ============
-function toNumber(v: any): number {
-  return typeof v === 'object' && v !== null && typeof v.toString === 'function' ? Number(v.toString()) : Number(v);
 }
 
 // ============ POST /api/bookings — USER: yangi bron (himoya + transaction) ============
@@ -160,27 +146,28 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
           throw new Error(`CONFLICT_${existing?.startTime}_${existing?.endTime}`);
         }
 
-        // Narxni hisoblash
+        // Narxni hisoblash — barchasi tiyingacha yaxlitlanadi (float xatolik yo'q)
         const duration = toNumber(durationHours) || (timeToMinutes(endTime as string) - timeToMinutes(startTime)) / 60;
-        const baseTotal = toNumber(zone.pricePerHour) * duration;
+        const baseTotal = round2(toNumber(zone.pricePerHour) * duration);
 
         // Chegirma
         let discount = 0;
         if (promo) {
           if (promo.discountType === 'PERCENTAGE') {
-            discount = (baseTotal * toNumber(promo.discountValue)) / 100;
+            discount = round2((baseTotal * toNumber(promo.discountValue)) / 100);
           } else {
-            discount = toNumber(promo.discountValue);
+            discount = round2(toNumber(promo.discountValue));
           }
           if (toNumber(promo.minBookingAmount) && baseTotal < toNumber(promo.minBookingAmount)) {
             throw new Error('MIN_AMOUNT_NOT_REACHED');
           }
-          discount = Math.min(discount, baseTotal);
+          discount = Math.min(round2(discount), baseTotal);
         }
 
-        const finalTotal = +(baseTotal - discount).toFixed(2);
-        const advance = +(finalTotal * 0.3).toFixed(2);
-        const remaining = +(finalTotal * 0.7).toFixed(2);
+        // Ma'lumotlar to'liq mos kelsin: final = avans + qoldiq (har doim teng)
+        const finalTotal = round2(baseTotal - discount);
+        const advance = round2(finalTotal * 0.3);
+        const remaining = round2(finalTotal - advance);
 
         const newBooking = await tx.booking.create({
           data: {
@@ -282,6 +269,12 @@ export const cancelBooking = async (req: AuthRequest, res: Response, next: NextF
       data: { status: 'CANCELLED' },
     });
 
+    // To'lovlar bor bo'lsa — qaytariladi (REFUNDED sifatida saqlanadi)
+    await prisma.payment.updateMany({
+      where: { bookingId: booking.id, status: 'COMPLETED' },
+      data: { status: 'REFUNDED' },
+    });
+
     // Promo-kod count'ni qaytarish
     if (booking.promoCodeId) {
       await prisma.promoCode.update({
@@ -350,24 +343,47 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response, next:
       return forbidden(res, 'Faqat o\'z xonangiz bronlarini boshqarasiz');
     }
 
-    // Agar bron CANCELLED bo'lsa, kompyuterni bo'shatamiz
-    if (status.toUpperCase() === 'CANCELLED' && booking.computerId) {
-      await prisma.computer.update({
-        where: { id: booking.computerId },
-        data: { status: 'AVAILABLE' },
+    const newStatus = status.toUpperCase();
+
+    // Admin CONFIRMED qilganda: kassada qabul qilingan PENDING CASH to'lovlar
+    // ham COMPLETED bo'ladi — pul to'g'ri saqlansin
+    if (newStatus === 'CONFIRMED') {
+      const pendingCash = await prisma.payment.findMany({
+        where: { bookingId: booking.id, status: 'PENDING', method: 'CASH' },
+        select: { id: true },
+      });
+      if (pendingCash.length) {
+        await prisma.payment.updateMany({
+          where: { id: { in: pendingCash.map((p) => p.id) } },
+          data: { status: 'COMPLETED', paidAt: new Date() },
+        });
+      }
+    }
+
+    // Charz bekor qilinsa: kompyuterni bo'shatamiz va to'lovlarni qaytaramiz
+    if (newStatus === 'CANCELLED') {
+      if (booking.computerId) {
+        await prisma.computer.update({
+          where: { id: booking.computerId },
+          data: { status: 'AVAILABLE' },
+        });
+      }
+      await prisma.payment.updateMany({
+        where: { bookingId: booking.id, status: 'COMPLETED' },
+        data: { status: 'REFUNDED' },
       });
     }
 
     const updated = await prisma.booking.update({
       where: { id: booking.id },
-      data: { status: status.toUpperCase() },
+      data: { status: newStatus },
       include: BOOKING_INCLUDE,
     });
 
     // Socket — real vaqt
-    io.emit('booking_status_changed', { roomId: booking.roomId, bookingId: booking.id, type: status.toUpperCase() });
+    io.emit('booking_status_changed', { roomId: booking.roomId, bookingId: booking.id, type: newStatus });
 
-    return ok(res, updated, `Bron: ${status}`);
+    return ok(res, updated, `Bron: ${newStatus}`);
   } catch (err) {
     next(err);
   }

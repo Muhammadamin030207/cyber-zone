@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import {
   Settings, Monitor, Cpu, CalendarDays, BadgePercent, Newspaper, BarChart3, MessageSquare,
   Plus, Pencil, Trash2, Loader2, AlertCircle, Check, ShieldCheck, Users, Zap,
-  Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign,
+  Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { Room, Zone, Computer, Booking, PromoCode, NewsItem, BookingStatus } from '@/lib/types';
@@ -31,24 +31,43 @@ const TABS: { key: Tab; icon: any; label: string }[] = [
 export default function AdminPage({ params }: { params: Promise<{ locale: string }> }) {
   void params;
   const t = useTranslations('admin');
+  const tG = useTranslations('superAdmin');
   const user = useAuthStore((s) => s.user);
 
   const [tab, setTab] = useState<Tab>('room');
   const [room, setRoom] = useState<Room | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Faqat ADMIN roliga ruxsat — SUPER_ADMIN o'z panelliga o'tadi
+  useEffect(() => {
+    if (!user) return;
+    if (user.role !== 'ADMIN') {
+      window.location.href = user.role === 'SUPER_ADMIN' ? '/super-admin' : '/dashboard';
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
-        const { data } = await api.get('/api/rooms');
+        const { data } = await api.get('/api/rooms/all');
         const myRoom = (data.data as Room[]).find((r) => r.ownerId === user?.id) || null;
         setRoom(myRoom);
       } catch { /* skip */ }
       setLoading(false);
     }
-    if (user) load();
+    if (user && user.role === 'ADMIN') load();
   }, [user]);
+
+  if (!user || user.role !== 'ADMIN') {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-24 text-center">
+        <ShieldCheck size={56} className="mx-auto mb-4 text-gray-500" />
+        <p className="text-gray-300 font-bold text-xl">{tG('accessDenied')}</p>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -141,13 +160,8 @@ function RoomTab({ room, setRoom }: { room: Room | null; setRoom: (r: Room) => v
         description: form.description || undefined,
         workingHours: { open: form.workingHoursOpen, close: form.workingHoursClose },
       };
-      if (room) {
-        const { data } = await api.put(`/api/rooms/${room.id}`, payload);
-        setRoom(data.data);
-      } else {
-        const { data } = await api.post('/api/rooms', payload);
-        setRoom(data.data);
-      }
+      const { data } = await api.put(`/api/rooms/${room!.id}`, payload);
+      setRoom(data.data);
       setMsg('Saqlandi!');
     } catch (err) {
       setMsg(getApiErrorMessage(err));
@@ -156,9 +170,28 @@ function RoomTab({ room, setRoom }: { room: Room | null; setRoom: (r: Room) => v
     }
   }
 
+  // Xona yaratish faqat SUPER_ADMIN'ga tegishli — adminga xona tayinlanadi
+  if (!room) {
+    return (
+      <div className="neo-card rounded-2xl p-6 max-w-2xl">
+        <h2 className="font-bold text-xl mb-3">Sizning xonangiz hali biriktirilmagan</h2>
+        <p className="text-gray-400 text-sm leading-relaxed mb-4">
+          Kompyuter xona platforma egaligi (Super Admin) tomonidan yaratiladi va sizga tayinlanadi.
+          Xona biriktirilgach, bu yerda o\'z xonangizni boshqarishingiz mumkin.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-6 py-2.5 rounded-xl border border-neon-cyan/30 text-neon-cyan text-sm font-bold flex items-center gap-2 hover:bg-neon-cyan/10"
+        >
+          <RefreshCw size={16} /> Yangilash
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="neo-card rounded-2xl p-6 max-w-2xl">
-      <h2 className="font-bold text-xl mb-4">{room ? 'Xona ma\'lumotlari' : t('createRoom')}</h2>
+      <h2 className="font-bold text-xl mb-4">Xona ma\'lumotlari</h2>
       {msg && (
         <div className={cn('mb-4 px-3 py-2.5 rounded-lg text-sm', msg.includes('xatolik') || msg.includes('Xatolik') ? 'bg-red-500/10 border border-red-500/30 text-red-300' : 'bg-neon-green/10 border border-neon-green/30 text-neon-green')}>
           <Check size={14} className="inline mr-1" />{msg}

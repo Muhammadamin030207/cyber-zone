@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import {
   Crown, Users, Building2, CalendarDays, CircleDollarSign, Activity,
   Search, Plus, Trash2, Loader2, Check, ShieldOff, ShieldCheck,
-  KeyRound, MapPin, X, PlusCircle,
+  KeyRound, MapPin, X, PlusCircle, Wallet, Banknote,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { User, Room } from '@/lib/types';
@@ -15,7 +15,7 @@ import { TASHKENT_DISTRICTS } from '@/lib/constants';
 import { Coffee } from 'lucide-react';
 import BarAll from '@/components/super-admin/BarAll';
 
-type Tab = 'overview' | 'users' | 'rooms' | 'bar';
+type Tab = 'overview' | 'users' | 'rooms' | 'bar' | 'payments';
 
 export default function SuperAdminPage({ params }: { params: Promise<{ locale: string }> }) {
   void params;
@@ -38,6 +38,7 @@ export default function SuperAdminPage({ params }: { params: Promise<{ locale: s
     { key: 'users' as Tab, icon: Users, label: t('tabUsers') },
     { key: 'rooms' as Tab, icon: Building2, label: t('tabRooms') },
     { key: 'bar' as Tab, icon: Coffee, label: 'Gaming Bar' },
+    { key: 'payments' as Tab, icon: Wallet, label: 'To\'lovlar' },
   ];
 
   return (
@@ -64,7 +65,7 @@ export default function SuperAdminPage({ params }: { params: Promise<{ locale: s
         ))}
       </div>
 
-      {tab === 'overview' ? <OverviewTab /> : tab === 'users' ? <UsersTab /> : tab === 'rooms' ? <RoomsTab /> : <BarAll />}
+      {tab === 'overview' ? <OverviewTab /> : tab === 'users' ? <UsersTab /> : tab === 'rooms' ? <RoomsTab /> : tab === 'payments' ? <PaymentsTab /> : <BarAll />}
     </div>
   );
 }
@@ -354,7 +355,7 @@ function RoomsTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { const { data } = await api.get('/api/rooms'); setRooms(data.data || []); } catch { /* skip */ }
+    try { const { data } = await api.get('/api/rooms/all'); setRooms(data.data || []); } catch { /* skip */ }
     setLoading(false);
   }, []);
 
@@ -488,7 +489,7 @@ function RoomsTab() {
                 <RoomStatusBadge status={r.status} />
               </div>
               <div className="text-xs text-gray-400 space-y-1">
-                <div className="flex items-center gap-1.5"><Users size={12} className="text-neon-cyan" /> {r.ownerId?.slice(0, 8)}...</div>
+                <div className="flex items-center gap-1.5"><Users size={12} className="text-neon-cyan" /> Admin: {r.owner?.fullName || r.ownerId?.slice(0, 8) || '—'}</div>
                 {r._count && <div className="text-gray-500">Zonalar: {r._count.zones} · Bronlar: {r._count.bookings} · Reytinglar: {r._count.reviews}</div>}
               </div>
               <div className="flex gap-2 pt-1">
@@ -508,6 +509,90 @@ function RoomsTab() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ====================== PAYMENTS ====================== */
+function PaymentsTab() {
+  const [payments, setPayments] = useState<Array<any> | null>(null);
+  const [total, setTotal] = useState(0);
+  const [revenue, setRevenue] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/api/payments?limit=100');
+      setPayments(data.data?.payments || []);
+      setTotal(data.data?.total || 0);
+      setRevenue(data.data?.revenue || 0);
+    } catch { /* skip */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const statusStyle: Record<string, string> = {
+    PENDING: 'bg-yellow-500/15 text-yellow-400',
+    COMPLETED: 'bg-neon-green/15 text-neon-green',
+    FAILED: 'bg-red-500/15 text-red-400',
+    REFUNDED: 'bg-gray-500/15 text-gray-400',
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid sm:grid-cols-3 gap-3">
+        <div className="neo-card rounded-2xl p-4">
+          <p className="text-xs text-gray-500 flex items-center gap-1"><Banknote size={13} /> Jami (COMPLETED)</p>
+          <p className="text-2xl font-extrabold text-neon-green mt-1">{formatPrice(revenue)} so'm</p>
+        </div>
+        <div className="neo-card rounded-2xl p-4">
+          <p className="text-xs text-gray-500 flex items-center gap-1"><Wallet size={13} /> Transaksiyalar</p>
+          <p className="text-2xl font-extrabold mt-1">{total}</p>
+        </div>
+        <div className="neo-card rounded-2xl p-4">
+          <p className="text-xs text-gray-500 flex items-center gap-1"><CircleDollarSign size={13} /> Platforma aylanmasi</p>
+          <p className="text-2xl font-extrabold text-yellow-400 mt-1">{formatPrice(revenue)} so'm</p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 rounded-xl bg-cyber-800 animate-pulse" />)}</div>
+      ) : !payments?.length ? (
+        <p className="text-gray-500 text-center py-16">To'lovlar hali yo'q</p>
+      ) : (
+        <div className="neo-card rounded-2xl overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-gray-500 border-b border-neon-cyan/10">
+                <th className="px-4 py-3">Foydalanuvchi</th>
+                <th className="px-4 py-3">Xona</th>
+                <th className="px-4 py-3">Miqdor</th>
+                <th className="px-4 py-3">Tur</th>
+                <th className="px-4 py-3">Usul</th>
+                <th className="px-4 py-3">Holat</th>
+                <th className="px-4 py-3">Sana</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payments.map((p) => (
+                <tr key={p.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                  <td className="px-4 py-3 text-gray-300">{p.user?.fullName || p.user?.email || '—'}</td>
+                  <td className="px-4 py-3 text-gray-400">{p.booking?.room?.name || '—'}</td>
+                  <td className="px-4 py-3 font-bold text-neon-cyan">{formatPrice(p.amount)} so'm</td>
+                  <td className="px-4 py-3 text-gray-300">{p.type === 'ADVANCE' ? 'Avans (30%)' : 'Qoldiq (70%)'}</td>
+                  <td className="px-4 py-3 text-gray-400">{p.method || '—'}</td>
+                  <td className="px-4 py-3">
+                    <span className={cn('px-2 py-0.5 rounded text-xs font-medium', statusStyle[p.status] || 'bg-gray-500/15 text-gray-400')}>{p.status}</span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-400">{formatDate(p.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

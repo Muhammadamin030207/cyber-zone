@@ -51,9 +51,15 @@ export default async function RootLayout({ children, params }: Props) {
         `}</style>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('cyber-zone-theme');if(t==='halloween'||t==='night'||t==='dark'){document.documentElement.dataset.theme=t;}}catch(e){}document.documentElement.style.colorScheme='dark';})();`,
+            __html: `(function(){try{var t=localStorage.getItem('cyber-zone-theme')||localStorage.getItem('cyber-arena-theme')||'obsidian';var all=['obsidian','midnight','ember','halloween','cyberpunk','aurora','nova','neon-halloween','slate','ocean','rose','mint'];if(all.indexOf(t)===-1)t='obsidian';document.documentElement.dataset.theme=t;}catch(e){}document.documentElement.style.colorScheme='dark';})();`,
           }}
         />
+        <link rel="dns-prefetch" href="https://accounts.google.com" />
+        <link rel="preconnect" href="https://accounts.google.com" crossOrigin="" />
+        <link rel="preconnect" href="https://apis.google.com" crossOrigin="" />
+        <link rel="dns-prefetch" href="https://www.gstatic.com" />
+        <link rel="preconnect" href="https://www.gstatic.com" crossOrigin="" />
+        <script src="https://accounts.google.com/gsi/client" async defer />
       </head>
       <body
         className={`${inter.className} antialiased min-h-screen flex flex-col`}

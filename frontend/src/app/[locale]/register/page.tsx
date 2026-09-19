@@ -5,21 +5,40 @@ import { useTranslations } from 'next-intl';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Gamepad2, UserPlus, Mail, Lock, User as UserIcon, Phone, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
+import { Gamepad2, UserPlus, Mail, Lock, User as UserIcon, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
 import PhoneInput, { phoneToDigits, isValidUzbekPhone } from '@/components/auth/PhoneInput';
 import GoogleButton from '@/components/auth/GoogleButton';
+import Logo from '@/components/brand/Logo';
 
-const registerSchema = z.object({
-  fullName: z.string().min(3, 'Kamida 3 ta belgi'),
-  email: z.string().min(1, 'Email kiriting').email('Email noto\u2019g\u2019ri'),
-  phone: z.optional(z.string()).refine(
-    (v) => !v || v === '+998 ' || isValidUzbekPhone(v),
-    { message: 'Telefon +998 XX XXX XX XX formatda' }
-  ),
-  password: z.string().min(6, 'Kamida 6 ta belgi'),
-});
+const registerSchema = z
+  .object({
+    fullName: z.string().min(3, 'Kamida 3 ta belgi'),
+    email: z.string().min(1, 'Email kiriting').email('Email noto\u2019g\u2019ri'),
+    phone: z.optional(z.string()).refine(
+      (v) => !v || v === '+998 ' || isValidUzbekPhone(v),
+      { message: 'Telefon +998 XX XXX XX XX formatda' }
+    ),
+    password: z.optional(z.string()),
+  })
+  .superRefine((data, ctx) => {
+    if (!isGoogleFlow() && !data.password) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['password'], message: 'Kamida 6 ta belgi' });
+    }
+    if (data.password && data.password.length < 6) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['password'], message: 'Kamida 6 ta belgi' });
+    }
+  });
+
+function isGoogleFlow() {
+  if (typeof window === 'undefined') return false;
+  try {
+    return !!sessionStorage.getItem('google_token');
+  } catch {
+    return false;
+  }
+}
 
 type RegisterForm = z.infer<typeof registerSchema>;
 
@@ -31,6 +50,7 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
   const [showPass, setShowPass] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isGoogle, setIsGoogle] = useState(false);
 
   const {
     register: field,
@@ -52,6 +72,7 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
       const profile = JSON.parse(raw);
       if (profile.fullName) setValue('fullName', profile.fullName);
       if (profile.email) setValue('email', profile.email);
+      setIsGoogle(true);
       sessionStorage.removeItem('google_prefill');
     } catch {
       /* ignore */
@@ -61,13 +82,21 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
   const onSubmit = handleSubmit(async (values) => {
     setSubmitting(true);
     setError(null);
+    let googleToken: string | undefined;
     try {
+      if (isGoogle) {
+        googleToken = sessionStorage.getItem('google_token') || undefined;
+      }
       await register({
         fullName: values.fullName,
         email: values.email,
         phone: values.phone && values.phone !== '+998 ' ? phoneToDigits(values.phone) : undefined,
-        password: values.password,
+        password: isGoogle && !values.password ? undefined : values.password,
+        googleToken,
       });
+      if (isGoogle) {
+        try { sessionStorage.removeItem('google_token'); } catch { /* ignore */ }
+      }
       router.push('/dashboard');
       router.refresh();
     } catch (err: any) {
@@ -86,9 +115,7 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
         <div className="absolute bottom-0 -left-24 w-96 h-96 rounded-full bg-neon-cyan/10 blur-3xl" />
 
         <div className="relative flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl neon-btn flex items-center justify-center">
-            <Gamepad2 size={26} />
-          </div>
+          <Logo size={44} />
           <span className="font-[--font-orbitron] text-xl font-bold tracking-widest neon-text">
             CYBER<span className="text-white">-ZONE</span>
           </span>
@@ -109,9 +136,7 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
       <div className="flex items-center justify-center px-4 sm:px-6 py-10">
         <div className="w-full max-w-md">
           <div className="lg:hidden flex items-center justify-center gap-2 mb-8">
-            <div className="w-10 h-10 rounded-xl neon-btn flex items-center justify-center">
-              <Gamepad2 size={22} />
-            </div>
+            <Logo size={38} />
             <span className="font-[--font-orbitron] text-lg font-bold tracking-widest neon-text">
               CYBER<span className="text-white">-ZONE</span>
             </span>
@@ -130,6 +155,13 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
               <div className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
                 <AlertCircle size={16} className="shrink-0 mt-0.5" />
                 {error}
+              </div>
+            )}
+
+            {isGoogle && (
+              <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-neon-cyan/10 border border-neon-cyan/25 text-sm text-neon-cyan">
+                <Mail size={15} className="shrink-0" />
+                Google akkauntingiz ulandi — ism va email avtomatik to'ldirildi. Telefon raqamini qo'shish kifoya.
               </div>
             )}
 
@@ -166,19 +198,18 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1.5">{t('phone')}</label>
-                <div className="relative">
-                  <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 z-10" />
-                  <PhoneInput
-                    value={watch('phone') || ''}
-                    onChange={(v) => setValue('phone', v)}
-                    className="pl-10"
-                  />
-                </div>
+                <PhoneInput
+                  value={watch('phone') || ''}
+                  onChange={(v) => setValue('phone', v)}
+                />
                 {errors.phone && <p className="text-xs text-red-400 mt-1">{errors.phone.message}</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1.5">{t('password')}</label>
+                <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                  {t('password')}
+                  {isGoogle && <span className="text-xs text-gray-500 font-normal ml-1">(ixtiyoriy — Google orqali kirasiz)</span>}
+                </label>
                 <div className="relative">
                   <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                   <input
@@ -216,7 +247,7 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
                 <div className="h-px flex-1 bg-white/10" />
               </div>
 
-              <GoogleButton mode="signup" />
+              {!isGoogle && <GoogleButton mode="signup" />}
             </div>
         </div>
       </div>

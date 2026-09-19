@@ -266,7 +266,23 @@ async function invalidateRoomCaches(roomId?: string) {
   if (roomId) await cacheDel(`rooms:detail:${roomId}`);
 }
 
-// ============ POST /api/rooms — ADMIN: yangi xona ============
+// ============ GET /api/rooms/all — SUPER_ADMIN: barcha xonalar (PENDING ham) ============
+export const getAllRooms = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const rooms = await prisma.computerRoom.findMany({
+      include: {
+        owner: { select: { id: true, fullName: true, email: true, phone: true } },
+        _count: { select: { zones: true, bookings: true, reviews: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return ok(res, rooms);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ POST /api/rooms — SUPER_ADMIN: yangi xona ============
 export const createRoom = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { name, description, address, district, city, latitude, longitude, phone, workingHours, timezone, images, status } = req.body;

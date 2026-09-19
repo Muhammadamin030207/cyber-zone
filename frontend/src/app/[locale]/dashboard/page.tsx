@@ -136,6 +136,7 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
           {shown.map((b) => {
             const paidPayments = (b.payments || []).filter((p) => p.status === 'COMPLETED');
             const totalPaid = paidPayments.reduce((a, p) => a + Number(p.amount), 0);
+            const remainingDue = Math.max(0, Number(b.finalPrice) - totalPaid);
             return (
               <div key={b.id} className="neo-card rounded-2xl p-5">
                 <div className="flex items-start justify-between mb-3">
@@ -181,7 +182,12 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
                     <p className="flex items-center gap-1 justify-end">
                       <CreditCard size={11} /> To'langan: {formatPrice(totalPaid)}
                     </p>
-                    {Number(b.remainingAmount) > 0 && <p>Qolgan: {formatPrice(b.remainingAmount)}</p>}
+                    {remainingDue > 0 && <p>Qolgan: {formatPrice(remainingDue)}</p>}
+                    {remainingDue <= 0.004 && b.status !== 'CANCELLED' && (
+                      <p className="text-emerald-400 flex items-center gap-1 justify-end mt-0.5">
+                        <CheckCircle2 size={11} /> To'liq to'langan
+                      </p>
+                    )}
                   </div>
                 </div>
 

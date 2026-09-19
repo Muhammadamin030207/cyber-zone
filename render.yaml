@@ -7,19 +7,20 @@ services:
     user: cyberarena
     ipAllowList: []
 
-  # Redis (kerak bo'lsa)
+  # Redis
   - type: redis
     name: cyberarena-redis
     plan: free
 
-  # Backend API
+  # Backend API (frontend Vercel'da)
   - type: web
     name: cyberarena-api
     plan: free
     env: node
     rootDir: backend
-    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy
+    buildCommand: npm install && npm run build && npx prisma generate && npx prisma migrate deploy
     startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -31,33 +32,22 @@ services:
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      # Vercel'dagi frontend domenini shu yerga yozing (vergul bilan bir nechta bo'lishi mumkin):
+      - key: FRONTEND_URLS
+        value: https://cyber-zone.vercel.app
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: SUPER_ADMIN_EMAIL
+        sync: false
+      - key: SUPER_ADMIN_PASSWORD
+        sync: false
+      - key: SUPER_ADMIN_NAME
         sync: false
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 5000
-      - key: FRONTEND_URL
-        value: https://cyberarena-hub.onrender.com
-
-  # Frontend
-  - type: web
-    name: cyberarena-frontend
-    plan: free
-    env: node
-    rootDir: frontend
-    buildCommand: npm install && npm run build
-    startCommand: npm start
-    envVars:
-      - key: NEXT_PUBLIC_API_URL
-        value: https://cyberarena-api.onrender.com
-      - key: NEXT_PUBLIC_SOCKET_URL
-        value: https://cyberarena-api.onrender.com
-      - key: NEXT_PUBLIC_GOOGLE_CLIENT_ID
-        sync: false
-      - key: NODE_ENV
-        value: production
-      - key: PORT
-        value: 3000

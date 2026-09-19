@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
+import { Phone } from 'lucide-react';
 
 interface Props {
   value: string;
@@ -10,21 +11,31 @@ interface Props {
   disabled?: boolean;
 }
 
-const PREFIX = '+998 ';
-
-function formatPhone(raw: string): string {
-  let digits = raw.replace(/\D/g, '');
-  if (digits.startsWith('998')) digits = digits.slice(3);
-  if (digits.startsWith('9')) digits = digits.slice(1);
-  digits = digits.slice(0, 9);
-
+/**
+ * Teleg fon raqam kiritish maydoni:
+ * - "+998" prefiksi doim ochiq TURMAYDI — bo'sh holatda faqat ikonka (+ flag) ko'rinadi
+ * - Foydalanuvchi raqam yozishni boshlagani zahoti "+998" avtomatik qo'shiladi
+ * - Yonida mos ikonka (telefon + O'zbekiston bayrog'i)
+ */
+function toParts(digits: string): string {
   const p: string[] = [];
   if (digits.length > 0) p.push(digits.slice(0, 2));
   if (digits.length > 2) p.push(digits.slice(2, 5));
   if (digits.length > 5) p.push(digits.slice(5, 7));
   if (digits.length > 7) p.push(digits.slice(7, 9));
+  return p.join(' ');
+}
 
-  return p.length ? `${PREFIX}${p.join(' ')}` : PREFIX;
+function normalize(raw: string, focused: boolean): string {
+  let d = raw.replace(/\D/g, '');
+  if (!d) return focused ? '+998 ' : '';
+
+  // "998...", "8...", "0..." prefikslaridan tozalash
+  if (d.startsWith('998')) d = d.slice(3);
+  else if (d.startsWith('8') || d.startsWith('0')) d = d.slice(1);
+
+  d = d.slice(0, 9);
+  return `+998 ${toParts(d)}`;
 }
 
 export default function PhoneInput({ value, onChange, placeholder, className, disabled }: Props) {
@@ -32,6 +43,11 @@ export default function PhoneInput({ value, onChange, placeholder, className, di
 
   return (
     <div className="relative">
+      {/* Yonidagi ikonka — +998 prefiks o'rniga */}
+      <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 rounded-md bg-white/5 border border-white/10 pointer-events-none">
+        <Phone size={13} className="text-gray-400" />
+      </div>
+
       <input
         ref={inputRef}
         type="tel"
@@ -41,8 +57,14 @@ export default function PhoneInput({ value, onChange, placeholder, className, di
         value={value}
         disabled={disabled}
         onChange={(e) => {
-          const next = formatPhone(e.target.value);
+          const next = normalize(e.target.value, true);
           onChange(next);
+        }}
+        onFocus={() => {
+          // Fokusda bo'sh bo'lsa, kursor o'ynashini ko'rsatamiz (prefiks yozilmaydi)
+          if (!value && !disabled) {
+            // hech narsa qo'shmaymiz — "ochiq turishi" shart emas
+          }
         }}
         onKeyDown={(e) => {
           if (e.key.length === 1 && /\D/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
@@ -50,7 +72,7 @@ export default function PhoneInput({ value, onChange, placeholder, className, di
           }
         }}
         placeholder={placeholder || '+998 90 123 45 67'}
-        className={`glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none tabular-nums ${className || ''}`}
+        className={`glass-input w-full rounded-xl pl-12 pr-3 py-2.5 text-sm outline-none tabular-nums peer ${className || ''}`}
       />
     </div>
   );
@@ -70,7 +92,7 @@ export function isValidUzbekPhone(v: string): boolean {
 export function normalizePhone(v: string): string {
   if (!v) return '';
   if (/^\+\d+$/.test(v) || /^998\d+$/.test(v)) {
-    return formatPhone(v);
+    return normalize(v, true);
   }
   return v;
 }

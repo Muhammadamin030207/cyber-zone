@@ -50,7 +50,7 @@ export default function BarAll() {
 
   const loadRooms = useCallback(async () => {
     try {
-      const { data } = await api.get('/api/admin/rooms');
+      const { data } = await api.get('/api/rooms/all');
       const list = (data.data || []);
       setRooms(list);
       setRoomSel((s) => s || (list[0]?.id || ''));

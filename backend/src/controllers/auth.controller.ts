@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import prisma from '../lib/prisma';
 import { generateTokens, verifyRefreshToken } from '../lib/jwt';
@@ -10,23 +11,69 @@ import { ok, badRequest, unauthorized, notFoundMsg } from '../utils/response';
 const googleClient = new OAuth2Client(config.google.clientId);
 
 // ============ REGISTER (USER) ============
+// googleToken berilganda parvoz qilib, parol ixtiyoriy (avtomatik random parol qo'yiladi)
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password, fullName, phone, language } = req.body;
+    const { email, password, fullName, phone, language, googleToken } = req.body;
+
+    if (!email || !fullName) {
+      return badRequest(res, 'email va fullName majburiy');
+    }
+    if (String(fullName).trim().length < 3) {
+      return badRequest(res, "Ism kamida 3 ta belgidan iborat bo'lishi kerak");
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+      return badRequest(res, "Email noto'g'ri formatda");
+    }
+    if (password && String(password).length < 6) {
+      return badRequest(res, "Parol kamida 6 ta belgidan iborat bo'lishi kerak");
+    }
+    if (phone && !/^\+998\d{9}$/.test(String(phone).replace(/[\s-]/g, ''))) {
+      return badRequest(res, "Telefon +998 XX XXX XX XX formatda bo'lishi kerak");
+    }
+
+    // Google orqali kelgan holatda token tekshiriladi va google_id biriktiriladi
+    let googleId: string | null = null;
+    let avatarUrl: string | null = null;
+    if (googleToken) {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: String(googleToken),
+        audience: config.google.clientId,
+      });
+      const payload = ticket.getPayload();
+      if (!payload || !payload.email_verified) {
+        return badRequest(res, 'Google token yaroqsiz');
+      }
+      if (payload.email && payload.email !== String(email)) {
+        return badRequest(res, "Email Google profili bilan mos kelmaydi");
+      }
+      googleId = payload.sub;
+      avatarUrl = payload.picture || null;
+    }
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return badRequest(res, 'Bunday email allaqachon ro\'yxatdan o\'tgan');
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    // Parol: berilsa hashlanadi, Google orqali bo'lsa random parol
+    let passwordHash: string;
+    if (password) {
+      passwordHash = await bcrypt.hash(password, 10);
+    } else if (googleId) {
+      passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10);
+    } else {
+      return badRequest(res, 'Parol talab qilinadi');
+    }
 
     const user = await prisma.user.create({
       data: {
         email,
         passwordHash,
         fullName,
-        phone,
+        phone: phone || null,
         language: language || 'uz',
         role: 'USER',
+        googleId,
+        avatarUrl,
       },
     });
 
@@ -36,7 +83,16 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       role: user.role,
     });
 
-    return ok(res, { user: sanitizeUser(user), ...tokens }, 'Ro\'yxatdan muvaffaqiyatli o\'tdingiz');
+    return ok(
+      res,
+      {
+        user: sanitizeUser(user),
+        ...tokens,
+        isNewUser: true,
+        profile: { fullName, email, phone: user.phone || null },
+      },
+      'Ro\'yxatdan muvaffaqiyatli o\'tdingiz'
+    );
   } catch (err) {
     next(err);
   }
@@ -83,7 +139,18 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
     const payload = ticket.getPayload();
     if (!payload) return badRequest(res, 'Token yaroqsiz');
 
-    const { email, sub: googleId, name, email_verified, picture } = payload;
+    const {
+      email,
+      sub: googleId,
+      name,
+      given_name,
+      family_name,
+      email_verified,
+      picture,
+    } = payload;
+
+    // Ism (given) va familiya (family) alohida olinadi — "Ism Familiya" formatida saqlanadi
+    const fullName = [given_name, family_name].filter(Boolean).join(' ').trim() || name || email!.split('@')[0] || 'Foydalanuvchi';
 
     if (!email_verified) return badRequest(res, 'Email tasdiqlanmagan');
 
@@ -94,28 +161,31 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
       user = await prisma.user.findUnique({ where: { email: email! } });
 
       if (user) {
-        // Mavjud user ga google_id va avatarni biriktiramiz
+        // Mavjud user ga google_id va avatarni biriktiramiz (agar bo'sh bo'lsa)
         user = await prisma.user.update({
           where: { id: user.id },
           data: {
             googleId,
             avatarUrl: user.avatarUrl || picture || null,
-            fullName: user.fullName || name || email!.split('@')[0],
+            fullName: !user.fullName || user.fullName.length < 3 ? fullName : user.fullName,
           },
         });
       } else {
-        // Yangi foydalanuvchi: Google ma'lumotlari bilan to'g'ridan-to'g'ri hisob yaratamiz
-        user = await prisma.user.create({
-          data: {
-            email: email!,
-            googleId,
-            fullName: name || email!.split('@')[0] || 'Foydalanuvchi',
-            avatarUrl: picture || null,
-            role: 'USER',
-            language: 'uz',
-            status: 'ACTIVE',
+        // Yangi foydalanuvchi: akkaunt hali yaratilmagan —
+        // profil register sahifasiga oldindan to'ldirish uchun qaytariladi
+        return ok(
+          res,
+          {
+            pendingRegister: true,
+            profile: {
+              fullName,
+              email,
+              avatarUrl: picture || null,
+              phone: null,
+            },
           },
-        });
+          'Google orqali davom eting — ro\'yxatdan o\'tishni yakunlang'
+        );
       }
     }
 
@@ -125,7 +195,21 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
       role: user.role,
     });
 
-    return ok(res, { user: sanitizeUser(user), ...tokens }, 'Google orqali muvaffaqiyatli kirdingiz');
+    return ok(
+      res,
+      {
+        user: sanitizeUser(user),
+        ...tokens,
+        isNewUser: false,
+        // Frontend profildagi ism/familiya/telefon maydonlarini to'ldirish uchun tayyor ma'lumot
+        profile: {
+          fullName,
+          email,
+          phone: user.phone || null,
+        },
+      },
+      'Google orqali muvaffaqiyatli kirdingiz'
+    );
   } catch (err) {
     next(err);
   }

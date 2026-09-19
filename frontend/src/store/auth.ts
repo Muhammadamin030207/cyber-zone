@@ -12,7 +12,7 @@ interface AuthState {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   googleLogin: (idToken: string) => Promise<{ data?: { data?: { pendingRegister?: boolean; profile?: any; user?: User } } } | undefined>;
-  register: (data: { email: string; password: string; fullName: string; phone?: string; language?: string }) => Promise<void>;
+  register: (data: { email: string; password?: string; fullName: string; phone?: string; language?: string; googleToken?: string }) => Promise<void>;
   logout: () => void;
   setAuth: (auth: AuthResponse) => void;
   fetchMe: () => Promise<void>;

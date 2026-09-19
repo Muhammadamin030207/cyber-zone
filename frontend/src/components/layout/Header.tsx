@@ -7,6 +7,7 @@ import { Gamepad2, Menu, X, LogIn, UserPlus, LayoutDashboard, Crown } from 'luci
 import { useAuthStore } from '@/store/auth';
 import LanguageSwitcher from './LanguageSwitcher';
 import ThemeSwitcher from './ThemeSwitcher';
+import Logo from '@/components/brand/Logo';
 
 export default function Header() {
   const t = useTranslations('nav');
@@ -47,10 +48,8 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 group">
-          <div className="w-9 h-9 rounded-lg neon-btn flex items-center justify-center">
-            <Gamepad2 size={20} />
-          </div>
-          <span className="font-bold tracking-wider text-lg">
+          <Logo size={34} />
+          <span className="font-[--font-orbitron] font-bold tracking-widest text-lg">
             CYBER<span className="text-neon-cyan">ARENA</span>
           </span>
         </Link>
@@ -73,7 +72,7 @@ export default function Header() {
                   {t('superAdmin')}
                 </Link>
               )}
-              {user.role !== 'USER' && (
+              {user.role === 'ADMIN' && (
                 <Link
                   href="/admin"
                   className="px-3 py-2 text-sm font-medium rounded-lg text-neon-green hover:bg-neon-green/10 flex items-center gap-1"
@@ -139,7 +138,7 @@ export default function Header() {
               {user.role === 'SUPER_ADMIN' && (
                 <Link href="/super-admin" onClick={() => setMobileOpen(false)} className="px-3 py-2 text-sm font-medium text-yellow-300">{t('superAdmin')}</Link>
               )}
-              {user.role !== 'USER' && (
+              {user.role === 'ADMIN' && (
                 <Link href="/admin" onClick={() => setMobileOpen(false)} className="px-3 py-2 text-sm font-medium text-neon-green">{t('admin')}</Link>
               )}
               <Link href="/dashboard" onClick={() => setMobileOpen(false)} className="px-3 py-2 text-sm font-medium text-gray-300">{t('dashboard')}</Link>

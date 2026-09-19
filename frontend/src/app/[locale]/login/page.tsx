@@ -5,10 +5,11 @@ import { useTranslations } from 'next-intl';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Gamepad2, LogIn, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
+import { LogIn, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
 import GoogleButton from '@/components/auth/GoogleButton';
+import Logo from '@/components/brand/Logo';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email kiriting').email('Email noto\u2019g\u2019ri'),
@@ -60,9 +61,7 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
         <div className="absolute bottom-0 -left-24 w-96 h-96 rounded-full bg-neon-magenta/10 blur-3xl" />
 
         <div className="relative flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl neon-btn flex items-center justify-center">
-            <Gamepad2 size={26} />
-          </div>
+          <Logo size={44} />
           <span className="font-[--font-orbitron] text-xl font-bold tracking-widest neon-text">
             CYBER<span className="text-white">-ZONE</span>
           </span>
@@ -86,9 +85,7 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center justify-center gap-2 mb-8">
-            <div className="w-10 h-10 rounded-xl neon-btn flex items-center justify-center">
-              <Gamepad2 size={22} />
-            </div>
+            <Logo size={38} />
             <span className="font-[--font-orbitron] text-lg font-bold tracking-widest neon-text">
               CYBER<span className="text-white">-ZONE</span>
             </span>

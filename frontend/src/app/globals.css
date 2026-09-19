@@ -105,6 +105,111 @@ html[data-theme="aurora"] {
   --fg-dim: #64748b;
 }
 
+/* ============================================================
+   NEON HALLOWEEN — neon qovoq + zaharli yashil + sirli binafsha
+   ============================================================ */
+html[data-theme="neon-halloween"] {
+  --acc-a: #ff8800;          /* neon qovoq */
+  --acc-a-soft: #ffad42;
+  --acc-b: #d231ff;          /* neon binafsha */
+  --acc-b-soft: #e26aff;
+  --bg-0: #0a0512;           /* chuqur binafsha-qora tun */
+  --bg-1: #120a1c;
+  --bg-2: #1a1028;
+  --bg-3: #241636;
+  --line: rgba(255, 136, 0, 0.14);
+  --line-strong: rgba(210, 49, 255, 0.24);
+  --fg: #fdf3e3;
+  --fg-mut: #cbb9a7;
+  --fg-dim: #8a7a6b;
+}
+
+/* ============================================================
+   MODERN — toza, premium, Linear/Vercel uslubi (zinc + indigo)
+   ============================================================ */
+html[data-theme="nova"] {
+  --acc-a: #6366f1;          /* indigo */
+  --acc-a-soft: #818cf8;
+  --acc-b: #22d3ee;          /* electric cyan */
+  --acc-b-soft: #67e8f9;
+  --bg-0: #09090b;           /* zinc-950 */
+  --bg-1: #0e0e11;
+  --bg-2: #16161b;
+  --bg-3: #1e1e24;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.13);
+  --fg: #fafafa;
+  --fg-mut: #a1a1aa;
+  --fg-dim: #71717a;
+}
+
+/* ============================================================
+   MODERN VARIANTS (4): slate / ocean / rose / mint
+   ============================================================ */
+html[data-theme="slate"] {
+  --acc-a: #38bdf8;          /* sky */
+  --acc-a-soft: #7dd3fc;
+  --acc-b: #818cf8;          /* periwinkle */
+  --acc-b-soft: #a5b4fc;
+  --bg-0: #07090c;
+  --bg-1: #0d1016;
+  --bg-2: #151a23;
+  --bg-3: #1d232f;
+  --line: rgba(148, 163, 184, 0.12);
+  --line-strong: rgba(148, 163, 184, 0.20);
+  --fg: #eef2f7;
+  --fg-mut: #94a3b8;
+  --fg-dim: #64748b;
+}
+
+html[data-theme="ocean"] {
+  --acc-a: #2dd4bf;          /* teal */
+  --acc-a-soft: #5eead4;
+  --acc-b: #60a5fa;          /* soft blue */
+  --acc-b-soft: #93c5fd;
+  --bg-0: #05131b;           /* chuqur kechki dengiz */
+  --bg-1: #0a1a26;
+  --bg-2: #102330;
+  --bg-3: #172d3d;
+  --line: rgba(45, 212, 191, 0.12);
+  --line-strong: rgba(96, 165, 250, 0.20);
+  --fg: #e8f7f7;
+  --fg-mut: #9db8c2;
+  --fg-dim: #6f8a95;
+}
+
+html[data-theme="rose"] {
+  --acc-a: #fb7185;          /* rose */
+  --acc-a-soft: #fda4af;
+  --acc-b: #fbbf24;          /* gold */
+  --acc-b-soft: #fcd34d;
+  --bg-0: #0d0a0c;
+  --bg-1: #151013;
+  --bg-2: #1e181c;
+  --bg-3: #282025;
+  --line: rgba(251, 113, 133, 0.12);
+  --line-strong: rgba(251, 191, 36, 0.20);
+  --fg: #fdf4f5;
+  --fg-mut: #b3a3a8;
+  --fg-dim: #7d6d72;
+}
+
+html[data-theme="mint"] {
+  --acc-a: #34d399;          /* mint */
+  --acc-a-soft: #6ee7b7;
+  --acc-b: #a3e635;          /* lime */
+  --acc-b-soft: #bef264;
+  --bg-0: #07100b;
+  --bg-1: #0c1a13;
+  --bg-2: #142518;
+  --bg-3: #1c3122;
+  --line: rgba(52, 211, 153, 0.12);
+  --line-strong: rgba(163, 230, 53, 0.20);
+  --fg: #effbf3;
+  --fg-mut: #a3b8aa;
+  --fg-dim: #70867a;
+}
+
 @theme inline {
   /* Eski klass nomlarini premium aksentlarga xaritalash —
      barcha mavjud komponentlar avtomatik yangi uslubni oladi */

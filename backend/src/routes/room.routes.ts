@@ -3,6 +3,7 @@ import {
   getRooms,
   getNearbyRooms,
   getRoomById,
+  getAllRooms,
   createRoom,
   createRoomBySuperAdmin,
   updateRoom,
@@ -18,13 +19,16 @@ const router = Router();
 // ============ XONALAR ============
 router.get('/', getRooms);
 router.get('/nearby', getNearbyRooms);
+// Barcha xonalar (PENDING ham) — SUPER_ADMIN/ADMIN uchun (ordering matters before /:id)
+router.get('/all', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), getAllRooms);
 router.get('/:id', getRoomById);
 router.get('/:id/stats', authenticate, getRoomStats);
 
 // SUPER_ADMIN — yangi xona yaratish va admin tayinlash
 router.post('/super-admin', authenticate, authorize('SUPER_ADMIN'), createRoomBySuperAdmin);
 
-router.post('/', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), createRoom);
+// Xona yaratish FAQAT SUPER_ADMIN'ga tegishli (admin xonani super-admin ochadi)
+router.post('/', authenticate, authorize('SUPER_ADMIN'), createRoom);
 router.put('/:id', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), updateRoom);
 router.delete('/:id', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), deleteRoom);
 

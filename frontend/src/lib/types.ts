@@ -57,7 +57,8 @@ export interface Room {
   reviews?: Review[];
   avgRating?: number;
   ratingCount?: number;
-  _count?: { zones: number; reviews: number; bookings: number };
+  _count?: { zones: number; reviews: number; bookings: number; computers?: number };
+  owner?: Pick<User, 'id' | 'fullName' | 'email' | 'phone'> | null;
 }
 
 export interface Review {
@@ -118,7 +119,7 @@ export interface Payment {
   userId: string;
   amount: number | string;
   type: 'ADVANCE' | 'REMAINING';
-  method?: 'PAYME' | 'CLICK' | 'UZCARD' | 'CASH' | null;
+  method?: 'PAYME' | 'CLICK' | 'UZCARD' | 'HUMO' | 'UZUM' | 'CASH' | null;
   status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
   paidAt?: string | null;
 }
