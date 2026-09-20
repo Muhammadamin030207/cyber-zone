@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import {
   Mail, Phone, UserRound, Save, Loader2, KeyRound, ShieldCheck, CalendarDays, LogOut, Coins,
 } from 'lucide-react';
-import { useRouter } from '@/i18n/navigation';
+import { useRouter, Link } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
 import api, { getApiErrorMessage } from '@/lib/api';
 import SupportChat from '@/components/support/SupportChat';
@@ -222,7 +222,32 @@ try {
               ishlatishingiz mumkin (narxning 50% gacha).
             </p>
           </div>
-          <SupportChat mode="user" />
+          {user.role === 'SUPER_ADMIN' ? (
+            <div className="neo-card rounded-2xl p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-10 h-10 rounded-xl bg-yellow-400/10 border border-yellow-400/25 grid place-items-center">
+                  <ShieldCheck size={20} className="text-yellow-400" />
+                </span>
+                <div>
+                  <p className="font-bold leading-tight">Super Admin</p>
+                  <p className="text-[10px] text-gray-500">Murojaatlar panelda boshqariladi</p>
+                </div>
+              </div>
+              <p className="text-sm text-gray-400 leading-relaxed mb-4">
+                Siz platformaning super admini sifatida murojaatlarni boshqaruv panelida o&apos;qib, javob berasiz.
+              </p>
+              <Link
+                href="/super-admin"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl neon-btn text-sm font-bold hover:scale-[1.02] hover:brightness-110 active:scale-[0.98] transition-all"
+              >
+                <ShieldCheck size={15} /> Murojaatlar paneliga o&apos;tish
+              </Link>
+            </div>
+          ) : user.role === 'ADMIN' ? (
+            <SupportChat mode="admin" channel="superadmin" />
+          ) : (
+            <SupportChat mode="user" />
+          )}
         </div>
       </div>
     </div>

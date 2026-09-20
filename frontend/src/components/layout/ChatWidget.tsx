@@ -52,9 +52,9 @@ export default function ChatWidget() {
 
   return (
     <>
-      <div className="fixed bottom-5 right-5 z-[60] flex flex-col items-end gap-3">
+      <div className="fixed bottom-20 md:bottom-5 right-4 md:right-5 z-[60] flex flex-col items-end gap-3">
         {open && (
-          <div className="w-[min(92vw,380px)] rounded-2xl glass border border-neon-cyan/25 shadow-2xl overflow-hidden flex flex-col">
+          <div className="w-[min(94vw,380px)] rounded-2xl glass border border-neon-cyan/25 shadow-2xl overflow-hidden flex flex-col">
             {/* Header */}
             <div className="px-4 py-3 flex items-center justify-between border-b border-neon-cyan/15 bg-neon-cyan/5">
               <div className="flex items-center gap-2">
@@ -79,7 +79,7 @@ export default function ChatWidget() {
             </div>
 
             {/* Body */}
-            <div ref={bodyRef} className="flex-1 overflow-y-auto max-h-[320px] px-3 py-3 space-y-2.5 scrollbar-thin">
+            <div ref={bodyRef} className="flex-1 overflow-y-auto max-h-[min(42vh,320px)] px-3 py-3 space-y-2.5 scrollbar-thin">
               {messages.map((msg, i) => (
                 <div key={i} className={msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                   <div

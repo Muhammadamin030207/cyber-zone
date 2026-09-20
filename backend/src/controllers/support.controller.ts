@@ -240,7 +240,7 @@ export const getSupportThreads = async (req: AuthRequest, res: Response, next: N
       }
       let list = Array.from(byKey.values()).sort((a, b) => (b.lastMessage?.createdAt || 0) - (a.lastMessage?.createdAt || 0));
       if (scope === 'users') list = list.filter((t) => t.user.role === 'USER');
-      else if (scope === 'admins') list = list.filter((t) => t.user.role !== 'USER');
+      else if (scope === 'admins') list = list.filter((t) => t.user.role === 'ADMIN');
       threads = list;
     } else {
       return forbidden(res, 'Ruxsat yo\'q');

@@ -82,8 +82,21 @@ export default function SupportChat({
   const visitorName = activeRoom?.owner?.fullName || (isSuperAdmin ? 'Super Admin' : 'Xona admini');
 
   const visibleThreads = threads.filter((t) =>
-    scope === 'all' ? true : scope === 'users' ? t.user.role === 'USER' : t.user.role !== 'USER'
+    scope === 'all' ? true : scope === 'users' ? t.user.role === 'USER' : t.user.role === 'ADMIN'
   );
+
+  // Xavfsizlik: super_admin o'ziga o'zi "Super Admin'ga yozish" ko'rinmaydi
+  if (isSuperAdmin && mode === 'user') {
+    return (
+      <div className="neo-card rounded-2xl p-8 text-center">
+        <ShieldCheck size={38} className="mx-auto text-yellow-400 mb-3" />
+        <p className="font-bold mb-1">Super Admin</p>
+        <p className="text-sm text-gray-400">
+          Murojaatlar boshqaruv panelidagi chat tablarida boshqariladi.
+        </p>
+      </div>
+    );
+  }
 
   const merge = (list: SupportMsg[], incoming: SupportMsg | SupportMsg[]) =>
     Array.from(new Map([...list, ...(Array.isArray(incoming) ? incoming : [incoming])].map((m) => [m.id, m])).values())

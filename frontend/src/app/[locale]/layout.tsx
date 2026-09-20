@@ -8,6 +8,7 @@ import Footer from '@/components/layout/Footer';
 import BottomTabBar from '@/components/layout/BottomTabBar';
 import AuthInit from '@/components/providers/AuthInit';
 import HalloweenDecor from '@/components/layout/HalloweenDecor';
+import ChatWidget from '@/components/layout/ChatWidget';
 
 const inter = Inter({ subsets: ['latin', 'latin-ext'] });
 const orbitron = Orbitron({ subsets: ['latin'], weight: ['400', '700', '900'] });
@@ -85,6 +86,7 @@ export default async function RootLayout({ children, params }: Props) {
           <main className="flex-1 pb-20 md:pb-0">{children}</main>
           <Footer />
           <BottomTabBar />
+          <ChatWidget />
         </NextIntlClientProvider>
       </body>
     </html>

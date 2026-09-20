@@ -120,7 +120,7 @@ export default function HomePage() {
             <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">{t('popularTitle')}</h2>
             <p className="text-gray-400 mt-1">{t('popularSubtitle')}</p>
           </div>
-          <Link href="/rooms" className="hidden sm:flex items-center gap-1 text-neon-cyan text-sm hover:gap-2 transition-all group">
+          <Link href="/rooms" className="flex items-center gap-1 text-neon-cyan text-sm hover:gap-2 transition-all group">
             {tCommon('viewAll')} <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
           </Link>
         </div>
@@ -150,7 +150,7 @@ export default function HomePage() {
             <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Xaritadagi klublar</h2>
             <p className="text-gray-400 mt-1">Toshkent bo&apos;ylab eng yaqin gaming zone&apos;ni toping</p>
           </div>
-          <Link href="/rooms" className="hidden sm:flex items-center gap-1 text-neon-cyan text-sm hover:gap-2 transition-all group">
+          <Link href="/rooms" className="flex items-center gap-1 text-neon-cyan text-sm hover:gap-2 transition-all group">
             {tCommon('viewAll')} <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
           </Link>
         </div>

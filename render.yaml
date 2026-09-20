@@ -34,9 +34,9 @@ services:
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
-      # Vercel'dagi frontend domenini shu yerga yozing (vergul bilan bir nechta bo'lishi mumkin):
+      # Vercel'dagi frontend domenlari (vergul bilan bir nechta bo'lishi mumkin):
       - key: FRONTEND_URLS
-        value: https://cyber-zone.vercel.app
+        value: https://cyber-zone-delta.vercel.app, https://cyber-zone-fullstacks-projects-ffc4c9c9.vercel.app, http://localhost:3006
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
@@ -47,6 +47,11 @@ services:
         sync: false
       - key: SUPER_ADMIN_NAME
         sync: false
+      # Gemini AI — Render dashboard'da qo'lda o'rnating
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.6-flash
       - key: NODE_ENV
         value: production
       - key: PORT

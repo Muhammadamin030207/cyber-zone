@@ -31,6 +31,48 @@ interface Msg {
  */
 export default function UserMessenger() {
   const me = useAuthStore((s) => s.user);
+
+  // Super Admin — murojaatlar boshqaruv panelida, chat sahifasida "o'ziga o'zi yozish" ko'rinmaydi
+  if (me?.role === 'SUPER_ADMIN') {
+    return (
+      <div className="neo-card rounded-2xl p-8 text-center">
+        <ShieldCheck size={40} className="mx-auto text-yellow-400 mb-3" />
+        <p className="font-bold mb-1">Super Admin</p>
+        <p className="text-sm text-gray-400 mb-5">
+          Murojaatlar (user va adminlar xabarlari) boshqaruv panelidagi chat tablarida boshqariladi.
+        </p>
+        <a href="/super-admin" className="text-sm font-bold text-yellow-300 hover:text-yellow-200 underline underline-offset-4">
+          Murojaatlar paneliga o&apos;tish →
+        </a>
+      </div>
+    );
+  }
+
+  // Admin — o'z murojaati (super_admin bilan) va xona murojaatlari inbox'i
+  if (me?.role === 'ADMIN') {
+    return (
+      <div className="space-y-4">
+        <AdminTabs />
+        <SupportChat mode="admin" channel="superadmin" />
+      </div>
+    );
+  }
+
+  return <UserMessengerInner />;
+}
+
+function AdminTabs() {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] px-2.5 py-1 rounded-full bg-yellow-400/10 text-yellow-300 font-bold uppercase tracking-wider flex items-center gap-1">
+        <ShieldCheck size={11} /> Super Admin bilan bog&apos;lanish
+      </span>
+    </div>
+  );
+}
+
+function UserMessengerInner() {
+  const me = useAuthStore((s) => s.user);
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [active, setActive] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
