@@ -9,6 +9,8 @@ import {
   KeyRound, MapPin, X, PlusCircle, Wallet, Banknote, MessageSquare, MessagesSquare, Inbox,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
+import { toastError } from '@/lib/toast';
+import { confirmDialog } from '@/lib/confirm';
 import type { User, Room } from '@/lib/types';
 import { formatPrice, formatDate, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
@@ -218,19 +220,19 @@ function UsersTab() {
 
   async function toggleStatus(u: User) {
     const next = u.status === 'BLOCKED' ? 'ACTIVE' : 'BLOCKED';
-    const ok = next === 'BLOCKED'
-      ? confirm(`"${u.fullName}" ni bloklash?`)
-      : true;
-    if (!ok) return;
+    if (next === 'BLOCKED') {
+      const ok = await confirmDialog({ title: 'Foydalanuvchini bloklash', message: `"${u.fullName}" ni bloklash?`, danger: true });
+      if (!ok) return;
+    }
     try {
       await api.patch(`/api/users/${u.id}/status`, { status: next });
       load();
-    } catch (err) { alert(getApiErrorMessage(err)); }
+    } catch (err) { toastError(getApiErrorMessage(err)); }
   }
 
   async function remove(u: User) {
-    if (!confirm(`"${u.fullName}" ni o'chirish?`)) return;
-    try { await api.delete(`/api/users/${u.id}`); load(); } catch (err) { alert(getApiErrorMessage(err)); }
+    if (!await confirmDialog({ title: 'Foydalanuvchini o\'chirish', message: `"${u.fullName}" ni o'chirish?`, danger: true })) return;
+    try { await api.delete(`/api/users/${u.id}`); load(); } catch (err) { toastError(getApiErrorMessage(err)); }
   }
 
   async function addAdmin() {
@@ -431,9 +433,9 @@ function RoomsTab() {
     } catch (err) { setMsg(getApiErrorMessage(err)); }
   }
 
-  async function remove(room: Room) {
-    if (!confirm(`"${room.name}" ni o'chirish?`)) return;
-    try { await api.delete(`/api/rooms/${room.id}`); load(); } catch (err) { alert(getApiErrorMessage(err)); }
+async function remove(room: Room) {
+    if (!await confirmDialog({ title: 'Xonani o\'chirish', message: `"${room.name}" ni o'chirish?`, danger: true })) return;
+    try { await api.delete(`/api/rooms/${room.id}`); load(); } catch (err) { toastError(getApiErrorMessage(err)); }
   }
 
   return (

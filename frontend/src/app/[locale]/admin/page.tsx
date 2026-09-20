@@ -10,6 +10,8 @@ import {
   Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy, MessagesSquare,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
+import { toastError } from '@/lib/toast';
+import { confirmDialog } from '@/lib/confirm';
 import type { Room, Zone, Computer, Booking, PromoCode, NewsItem, BookingStatus } from '@/lib/types';
 import { formatPrice, formatDate, formatDateTime, todayISO, zoneTypeLabel, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
@@ -297,7 +299,7 @@ function ZonesTab({ room }: { room: Room }) {
       setEditId(null);
       load();
     } catch (err) {
-      alert(getApiErrorMessage(err));
+      toastError(getApiErrorMessage(err));
     }
     setSaving(false);
   }
@@ -308,7 +310,7 @@ function ZonesTab({ room }: { room: Room }) {
   }
 
   async function remove(id: string) {
-    if (!confirm('O\'chirmoqchimisiz?')) return;
+    if (!await confirmDialog({ title: 'Zonani o\'chirish', message: 'O\'chirmoqchimisiz?', danger: true })) return;
     try { await api.delete(`/api/rooms/${room.id}/zones/${id}`); load(); } catch { /* skip */ }
   }
 
@@ -402,7 +404,7 @@ function ComputersTab({ room }: { room: Room }) {
       setEditId(null);
       const { data } = await api.get(`/api/rooms/${room.id}/zones/${selectedZoneId}/computers`);
       setComputers(data.data || []);
-    } catch (err) { alert(getApiErrorMessage(err)); }
+    } catch (err) { toastError(getApiErrorMessage(err)); }
     setSaving(false);
   }
 
@@ -412,7 +414,7 @@ function ComputersTab({ room }: { room: Room }) {
   }
 
   async function remove(id: string) {
-    if (!confirm("O'chirmoqchimisiz?")) return;
+    if (!await confirmDialog({ title: 'Kompyuterni o\'chirish', message: 'O\'chirmoqchimisiz?', danger: true })) return;
     try {
       await api.delete(`/api/rooms/${room.id}/zones/${selectedZoneId}/computers/${id}`);
       setComputers((prev) => prev.filter((c) => c.id !== id));
@@ -494,7 +496,7 @@ function BookingsTab({ room }: { room: Room }) {
     try {
       await api.patch(`/api/bookings/admin/bookings/${id}/status`, { status });
       setBookings((prev) => prev.map((b) => b.id === id ? { ...b, status } : b));
-    } catch (err) { alert(getApiErrorMessage(err)); }
+    } catch (err) { toastError(getApiErrorMessage(err)); }
   }
 
   const STATUS_BADGE: Record<string, string> = {
@@ -586,7 +588,7 @@ function PromosTab({ room }: { room: Room }) {
       setForm({ code: '', discountType: 'PERCENTAGE', discountValue: 10, minBookingAmount: 0, maxUses: 100, startsAt: todayISO(), expiresAt: '' });
       setEditId(null);
       load();
-    } catch (err) { alert(getApiErrorMessage(err)); }
+    } catch (err) { toastError(getApiErrorMessage(err)); }
     setSaving(false);
   }
 
@@ -596,7 +598,7 @@ function PromosTab({ room }: { room: Room }) {
   }
 
   async function remove(id: string) {
-    if (!confirm("O'chirmoqchimisiz?")) return;
+    if (!await confirmDialog({ title: 'Promo-kodni o\'chirish', message: 'O\'chirmoqchimisiz?', danger: true })) return;
     try { await api.delete(`/api/promo/${id}`); load(); } catch { /* skip */ }
   }
 
@@ -683,7 +685,7 @@ function NewsTab({ room }: { room: Room | null }) {
       setForm({ title: '', content: '', type: 'NEWS', imageUrl: '' });
       setEditId(null);
       load();
-    } catch (err) { alert(getApiErrorMessage(err)); }
+    } catch (err) { toastError(getApiErrorMessage(err)); }
     setSaving(false);
   }
 
@@ -693,7 +695,7 @@ function NewsTab({ room }: { room: Room | null }) {
   }
 
   async function remove(id: string) {
-    if (!confirm("O'chirmoqchimisiz?")) return;
+    if (!await confirmDialog({ title: 'Yangilikni o\'chirish', message: 'O\'chirmoqchimisiz?', danger: true })) return;
     try { await api.delete(`/api/news/${id}`); load(); } catch { /* skip */ }
   }
 

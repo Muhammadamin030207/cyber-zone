@@ -11,6 +11,7 @@ import AuthInit from '@/components/providers/AuthInit';
 import HalloweenDecor from '@/components/layout/HalloweenDecor';
 import ChatWidget from '@/components/layout/ChatWidget';
 import ToastContainer from '@/components/ui/ToastContainer';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 const inter = Inter({ subsets: ['latin', 'latin-ext'] });
 const orbitron = Orbitron({ subsets: ['latin'], weight: ['400', '700', '900'] });
@@ -90,6 +91,7 @@ export default async function RootLayout({ children, params }: Props) {
           <BottomTabBar />
           <ChatWidget />
           <ToastContainer />
+          <ConfirmDialog />
         </NextIntlClientProvider>
       </body>
     </html>
