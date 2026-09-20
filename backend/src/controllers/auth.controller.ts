@@ -255,7 +255,12 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
     const { refreshToken } = req.body;
     if (!refreshToken) return badRequest(res, 'Refresh token talab qilinadi');
 
-    const decoded = verifyRefreshToken(refreshToken);
+    let decoded;
+    try {
+      decoded = verifyRefreshToken(refreshToken);
+    } catch {
+      return unauthorized(res, 'Refresh token yaroqsiz yoki muddati o\'tgan');
+    }
 
     const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
     if (!user) return notFoundMsg(res, 'Foydalanuvchi topilmadi');
