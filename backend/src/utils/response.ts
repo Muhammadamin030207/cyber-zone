@@ -17,3 +17,6 @@ export const forbidden = (res: Response, message = 'Sizga ruxsat berilmagan') =>
 
 export const notFoundMsg = (res: Response, message = 'Topilmadi') =>
   res.status(404).json({ success: false, message });
+
+export const serverError = (res: Response, message = 'Server xatosi', code?: string) =>
+  res.status(500).json(code ? { success: false, message, code } : { success: false, message });

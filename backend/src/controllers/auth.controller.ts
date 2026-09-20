@@ -6,7 +6,7 @@ import prisma from '../lib/prisma';
 import { generateTokens, verifyRefreshToken } from '../lib/jwt';
 import { config } from '../config';
 import { AuthRequest } from '../types';
-import { ok, badRequest, unauthorized, notFoundMsg } from '../utils/response';
+import { ok, badRequest, unauthorized, notFoundMsg, serverError } from '../utils/response';
 import { sendEmail, buildResetEmail, buildResetText } from '../lib/mailer';
 
 const googleClient = new OAuth2Client(config.google.clientId);
@@ -450,13 +450,18 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
     try {
       await sendEmail(user.email, 'Cyber-ZONE — Parolni tiklash', buildResetEmail(resetUrl), buildResetText(resetUrl, expiryLabel ?? '1 soat'));
     } catch (sendErr) {
-      // Foydalanuvchiga umumiy javob qaytaramiz (email mavjudligini sizdirmaymiz),
-      // LEKIN real sabab log'da aniq qoladi va token bekor qilinadi (qayta urinish mumkin).
+      // Soxta "yuborildi" javobi qaytarmaymiz: SMTP xatosi yuz berdi.
+      // Sabab log'da aniq qoladi va token bekor qilinadi (qayta urinish mumkin).
       console.error(`[forgot-password] Email yuborilmadi -> user=${user.id} email=${user.email} resetUrl=${resetUrl}`);
       console.error(`[forgot-password] Sabab: ${(sendErr as Error).stack || (sendErr as Error).message}`);
       await prisma.user
         .update({ where: { id: user.id }, data: { resetToken: null, resetTokenExpiresAt: null } })
         .catch(() => undefined);
+
+      if (process.env.NODE_ENV === 'production') {
+        return serverError(res, 'Parolni tiklash havolasini yuborishda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko\'ring.');
+      }
+      // Dev: SMTP sozlanmagan bo'lsa ham token ishlatilishi uchun davom etamiz (devToken yetarli).
     }
 
     return ok(

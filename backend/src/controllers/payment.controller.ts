@@ -239,6 +239,63 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       }
     }
 
+    // Idempotentlik: bu bron uchun hali yaroqli (muddati o'tmagan) aktiv onlayn
+    // sessiya mavjud bo'lsa — yangi to'lov YARATMAYMIZ, mavjudini qaytaramiz.
+    // Bu "refresh/bosish" vaqtida duplicate sessionlar va overpay oldini oladi.
+    if (!cash) {
+      const active = await prisma.payment.findFirst({
+        where: {
+          bookingId,
+          status: { in: ['CREATED', 'REDIRECT_REQUIRED', 'PROCESSING'] },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
+        select: { id: true, status: true, amount: true, depositPercent: true },
+      });
+      if (active) {
+        // Provayder uchun yangi checkout URL qayta olinadi (bir xil paymentId —
+        // merchant trans id o'zgarmaydi), aks holda sessiya tiklanadi.
+        let checkoutUrl: string | null = null;
+        if (provider) {
+          try {
+            const prepared = await provider.createPayment({
+              paymentId: active.id,
+              bookingId: booking.id,
+amount: Number(active.amount),
+              currency: 'UZS',
+              depositPercent: active.depositPercent,
+              description: `Cyber-ZONE bron ${booking.id}`,
+              callbackUrl: providerCallbackUrl(providerId),
+              returnUrl: `${config.frontendUrls[0] || ''}/checkout/${booking.id}/pay?pid=${active.id}`,
+              userId: req.user!.userId,
+            });
+            checkoutUrl = prepared.checkoutUrl;
+            await prisma.payment.update({
+              where: { id: active.id },
+              data: { expiresAt: prepared.expiresAt || new Date(Date.now() + 30 * 60 * 1000) },
+            });
+          } catch {
+            /* eski sessiya o'z holicha davom etadi */
+          }
+        }
+        return created(res, {
+          payment: {
+            id: active.id,
+            status: active.status,
+            amount: active.amount,
+            method: normMethod || null,
+            provider: providerId === 'TEST' ? null : providerId,
+            depositPercent: active.depositPercent,
+          },
+          checkoutUrl,
+          resumed: true,
+          depositPercent: active.depositPercent,
+          amount: active.amount,
+          mode: config.payments.mode,
+          isTest: providerId === 'TEST',
+        }, 'Oldingi to\'lov sessiyasi tiklandi');
+      }
+    }
+
     const finalPrice = round2(toNumber(booking.finalPrice));
     const prevPayments = await prisma.payment.findMany({
       where: { bookingId, status: { in: [...PAID_STATUSES] } },

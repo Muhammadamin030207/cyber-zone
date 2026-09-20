@@ -94,8 +94,11 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
     const slot = normalizeSlot(startTime, endTime);
     if (!slot) return badRequest(res, 'Vaqt oralig\'i noto\'g\'ri');
 
-    // Bugun (Toshkent) uchun o'tgan vaqtlarni bloklash
+    // O'tgan sana va bugun (Toshkent) uchun o'tgan vaqtlarni bloklash — server avtoritet
     const todayISO = tashkentTodayISO();
+    if (isoDate < todayISO) {
+      return badRequest(res, 'O\'tgan sanaga bron qilib bo\'lmaydi', 'BOOKING_IN_PAST');
+    }
     if (isoDate === todayISO) {
       const nowMin = parseTime(tashkentNowHHMM());
       if (nowMin !== null && slot.start < nowMin) {
@@ -137,6 +140,15 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
     try {
       const booking = await prisma.$transaction(async (tx) => {
         const candidateIds: string[] = [];
+
+        // Promo-kod bir foydalanuvchiga bir marta ishlatilishi mumkin (single-use per user)
+        if (promo) {
+          const prevUse = await tx.booking.findFirst({
+            where: { userId: req.user!.userId, promoCodeId: promo.id, status: { not: 'CANCELLED' } },
+            select: { id: true },
+          });
+          if (prevUse) throw new Error('PROMO_ALREADY_USED');
+        }
 
         if (computerId) {
           // Tanlangan kompyuterni lock qilamiz
@@ -299,7 +311,7 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
       // Socket — real vaqt yangilanish
       io.emit('booking_status_changed', { roomId, type: 'new_booking' });
 
-      return created(res, booking, 'Bron yaratildi. 30% oldindan to\'lov kerak');
+      return created(res, booking, `Bron yaratildi. ${Number(booking.depositPercent) || 30}% oldindan to'lov kerak`);
     } catch (txErr: any) {
       const msg = txErr.message || '';
       if (msg === 'COMPUTER_NOT_FOUND') return notFoundMsg(res, 'Kompyuter topilmadi');
@@ -308,6 +320,7 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
       if (msg === 'NO_FREE_COMPUTER') return badRequest(res, 'Ushbu vaqt uchun bo\'sh kompyuter yo\'q', 'ROOM_FULL');
       if (msg === 'INSUFFICIENT_POINTS') return badRequest(res, 'Bonus ballaringiz yetarli emas');
       if (msg === 'MIN_AMOUNT_NOT_REACHED') return badRequest(res, 'Promo-kod uchun minimal narx yetishmayapti');
+      if (msg === 'PROMO_ALREADY_USED') return badRequest(res, 'Bu promo-kod siz allaqachon ishlatgansiz');
       if (msg.startsWith('CONFLICT_')) {
         const [, s, e] = msg.split('_');
         return badRequest(res, `Bu kompyuter ${s} - ${e} vaqtda band`, 'BOOKING_TIME_ALREADY_RESERVED');
@@ -355,8 +368,10 @@ export const cancelBooking = async (req: AuthRequest, res: Response, next: NextF
     if (!booking) return notFoundMsg(res, 'Bron topilmadi');
     if (booking.userId !== req.user!.userId) return forbidden(res, 'Bu bron sizniki emas');
 
-    if (booking.status === 'COMPLETED' || booking.status === 'CANCELLED') {
-      return badRequest(res, 'Bu bron o\'zgartirib bo\'lmaydi');
+    // Foydalanuvchi faqat to'lanmagan bronni bekor qila oladi.
+    // To'langan (30% prepaid) bronni bekor qilish faqat admin panel orqali (refund yo'q).
+    if (!['PENDING', 'PENDING_PAYMENT'].includes(booking.status)) {
+      return badRequest(res, 'To\'langan bronni bekor qilib bo\'lmaydi. Admin bilan bog\'laning.', 'BOOKING_PAID_CANNOT_CANCEL');
     }
 
     const updated = await prisma.booking.update({

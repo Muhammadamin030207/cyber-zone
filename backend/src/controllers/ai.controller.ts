@@ -54,7 +54,10 @@ async function geminiChat(
   history: ChatHistoryItem[]
 ): Promise<{ text: string; model: string } | null> {
   const key = config.ai.geminiApiKey;
-  if (!key) return null;
+  if (!key) {
+    console.warn('[AI] GEMINI_API_KEY o\'rnatilmagan — qoidaviy fallback javob ishlatilmoqda. AI sifatli javob berishi uchun Render dashboard\'da GEMINI_API_KEY ko\'rsatilishi shart.');
+    return null;
+  }
 
   const system = [
     'Sen Cyber-ZONE — kompyuter xona (gaming club) platformasining rasmiy AI yordamchisisan.',
