@@ -52,6 +52,15 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-3.6-flash
+      # Parol tiklash email'i uchun SMTP (misol: Gmail app-password)
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        value: 587
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
       - key: NODE_ENV
         value: production
       - key: PORT
