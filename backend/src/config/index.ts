@@ -23,6 +23,13 @@ export const config = {
     port: parseInt(process.env.EMAIL_PORT || '587'),
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
+    secure: process.env.EMAIL_USE_TLS === 'true' || process.env.EMAIL_SECURE === 'true',
+    from: process.env.DEFAULT_FROM_EMAIL || '',
+  },
+  bookings: {
+    // To'lanmagan bronni avtomatik bekor qilish muddati (daqiqa). Abandoned
+    // PENDING/PENDING_PAYMENT bronlar vaqt oralig'ini qulflab qoymasligi uchun.
+    unpaidTtlMinutes: Math.max(5, parseInt(process.env.UNPAID_BOOKING_TTL_MINUTES || '60', 10)),
   },
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6380',
   payments: {

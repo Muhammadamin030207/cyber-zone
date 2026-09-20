@@ -71,6 +71,46 @@ export function slotsOverlap(a: SlotNorm, b: SlotNorm): boolean {
   return a.start < b.end && a.end > b.start;
 }
 
+/**
+ * Berilgan band vaqtlar orasidagi BO'SH vaqt oynalarini qaytaradi.
+ * Ish vaqti [open, close] (close 1440 dan oshishi mumkin — tungi smena) ichida.
+ * Kiruvchi bandlar ish vaqtiga qirqiladi, kesishganlari birlashtiriladi.
+ */
+export function freeWindowsInDay(
+  blocked: SlotNorm[],
+  open: number,
+  close: number
+): Array<{ start: number; end: number }> {
+  if (close <= open) return [];
+  const min = (v: number) => Math.max(open, Math.min(close, v));
+  const clipped: Array<{ start: number; end: number }> = [];
+  for (const b of blocked) {
+    const s = min(b.start);
+    const e2 = min(b.end);
+    if (e2 > s) clipped.push({ start: s, end: e2 });
+  }
+  clipped.sort((a, b) => a.start - b.start);
+
+  const merged: Array<{ start: number; end: number }> = [];
+  for (const c of clipped) {
+    const last = merged[merged.length - 1];
+    if (last && c.start <= last.end) {
+      if (c.end > last.end) last.end = c.end;
+    } else {
+      merged.push({ start: c.start, end: c.end });
+    }
+  }
+
+  const free: Array<{ start: number; end: number }> = [];
+  let cursor = open;
+  for (const m of merged) {
+    if (m.start > cursor) free.push({ start: cursor, end: m.start });
+    cursor = Math.max(cursor, m.end);
+  }
+  if (cursor < close) free.push({ start: cursor, end: close });
+  return free;
+}
+
 export interface WorkingHoursNorm {
   open: number;
   close: number; // 1440 dan oshishi mumkin (tungi ish: 15:00 - 03:00 => close 1620)

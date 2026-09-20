@@ -1,9 +1,28 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { register, login, googleLogin, refreshToken, getMe, updateProfile, uploadAvatarImage, changePassword, forgotPassword, resetPassword } from '../controllers/auth.controller';
 import { authenticate } from '../middlewares/auth';
 import { uploadAvatar } from '../middlewares/upload';
 
 const router = Router();
+
+// Brute-force oldini olish: login — 10 ta urinish / 15 daqiqa / IP
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { success: false, message: "Juda ko'p urinish. Birozdan so'ng qayta urinib ko'ring." },
+});
+
+// Forgot-password spam'i: 5 ta so'rov / 15 daqiqa / IP
+const forgotLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { success: false, message: "Juda ko'p so'rov. Birozdan so'ng qayta urinib ko'ring." },
+});
 
 /**
  * @swagger
@@ -16,12 +35,12 @@ router.post('/register', register);
 /**
  * POST /api/auth/login
  */
-router.post('/login', login);
+router.post('/login', loginLimiter, login);
 
 /**
  * POST /api/auth/login/google
  */
-router.post('/login/google', googleLogin);
+router.post('/login/google', loginLimiter, googleLogin);
 
 /**
  * POST /api/auth/refresh
@@ -51,7 +70,7 @@ router.put('/change-password', authenticate, changePassword);
 /**
  * POST /api/auth/forgot-password
  */
-router.post('/forgot-password', forgotPassword);
+router.post('/forgot-password', forgotLimiter, forgotPassword);
 
 /**
  * POST /api/auth/reset-password

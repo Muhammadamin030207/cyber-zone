@@ -24,6 +24,7 @@ import prisma from './lib/prisma';
 import { verifyAccessToken } from './lib/jwt';
 import { io } from './lib/socket';
 import { redisClient } from './lib/redis';
+import { scheduleBookingExpiry } from './utils/bookingExpiry';
 
 const app = express();
 const httpServer = createServer(app);
@@ -67,8 +68,30 @@ io.on('connection', (socket) => {
   });
 
   // Chat: xona chatlariga qo'shilish (jonli yangilanish uchun)
-  socket.on('joinRoom', (roomId: string) => {
-    if (roomId) socket.join(`chat:room:${roomId}`);
+  // Xavfsizlik: faqat SUPER_ADMIN, xona egasi, yoki shu xonada bron qilgan
+  // foydalanuvchi xona chatiga qo'shilishi mumkin (IDOR oldini olish).
+  socket.on('joinRoom', async (roomId: string) => {
+    if (!roomId || typeof roomId !== 'string') return;
+    const role = socket.data.role;
+    if (role === 'SUPER_ADMIN') {
+      socket.join(`chat:room:${roomId}`);
+      return;
+    }
+    try {
+      const room = await prisma.computerRoom.findUnique({ where: { id: roomId }, select: { id: true, ownerId: true } });
+      if (!room) return;
+      if (role === 'ADMIN') {
+        if (room.ownerId === socket.data.userId) socket.join(`chat:room:${roomId}`);
+        return;
+      }
+      const booking = await prisma.booking.findFirst({
+        where: { userId: socket.data.userId, roomId: room.id, status: { not: 'CANCELLED' } },
+        select: { id: true },
+      });
+      if (booking) socket.join(`chat:room:${roomId}`);
+    } catch {
+      /* ignore */
+    }
   });
 
   // Support: super_admin xonasi — faqat adminlar/super admin
@@ -176,4 +199,6 @@ app.use(errorHandler);
 httpServer.listen(config.port, () => {
   console.log(`🚀 Cyber-ZONE API ${config.port}-portda ishlamoqda`);
   console.log(`   Frontendlar: ${config.frontendUrls.join(', ')}`);
+  // Muddati o'tgan to'lanmagan bronlarni davriy tozalash
+  scheduleBookingExpiry();
 });

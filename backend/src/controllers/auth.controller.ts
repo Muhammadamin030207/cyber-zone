@@ -7,7 +7,7 @@ import { generateTokens, verifyRefreshToken } from '../lib/jwt';
 import { config } from '../config';
 import { AuthRequest } from '../types';
 import { ok, badRequest, unauthorized, notFoundMsg } from '../utils/response';
-import { sendEmail, buildResetEmail } from '../lib/mailer';
+import { sendEmail, buildResetEmail, buildResetText } from '../lib/mailer';
 
 const googleClient = new OAuth2Client(config.google.clientId);
 
@@ -19,17 +19,23 @@ function normalizePhone(p: string): string | null {
   return null;
 }
 
+/** Emailni yagona formaga keltiradi: trim + kichik harf (email case-insensitive) */
+function normalizeEmail(e: string): string {
+  return String(e).trim().toLowerCase();
+}
+
 // ============ REGISTER (USER) ============
 // googleToken berilganda parvoz qilib, parol ixtiyoriy (avtomatik random parol qo'yiladi)
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password, phone, language, googleToken } = req.body;
+    const { password, phone, language, googleToken } = req.body;
     let fullName = String(req.body.fullName || '').trim();
+    const email = normalizeEmail(req.body.email);
 
     if (!email) {
       return badRequest(res, 'email majburiy');
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return badRequest(res, "Email noto'g'ri formatda");
     }
     if (password && String(password).length < 6) {
@@ -118,7 +124,8 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
 // ============ LOGIN ============
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password } = req.body;
+    const { password } = req.body;
+    const email = normalizeEmail(req.body.email);
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return badRequest(res, 'Email yoki parol noto\'g\'ri');
@@ -128,7 +135,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) return badRequest(res, 'Email yoki parol noto\'g\'ri');
 
-    if (user.status === 'BLOCKED') return unauthorized(res, 'Akkauntingiz bloklangan');
+    if (user.status !== 'ACTIVE') return unauthorized(res, 'Akkauntingiz bloklangan');
 
     const tokens = generateTokens({
       userId: user.id,
@@ -157,7 +164,7 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
     if (!payload) return badRequest(res, 'Token yaroqsiz');
 
     const {
-      email,
+      email: rawEmail,
       sub: googleId,
       name,
       given_name,
@@ -165,9 +172,10 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
       email_verified,
       picture,
     } = payload;
+    const email = normalizeEmail(rawEmail || '');
 
     // Ism (given) va familiya (family) alohida olinadi — "Ism Familiya" formatida saqlanadi
-    const fullName = [given_name, family_name].filter(Boolean).join(' ').trim() || name || email!.split('@')[0] || 'Foydalanuvchi';
+    const fullName = [given_name, family_name].filter(Boolean).join(' ').trim() || name || email.split('@')[0] || 'Foydalanuvchi';
 
     if (!email_verified) return badRequest(res, 'Email tasdiqlanmagan');
 
@@ -175,10 +183,16 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
 
     if (!user) {
       // googleId bo'yicha topilmasa, email bo'yicha qidiramiz
-      user = await prisma.user.findUnique({ where: { email: email! } });
+      user = await prisma.user.findUnique({ where: { email } });
 
       if (user) {
-        // Mavjud user ga google_id va avatarni biriktiramiz (agar bo'sh bo'lsa)
+        // Xavfsizlik: akkaunt parol bilan yaratilgan bo'lsa (passwordHash bor),
+        // Google id'sini avtomatik bog'lab bo'lmaydi — aks holda Google orqali
+        // akkauntni egallash (account pre-hijacking) mumkin bo'ladi.
+        if (user.passwordHash && !user.googleId) {
+          return unauthorized(res, 'Bu email allaqachon parol bilan ro\'yxatdan o\'tgan. Iltimos, parol orqali kiring yoki parolni tiklang.');
+        }
+        // Parolsiz/Google akkauntiga googleId biriktiramiz (xavfsiz holat)
         user = await prisma.user.update({
           where: { id: user.id },
           data: {
@@ -205,6 +219,9 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
         );
       }
     }
+
+    // Bloklangan yoki faol bo'lmagan foydalanuvchi Google orqali ham kira olmaydi
+    if (user.status !== 'ACTIVE') return unauthorized(res, 'Akkauntingiz bloklangan');
 
     const tokens = generateTokens({
       userId: user.id,
@@ -365,6 +382,10 @@ export const changePassword = async (req: AuthRequest, res: Response, next: Next
     const valid = await bcrypt.compare(oldPassword, user.passwordHash);
     if (!valid) return badRequest(res, 'Eski parol noto\'g\'ri');
 
+    if (!newPassword || String(newPassword).length < 6) {
+      return badRequest(res, "Yangi parol kamida 6 ta belgidan iborat bo'lishi kerak");
+    }
+
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await prisma.user.update({
       where: { id: user.id },
@@ -377,31 +398,66 @@ export const changePassword = async (req: AuthRequest, res: Response, next: Next
   }
 };
 
+/** Reset token hash — DB'da faqat SHA-256 hash saqlanadi (Django uslubidagi xavfsiz yondashuv). */
+function resetTokenHash(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+/** Reset link uchun frontend bazaviy domeni: so'rov manbai ruxsatlangan bo'lsa o'sha,
+ *  aks holda birinchi sozlangan FRONTEND_URLS. localhost production xatga tushmaydi. */
+function resetBaseUrl(req: Request): string {
+  const probe = (req.headers.origin || req.get('referer') || '').trim();
+  if (probe) {
+    try {
+      const origin = new URL(probe).origin;
+      if (config.frontendUrls.includes(origin)) return origin;
+    } catch {
+      /* ignore */
+    }
+  }
+  return config.frontendUrls[0] || `http://localhost:${config.port}`;
+}
+
 // ============ FORGOT PASSWORD (email orqali havola) ============
 export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email } = req.body;
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+    const email = normalizeEmail(req.body.email);
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return badRequest(res, "Email noto'g'ri formatda");
     }
 
-    const user = await prisma.user.findUnique({ where: { email: String(email).toLowerCase() } });
+    const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      // Xavfsizlik: user topilmasa ham "yuborildi" deb javob beramiz
+      // Xavfsizlik: user topilmasa ham "yuborildi" deb javob beramiz (enumeration oldini olish)
       return ok(res, null, 'Parolni tiklash havolasi emailingizga yuborildi');
     }
 
+    // Har bir so'rov yangi token yaratadi (rate-limit spam oldini oladi). Bu, email
+    // eski tokenning amal qilishini kutmasdan qayta yuborish imkonini beradi.
     const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = resetTokenHash(token);
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 soat
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { resetToken: token, resetTokenExpiresAt: expiresAt },
+      data: { resetToken: tokenHash, resetTokenExpiresAt: expiresAt },
     });
 
-    const base = config.frontendUrls[0] || 'http://localhost:3006';
+    const base = resetBaseUrl(req);
     const resetUrl = `${base}/reset-password?token=${token}`;
-    await sendEmail(user.email, 'Cyber-ZONE — Parolni tiklash', buildResetEmail(resetUrl));
+    const expiryLabel = expiresAt.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+
+    try {
+      await sendEmail(user.email, 'Cyber-ZONE — Parolni tiklash', buildResetEmail(resetUrl), buildResetText(resetUrl, expiryLabel ?? '1 soat'));
+    } catch (sendErr) {
+      // Foydalanuvchiga umumiy javob qaytaramiz (email mavjudligini sizdirmaymiz),
+      // LEKIN real sabab log'da aniq qoladi va token bekor qilinadi (qayta urinish mumkin).
+      console.error(`[forgot-password] Email yuborilmadi -> user=${user.id} email=${user.email} resetUrl=${resetUrl}`);
+      console.error(`[forgot-password] Sabab: ${(sendErr as Error).stack || (sendErr as Error).message}`);
+      await prisma.user
+        .update({ where: { id: user.id }, data: { resetToken: null, resetTokenExpiresAt: null } })
+        .catch(() => undefined);
+    }
 
     return ok(
       res,
@@ -424,10 +480,12 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
       return badRequest(res, "Yangi parol kamida 6 ta belgidan iborat bo'lishi kerak");
     }
 
-    const user = await prisma.user.findUnique({ where: { resetToken: String(token) } });
+    const tokenHash = resetTokenHash(String(token));
+    const user = await prisma.user.findUnique({ where: { resetToken: tokenHash } });
     if (!user || !user.resetTokenExpiresAt || user.resetTokenExpiresAt < new Date()) {
       return badRequest(res, 'Token yaroqsiz yoki muddati tugagan. Qayta so\'rov yuboring.');
     }
+    if (user.status !== 'ACTIVE') return unauthorized(res, 'Akkauntingiz bloklangan');
 
     const passwordHash = await bcrypt.hash(String(newPassword), 10);
     await prisma.user.update({

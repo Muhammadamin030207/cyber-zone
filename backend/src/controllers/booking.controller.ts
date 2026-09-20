@@ -15,8 +15,10 @@ import {
   slotsOverlap,
   normalizeWorkingHours,
   slotWithinWorkingHours,
+  freeWindowsInDay,
   toISODate,
 } from '../utils/time';
+import { expireUnpaidBeforeRead } from '../utils/bookingExpiry';
 
 const ACTIVE_BOOKING_STATUSES = ['PENDING', 'PENDING_PAYMENT', 'PARTIALLY_PAID', 'PAID', 'CONFIRMED', 'ACTIVE'] as BookingStatus[];
 
@@ -56,6 +58,9 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
     if (req.user!.role !== 'USER') {
       return forbidden(res, 'Bron faqat foydalanuvchilar uchun. Admin bron qila olmaydi');
     }
+
+    // Muddati o'tgan to'lanmagan bronlarni tozalash — band joylar qaytariladi
+    await expireUnpaidBeforeRead();
 
     const { roomId, zoneId, computerId, date, startTime, durationHours, notes, promoCode, usePoints } = req.body;
     let endTime = req.body.endTime as string | undefined;
@@ -497,6 +502,9 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response, next:
 // ============ GET /api/rooms/:roomId/availability — PUBLIC: bo'sh kompyuterlar vaqti ============
 export const getAvailability = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Muddati o'tgan to'lanmagan bronlarni tozalash (band joylar qaytariladi)
+    await expireUnpaidBeforeRead();
+
     const { date } = req.query as { date?: string };
     const refDate = date ? String(date).slice(0, 10) : tashkentTodayISO();
     const availabilityDate = new Date(`${refDate}T00:00:00.000Z`);
@@ -507,6 +515,8 @@ export const getAvailability = async (req: Request, res: Response, next: NextFun
       include: { zones: { include: { computers: true } } },
     });
     if (!room) return notFoundMsg(res, 'Xona topilmadi');
+
+    const wh = normalizeWorkingHours(room.workingHours as { open?: string; close?: string } | null);
 
     // Har bir zona uchun: jami kompyuterlar, band bo'lganlari, bo'shlari va band vaqtlar
     const zones = [];
@@ -520,24 +530,31 @@ export const getAvailability = async (req: Request, res: Response, next: NextFun
         select: { computerId: true, startTime: true, endTime: true },
       });
 
-      const bookedIds = new Set<string>();
-      const slotsByComputer = new Map<string, Array<{ start: string; end: string }>>();
+      // Har bir kompyuter uchun band vaqtlar (normallashtirilgan)
+      const slotsByComputer = new Map<string, Array<{ start: number; end: number }>>();
       for (const b of dayBookings) {
         if (!b.computerId) continue;
-        bookedIds.add(b.computerId);
+        const s = normalizeSlot(b.startTime, b.endTime);
+        if (!s) continue;
         const list = slotsByComputer.get(b.computerId) ?? [];
-        list.push({ start: b.startTime, end: b.endTime });
+        list.push(s);
         slotsByComputer.set(b.computerId, list);
       }
 
-      const allComputers = zone.computers.map((c) => ({
-        id: c.id,
-        name: c.name,
-        specs: c.specs,
-        status: c.status,
-        canBook: c.status === 'AVAILABLE' && !bookedIds.has(c.id),
-        bookedSlots: slotsByComputer.get(c.id) ?? [],
-      }));
+      // Kunning bo'sh oynalari — kompyuter biror bo'sh oynaga ega bo'lsa tanlanadigan
+      const allComputers = zone.computers.map((c) => {
+        const blocked = slotsByComputer.get(c.id) ?? [];
+        const freeWindows = freeWindowsInDay(blocked, wh.open, wh.close);
+        return {
+          id: c.id,
+          name: c.name,
+          specs: c.specs,
+          status: c.status,
+          canBook: c.status === 'AVAILABLE' && freeWindows.length > 0,
+          bookedSlots: blocked.map((s) => ({ start: minutesToHHMM(s.start), end: minutesToHHMM(s.end) })),
+          freeWindows: freeWindows.map((s) => ({ start: minutesToHHMM(s.start), end: minutesToHHMM(s.end) })),
+        };
+      });
 
       const availableComputers = allComputers.filter((c) => c.canBook);
 
@@ -547,7 +564,7 @@ export const getAvailability = async (req: Request, res: Response, next: NextFun
         type: zone.type,
         pricePerHour: zone.pricePerHour,
         totalComputers: zone.computers.length,
-        bookedComputers: bookedIds.size,
+        bookedComputers: zone.computers.length - availableComputers.length,
         availableComputers: availableComputers.length,
         computers: availableComputers.map((c) => ({ id: c.id, name: c.name, specs: c.specs })),
         allComputers,

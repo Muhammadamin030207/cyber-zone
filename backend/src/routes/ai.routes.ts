@@ -1,16 +1,19 @@
 import { Router } from 'express';
 import { chat } from '../controllers/ai.controller';
 import rateLimit from 'express-rate-limit';
+import { authenticate } from '../middlewares/auth';
 
 const router = Router();
 
 /**
  * POST /api/ai/chat
- * AI yordamchi — { message }
+ * AI yordamchi — { message, history? } (authenticated)
  * Gemini API xarajatini cheklash uchun alohida rate-limit qo'llanadi.
+ * Faqat autentifikatsiyadan o'tgan foydalanuvchilar (o'z bron/to'lov ma'lumotlari bilan).
  */
 router.post(
   '/chat',
+  authenticate,
   rateLimit({
     windowMs: 60 * 1000,
     limit: 6,

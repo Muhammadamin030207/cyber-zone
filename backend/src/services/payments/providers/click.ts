@@ -90,8 +90,12 @@ export class ClickProvider implements PaymentProvider {
       return { acknowledged: true, action: action === 1 ? 'complete' : 'prepare', providerTransactionId: merchantTransId || undefined, response: response(-1) };
     }
 
-    // Callback imzosini tekshirish (imzo kelganda).
-    if (this.isConfigured() && signString) {
+    // Callback imzosini tekshirish. Provayder ulangan bo'lsa, imzo MAJBURIY:
+    // imzosiz yoki noto'g'ri imzoli so'rov rad etiladi (forjiqlash oldini olish).
+    if (this.isConfigured()) {
+      if (!signString) {
+        return { acknowledged: true, action: action === 1 ? 'complete' : 'prepare', providerTransactionId: merchantTransId || undefined, response: response(-1) };
+      }
       const expected = md5hex(
         [clickTransId, serviceId || this.creds.serviceId, this.creds.secretKey, merchantTransId, amountStr, String(action), signTime].join('')
       );

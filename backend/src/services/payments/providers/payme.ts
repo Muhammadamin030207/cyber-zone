@@ -1,6 +1,7 @@
 import type { PaymentProvider, CreatePaymentInput, CreatePaymentResult, VerifyPaymentInput, VerifyPaymentResult, WebhookContext, WebhookResult } from '../types';
 import { config } from '../../../config';
 import { round2 } from '../../../utils/money';
+import { safeEqual } from '../crypto';
 
 /** Provayder bilan bog'lanishda xato — foydalanuvchiga "vaqtincha ishlamayapti" ko'rsatiladi. */
 export class ProviderUnavailableError extends Error {
@@ -9,6 +10,20 @@ export class ProviderUnavailableError extends Error {
     super(message);
     this.name = 'ProviderUnavailableError';
   }
+}
+
+/** Payme summasini tiyindan so'mga o'tkazadi (controller bilan solishtirish uchun). */
+function tiyinToSom(t: number): number {
+  return round2(Number(t) / 100);
+}
+
+/** Webhook Authorization header'ini tekshiradi (Merchant API auth). */
+function isAuthorized(ctx: WebhookContext): boolean {
+  if (!config.payments.payme.merchantId || !config.payments.payme.merchantKey) return false;
+  const raw = ctx?.headers?.authorization ?? ctx?.headers?.Authorization;
+  const auth = Array.isArray(raw) ? String(raw[0]) : String(raw || '');
+  const expected = 'Basic ' + Buffer.from(`${config.payments.payme.merchantId}:${config.payments.payme.merchantKey}`).toString('base64');
+  return safeEqual(auth, expected) || safeEqual(auth, `Bearer ${config.payments.payme.merchantKey}`);
 }
 
 /**
@@ -114,6 +129,16 @@ export class PaymeProvider implements PaymentProvider {
   }
 
   async handleWebhook(ctx: WebhookContext): Promise<WebhookResult> {
+    // Merchant API autentifikatsiya — imzosiz/soxta webhook bilan to'lovni
+    // PAID qilib bo'lmaydi. Provayder ulangan bo'lsa header MAJBURIY.
+    if (!isAuthorized(ctx)) {
+      return {
+        acknowledged: true,
+        action: ctx.body?.method || 'CheckPerformTransaction',
+        response: { error: { code: -32504, message: 'Access denied' } },
+      };
+    }
+
     const body = ctx.body || {};
     const method = body?.method || '';
     const params = body?.params || {};
@@ -169,7 +194,7 @@ export class PaymeProvider implements PaymentProvider {
           providerTransactionId: accountOrderId || undefined,
           providerPaymentId: paymeTransId,
           status: 'PAID',
-          amount,
+          amount: tiyinToSom(amount),
           response: { result: { state: 2, transaction: paymeTransId } },
         };
       }

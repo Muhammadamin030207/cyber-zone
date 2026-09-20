@@ -36,7 +36,7 @@ services:
         generateValue: true
       # Vercel'dagi frontend domenlari (vergul bilan bir nechta bo'lishi mumkin):
       - key: FRONTEND_URLS
-        value: https://cyber-zone-delta.vercel.app, https://cyber-zone-fullstacks-projects-ffc4c9c9.vercel.app, http://localhost:3006
+        value: https://cyber-zone-delta.vercel.app, https://frontend-six-bay-25.vercel.app, https://frontend-fullstacks-projects-ffc4c9c9.vercel.app, https://cyber-zone-fullstacks-projects-ffc4c9c9.vercel.app, http://localhost:3006
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
@@ -52,15 +52,22 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-3.6-flash
-      # Parol tiklash email'i uchun SMTP (misol: Gmail app-password)
+      # Parol tiklash email'i uchun SMTP (Gmail app-password — secret, Render dashboard'da qo'lda)
       - key: EMAIL_HOST
         sync: false
       - key: EMAIL_PORT
         value: 587
+      - key: EMAIL_USE_TLS
+        value: "true"
       - key: EMAIL_USER
         sync: false
       - key: EMAIL_PASS
         sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      # Muddati o'tgan to'lanmagan bron avtomatik bekor qilingan vaqt (daqiqa)
+      - key: UNPAID_BOOKING_TTL_MINUTES
+        value: 60
       - key: NODE_ENV
         value: production
       - key: PORT

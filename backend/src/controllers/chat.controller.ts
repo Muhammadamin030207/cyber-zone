@@ -4,12 +4,31 @@ import { AuthRequest } from '../types';
 import { ok, created, badRequest, forbidden } from '../utils/response';
 import { io } from '../lib/socket';
 
+// ============ Chat kirish nazorati ============
+// Chat faqat: SUPER_ADMIN, xona egasi (ADMIN), yoki shu xonada
+// (bekor qilinmagan) bron qilgan foydalanuvchi uchun ochiq.
+async function canAccessRoomChat(roomId: string, userId: string, role: string): Promise<boolean> {
+  if (role === 'SUPER_ADMIN') return true;
+  const room = await prisma.computerRoom.findUnique({ where: { id: roomId }, select: { id: true, ownerId: true } });
+  if (!room) return false;
+  if (role === 'ADMIN') return room.ownerId === userId;
+  const booking = await prisma.booking.findFirst({
+    where: { userId, roomId: room.id, status: { not: 'CANCELLED' } },
+    select: { id: true },
+  });
+  return Boolean(booking);
+}
+
 // ============ GET /api/chat/rooms/:roomId/messages — chat tarixi ============
 export const getRoomMessages = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const roomId = req.params.roomId;
     const room = await prisma.computerRoom.findUnique({ where: { id: roomId } });
     if (!room) return badRequest(res, 'Xona topilmadi');
+
+    if (!(await canAccessRoomChat(roomId, req.user!.userId, req.user!.role))) {
+      return forbidden(res, 'Ushbu chatga kirish huquqi yo\'q');
+    }
 
     const messages = await prisma.chatMessage.findMany({
       where: { roomId },
@@ -40,6 +59,10 @@ export const sendMessage = async (req: AuthRequest, res: Response, next: NextFun
 
     const room = await prisma.computerRoom.findUnique({ where: { id: req.params.roomId } });
     if (!room) return badRequest(res, 'Xona topilmadi');
+
+    if (!(await canAccessRoomChat(room.id, req.user!.userId, req.user!.role))) {
+      return forbidden(res, 'Ushbu chatga kirish huquqi yo\'q');
+    }
 
     const msg = await prisma.chatMessage.create({
       data: {

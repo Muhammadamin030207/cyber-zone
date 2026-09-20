@@ -550,7 +550,12 @@ export const webhookPayment = async (req: Request, res: Response, next: NextFunc
       });
 
       if (payment) {
-        const amountOk = Math.abs(round2(toNumber(result.amount ?? payment.amount)) - round2(toNumber(payment.amount))) <= 1;
+        // Provayder summasini talab qilamiz: summa kelmasa/webhook sertifikatsiz
+        // bo'lsa, DB'dagi summaga tayanib "PAID" qilish mumkin emas.
+        const webhookAmount = toNumber(result.amount);
+        const amountOk =
+          Number.isFinite(webhookAmount) &&
+          Math.abs(round2(webhookAmount) - round2(toNumber(payment.amount))) <= 1;
 
         if (['PAID'].includes(result.status as string) && amountOk) {
           const txResult = await prisma.$transaction(async (tx) => {

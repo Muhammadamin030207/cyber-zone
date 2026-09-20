@@ -1,7 +1,17 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request as ExpressRequest, Response as ExpressResponse, NextFunction } from 'express';
 import prisma from '../lib/prisma';
 import { config } from '../config';
 import { ok } from '../utils/response';
+import { AuthRequest } from '../types';
+
+// Gemini chaqiruv uchun taym-aut (abadiy kutib qolishning oldini oladi)
+const GEMINI_TIMEOUT_MS = 15_000;
+
+function fetchWithTimeout(url: string, init: RequestInit, ms = GEMINI_TIMEOUT_MS): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
 
 // ============================================================================
 // CYBER-ZONE AI Yordamchi — Gemini orqali real LLM + app konteksti.
@@ -42,7 +52,7 @@ async function geminiChat(
   context: string,
   model: string,
   history: ChatHistoryItem[]
-): Promise<string | null> {
+): Promise<{ text: string; model: string } | null> {
   const key = config.ai.geminiApiKey;
   if (!key) return null;
 
@@ -50,9 +60,12 @@ async function geminiChat(
     'Sen Cyber-ZONE — kompyuter xona (gaming club) platformasining rasmiy AI yordamchisisan.',
     'Foydalanuvchilarga o\'zbek tilida, do\'stona va aniq javob ber. Kerakli joyda emojilar ishlat 😊🎮💡.',
     'Savol platformaga tegishli bo\'lmasa (masalan, umumiy bilim) — qisqa va xushmuomalalik bilan javob ber, lekin imkoni boricha platformaga bog\'la.',
-    'Narx, ish vaqti, xona ro\'yxati va promo-kodlar haqidagi ma\'lumotlarni FAQAT quyida berilgan KONTEKSTDAN ol. Unda yo\'q bo\'lsa — "hozircha ma\'lumot yomilgan" deb ayt, o\'ylab chiqma.',
+    'Narx, ish vaqti, xona ro\'yxati va promo-kodlar haqidagi ma\'lumotlarni FAQAT quyida berilgan KONTEKSTDAN ol. Unda yo\'q bo\'lsa — "hozircha ma\'lumot yo\'q" deb ayt, o\'ylab chiqma.',
+    'Foydalanuvchining shaxsiy bronlari, to\'lovlari, bonus balansi, profil ma\'lumoti faqat KONTEKSTDAGI "FOYDALANUVCHI MA\'LUMOTI" bo\'limida berilganini ayt. U yerda yo\'q narsani uydirma. Masalan bron holati haqida faqat ro\'yxatda kelgan bronlarni ko\'rsat.',
+    'AI hech qachon bronni o\'zi tasdiqlamaydi, to\'lovni muvaffaqiyatli deb aytmaydi va narxni taxmin qilmaydi — bular platforma/backenda tekshiriladi.',
     'Bron qilish qadamlari haqida aniq ayt: 1) xona sahifasi, 2) sana/vaqt/zonani tanlash, 3) promo-kod (agar bo\'lsa), 4) to\'lov (Uzum/Click/Payme/naqd), 5) tasdiqlanish.',
     'Havolalarni /rooms, /chat, /profile, /news kabi sahifa nomlari bilan ko\'rsat.',
+    'Foydalanuvchining tiliga moslash: o\'zbekcha — o\'zbekcha, ruscha — ruscha, inglizcha — inglizcha javob ber.',
     'Javobni 3-6 qisqa paragraf yoki ro\'yxat shaklida yoz, uzun bo\'lmasin.',
   ].join('\n');
 
@@ -71,8 +84,9 @@ async function geminiChat(
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
 
+  const primaryModel = model;
   try {
-    const resp = await fetch(url, {
+    const resp = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -94,7 +108,7 @@ async function geminiChat(
       .join('')
       .trim();
     if (!text) return null;
-    return text;
+    return { text, model: primaryModel };
   } catch (err) {
     console.warn('[AI] Gemini chaqiruv xatoligi:', (err as Error).message);
     const fallback = await geminiChatWithModel(message, context, config.ai.fallbackModel, history);
@@ -107,7 +121,7 @@ async function geminiChatWithModel(
   context: string,
   model: string,
   history: ChatHistoryItem[]
-): Promise<string | null> {
+): Promise<{ text: string; model: string } | null> {
   const key = config.ai.geminiApiKey;
   if (!key || !model) return null;
   const tmp = { ...config.ai, model };
@@ -124,14 +138,16 @@ async function geminiChatWithModel(
   };
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
   try {
-    const resp = await fetch(url, {
+    const resp = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     if (!resp.ok) return null;
     const data = (await resp.json()) as any;
-    return data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text || '').join('').trim() || null;
+    const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text || '').join('').trim() || null;
+    if (!text) return null;
+    return { text, model };
   } catch {
     return null;
   }
@@ -217,7 +233,58 @@ function countWords(msg: string): number {
   return msg.trim().split(/\s+/).filter(Boolean).length;
 }
 
-// Qoidaviy fallback (Gemini bo'lmasa)
+// ---------- Foydalanuvchi shaxsiy konteksti (o'qish uchun, faqat o'zi haqida) ----------
+async function buildUserContext(userId: string): Promise<string> {
+  const [user, bookings, payments] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { fullName: true, phone: true, email: true, loyaltyBalance: true },
+    }),
+    prisma.booking.findMany({
+      where: { userId, status: { in: ['PENDING', 'PENDING_PAYMENT', 'PARTIALLY_PAID', 'PAID', 'CONFIRMED', 'ACTIVE'] } },
+      select: {
+        id: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        status: true,
+        finalPrice: true,
+        room: { select: { name: true } },
+      },
+      orderBy: { date: 'desc' },
+      take: 10,
+    }),
+    prisma.payment.findMany({
+      where: { userId, status: { in: ['PAID', 'COMPLETED', 'PENDING', 'REDIRECT_REQUIRED', 'PROCESSING'] } },
+      select: { id: true, amount: true, status: true, method: true, createdAt: true, bookingId: true },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    }),
+  ]);
+
+  if (!user) return 'Foydalanuvchi topilmadi.';
+
+  const lines: string[] = [];
+  if (user.fullName) lines.push(`Ism: ${user.fullName}`);
+  if (user.phone) lines.push(`Telefon: ${user.phone}`);
+  lines.push(`Bonus balansi: ${user.loyaltyBalance} ball (1 ball = 1 so'm)`);
+
+  const bookingLines = bookings.map((b) => {
+    const d = b.date ? String(b.date).slice(0, 10) : '?';
+    return `• Bron #${b.id.slice(0, 8)} — ${b.room?.name || 'Xona'}, ${d} ${b.startTime}-${b.endTime}, holat: ${b.status}, narx: ${b.finalPrice} so'm`;
+  });
+  lines.push('Faol bronlar:');
+  lines.push(bookingLines.length ? bookingLines.join('\n') : 'Faol bronlar yo\'q.');
+
+  const paymentLines = payments.map((p) => {
+    return `• To'lov #${p.id.slice(0, 8)} — ${p.amount} so'm, usul: ${p.method || '—'}, holat: ${p.status}, bron: ${p.bookingId.slice(0, 8)}`;
+  });
+  lines.push('So\x27nggi to\x27lovlar:');
+  lines.push(paymentLines.length ? paymentLines.join('\n') : 'To\'lovlar topilmadi.');
+
+  return lines.join('\n');
+}
+
 function lower(s: string) {
   return s.toLowerCase().replace(/['’`]+/g, '').replace(/[.,!?;:]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -327,8 +394,8 @@ async function fallbackReply(message: string, lat?: number, lng?: number): Promi
   return `Kechirasiz, buni aniq tushunmadim. Narxlar, xonalar, ish vaqti, promo-kodlar va bron haqida so'rashingiz mumkin.`;
 }
 
-// ============ POST /api/ai/chat — AI yordamchi ============
-export const chat = async (req: Request, res: Response, next: NextFunction) => {
+// ============ POST /api/ai/chat — AI yordamchi (auth talab qilinadi) ============
+export const chat = async (req: AuthRequest, res: ExpressResponse, next: NextFunction) => {
   try {
     const { message, history } = req.body as { message?: string; history?: unknown; lat?: number; lng?: number };
     if (!message || !message.trim()) {
@@ -342,21 +409,32 @@ export const chat = async (req: Request, res: Response, next: NextFunction) => {
     const latN = Number(lat);
     const lngN = Number(lng);
 
-    // 1) Haqiqiy Gemini bilan javob berish
-    const context = await buildContext();
+    // 1) Platforma konteksti + foydalanuvchining o'z ma'lumotlari (faqat o'qish)
+    const [platform, userCtx] = await Promise.all([
+      buildContext(),
+      buildUserContext(req.user!.userId),
+    ]);
+    const context = `===== FOYDALANUVCHI MA'LUMOTI =====\n${userCtx}\n\n` + platform;
+
+    // 2) Haqiqiy Gemini bilan javob berish (taym-aut va fallback bilan)
     let reply: string | null = null;
+    let usedModel = 'fallback';
     try {
-      reply = await geminiChat(msg, context, config.ai.model, hist);
+      const result = await geminiChat(msg, context, config.ai.model, hist);
+      if (result) {
+        reply = result.text;
+        usedModel = result.model;
+      }
     } catch (err) {
       console.warn('[AI] Gemini chat xatoligi:', (err as Error).message);
     }
 
-    // 2) Gemini ishlamasa — qoidaviy fallback
+    // 3) Gemini ishlamasa — qoidaviy fallback
     if (!reply) {
       reply = await fallbackReply(msg, Number.isFinite(latN) ? latN : undefined, Number.isFinite(lngN) ? lngN : undefined);
     }
 
-    return ok(res, { reply, model: reply ? (config.ai.model) : 'fallback' });
+    return ok(res, { reply, model: usedModel });
   } catch (err) {
     next(err);
   }
