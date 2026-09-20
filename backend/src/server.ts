@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { config } from './config';
+import { execSync } from 'child_process';
 import authRoutes from './routes/auth.routes';
 import roomRoutes from './routes/room.routes';
 import bookingRoutes from './routes/booking.routes';
@@ -24,6 +25,18 @@ import { redisClient } from './lib/redis';
 
 const app = express();
 const httpServer = createServer(app);
+
+// ============ DB MIGRATIONS (prod auto-sync) ============
+// Render'da DB sxemani yangi kod bilan sinxronlash — idempotent va xavfsiz.
+// SKIP_MIGRATE_ON_BOOT=1 bilan o'chirib qo'yish mumkin.
+if (process.env.NODE_ENV === 'production' && !process.env.SKIP_MIGRATE_ON_BOOT) {
+  try {
+    execSync('npm run prisma:migrate:deploy', { stdio: 'inherit', cwd: process.cwd() });
+    console.log('[DB] Migrations applied.');
+  } catch (err) {
+    console.warn('[DB] Migrate deploy muammosi:', (err as Error).message);
+  }
+}
 
 // Socket.io — http serverga biriktirish
 io.attach(httpServer);
