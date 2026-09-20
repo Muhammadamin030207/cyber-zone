@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Bot, Send, X, Loader2, Moon, Ghost, Zap } from 'lucide-react';
+import { Bot, Send, X, Loader2, Moon, Ghost, Zap, type LucideIcon } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 
 interface Msg {
@@ -22,6 +22,15 @@ export default function ChatWidget() {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
   }, [messages, open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+
   async function send() {
     const text = input.trim();
     if (!text || sending) return;
@@ -41,7 +50,7 @@ export default function ChatWidget() {
     setInput(prompt);
   }
 
-  const QuickButton = ({ label, prompt, icon: Qi }: { label: string; prompt: string; icon: any }) => (
+  const QuickButton = ({ label, prompt, icon: Qi }: { label: string; prompt: string; icon: LucideIcon }) => (
     <button
       onClick={() => { quick(prompt); }}
       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border border-neon-cyan/25 text-neon-cyan hover:bg-neon-cyan/10 transition-colors"
@@ -54,7 +63,11 @@ export default function ChatWidget() {
     <>
       <div className="fixed bottom-20 md:bottom-5 right-4 md:right-5 z-[60] flex flex-col items-end gap-3">
         {open && (
-          <div className="w-[min(94vw,380px)] rounded-2xl glass border border-neon-cyan/25 shadow-2xl overflow-hidden flex flex-col">
+          <div
+            role="dialog"
+            aria-label="Cyber-ZONE AI yordamchi"
+            className="w-[min(94vw,380px)] rounded-2xl glass border border-neon-cyan/25 shadow-2xl overflow-hidden flex flex-col panel-pop"
+          >
             {/* Header */}
             <div className="px-4 py-3 flex items-center justify-between border-b border-neon-cyan/15 bg-neon-cyan/5">
               <div className="flex items-center gap-2">
@@ -125,8 +138,10 @@ export default function ChatWidget() {
         {/* Toggle */}
         <button
           onClick={() => setOpen((o) => !o)}
-          className="w-14 h-14 rounded-full neon-btn shadow-[0_0_25px_rgba(0,255,255,0.4)] flex items-center justify-center text-white transition-transform hover:scale-105"
-          aria-label="AI yordamchi"
+          className="w-14 h-14 rounded-full neon-btn ai-fab flex items-center justify-center text-white"
+          aria-label={open ? 'AI yordamchini yopish' : 'AI yordamchini ochish'}
+          aria-expanded={open}
+          data-tip={open ? 'Yopish' : 'AI yordamchi'}
         >
           {open ? <X size={22} /> : <Bot size={24} />}
         </button>

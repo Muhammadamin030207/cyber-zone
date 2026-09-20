@@ -129,6 +129,9 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
           <button
             type="button"
             onClick={() => setView('list')}
+            aria-label="Ro'yxat ko'rinishi"
+            aria-pressed={view === 'list'}
+            data-tip="Ro'yxat"
             className={`px-3 py-2.5 flex items-center gap-1.5 text-sm font-medium transition-colors ${view === 'list' ? 'bg-neon-cyan/15 text-neon-cyan' : 'bg-cyber-800 text-gray-400 hover:text-neon-cyan'}`}
           >
             <LayoutGrid size={15} />
@@ -136,7 +139,10 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
           <button
             type="button"
             onClick={() => setView('map')}
-            className={`px-3 py-2.5 flex items-center gap-1.5 text-sm font-medium transition-colors ${view === 'map' ? 'bg-amber-400/15 text-amber-300' : 'bg-cyber-800 text-gray-400 hover:text-amber-300'}`}
+            aria-label="Xarita ko'rinishi"
+            aria-pressed={view === 'map'}
+            data-tip="Xarita"
+            className={`px-3 py-2.5 flex items-center gap-1.5 text-sm font-medium transition-colors ${view === 'map' ? 'bg-neon-cyan/15 text-neon-cyan ring-1 ring-inset ring-neon-cyan/40' : 'bg-cyber-800 text-gray-400 hover:text-neon-cyan'}`}
           >
             <Map size={15} />
           </button>

@@ -238,7 +238,7 @@ try {
               </p>
               <Link
                 href="/super-admin"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl neon-btn text-sm font-bold hover:scale-[1.02] hover:brightness-110 active:scale-[0.98] transition-all"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl neon-btn text-sm font-bold"
               >
                 <ShieldCheck size={15} /> Murojaatlar paneliga o&apos;tish
               </Link>

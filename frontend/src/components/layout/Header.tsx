@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link, usePathname } from '@/i18n/navigation';
 import { Menu, X, LogIn, LayoutDashboard, Crown, MessageSquare } from 'lucide-react';
@@ -15,6 +15,15 @@ export default function Header() {
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [mobileOpen]);
 
   const links = [
     { href: '/', label: t('home') },
@@ -31,6 +40,7 @@ export default function Header() {
         key={l.href}
         href={l.href}
         onClick={() => setMobileOpen(false)}
+        aria-current={isActive(l.href) ? 'page' : undefined}
         className={`px-3.5 py-2 text-sm font-medium rounded-lg transition-colors ${
           isActive(l.href)
             ? 'text-neon-cyan bg-neon-cyan/10 border border-neon-cyan/20'
@@ -88,7 +98,8 @@ export default function Header() {
               )}
               <Link
                 href="/chat"
-                title="Xabarlar"
+                data-tip="Xabarlar"
+                data-tip-top
                 aria-label="Xabarlar"
                 className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
                   isActive('/chat')
@@ -100,7 +111,8 @@ export default function Header() {
               </Link>
               <Link
                 href="/dashboard"
-                title={t('dashboard')}
+                data-tip={t('dashboard')}
+                data-tip-top
                 aria-label={t('dashboard')}
                 className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm transition-colors ${
                   isActive('/dashboard')
@@ -136,8 +148,10 @@ export default function Header() {
           <LanguageSwitcher />
           <button
             onClick={() => setMobileOpen((o) => !o)}
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-menu"
+            aria-label={mobileOpen ? 'Menyuni yopish' : 'Menyuni ochish'}
             className="p-2 rounded-lg text-gray-300 hover:bg-white/5"
-            aria-label="Menu"
           >
             {mobileOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
@@ -146,7 +160,7 @@ export default function Header() {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className="md:hidden glass border-t border-neon-cyan/15 px-4 py-3 flex flex-col gap-1">
+        <div id="mobile-menu" className="md:hidden glass border-t border-neon-cyan/15 px-4 py-3 flex flex-col gap-1 panel-pop">
           {navItems}
           <div className="h-px bg-neon-cyan/15 my-2" />
           {user ? (

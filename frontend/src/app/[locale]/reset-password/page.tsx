@@ -75,7 +75,7 @@ function ResetForm() {
               </div>
               <button
                 onClick={() => { router.push('/login'); router.refresh(); }}
-                className="block w-full text-center py-3 rounded-xl neon-btn text-sm font-bold transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                className="block w-full text-center py-3 rounded-xl neon-btn text-sm font-bold"
               >
                 Kirish sahifasiga o&apos;tish
               </button>
@@ -133,7 +133,7 @@ function ResetForm() {
               <button
                 type="submit"
                 disabled={submitting || !password || !confirm}
-                className="w-full py-3 rounded-xl neon-btn flex items-center justify-center gap-2 disabled:opacity-60 transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                className="w-full py-3 rounded-xl neon-btn flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {submitting ? <Loader2 size={18} className="animate-spin" /> : <KeyRound size={18} />}
                 Parolni saqlash

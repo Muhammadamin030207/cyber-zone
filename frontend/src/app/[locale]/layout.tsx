@@ -6,6 +6,7 @@ import '../globals.css';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import BottomTabBar from '@/components/layout/BottomTabBar';
+import PageTransition from '@/components/layout/PageTransition';
 import AuthInit from '@/components/providers/AuthInit';
 import HalloweenDecor from '@/components/layout/HalloweenDecor';
 import ChatWidget from '@/components/layout/ChatWidget';
@@ -83,7 +84,7 @@ export default async function RootLayout({ children, params }: Props) {
           <AuthInit />
           <HalloweenDecor />
           <Header />
-          <main className="flex-1 pb-20 md:pb-0">{children}</main>
+          <PageTransition>{children}</PageTransition>
           <Footer />
           <BottomTabBar />
           <ChatWidget />

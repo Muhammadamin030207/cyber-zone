@@ -286,7 +286,7 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 rounded-xl neon-btn flex items-center justify-center gap-2 disabled:opacity-60 transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                className="w-full py-3 rounded-xl neon-btn flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {submitting ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
                 {isGoogle ? 'Yakunlash' : t('registerBtn')}

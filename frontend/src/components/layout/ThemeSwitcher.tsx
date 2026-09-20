@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Palette, Check } from 'lucide-react';
 
 const THEMES = [
@@ -23,13 +23,32 @@ function applyTheme(theme: ThemeId) {
 export default function ThemeSwitcher() {
   const [theme, setTheme] = useState<ThemeId>('obsidian');
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const saved = (localStorage.getItem(STORAGE_KEY) as ThemeId) || 'obsidian';
     const initial = THEMES.some((t) => t.id === saved) ? saved : 'obsidian';
-    setTheme(initial);
-    applyTheme(initial);
+    queueMicrotask(() => {
+      setTheme(initial);
+      applyTheme(initial);
+    });
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
 
   function change(id: ThemeId) {
     setTheme(id);
@@ -39,11 +58,15 @@ export default function ThemeSwitcher() {
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Mavzu tanlash"
+        data-tip="Mavzu"
+        data-tip-top
         className="p-2 rounded-lg text-gray-300 hover:text-neon-cyan hover:bg-white/5 transition-colors"
-        title="Mavzu"
       >
         <Palette size={16} />
       </button>
@@ -51,10 +74,11 @@ export default function ThemeSwitcher() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 mt-2 w-48 rounded-xl glass border border-white/10 overflow-hidden z-50 shadow-glow animate-fade-in max-h-[380px] overflow-y-auto scrollbar-thin">
+          <div role="menu" aria-label="Mavzu tanlash" className="absolute right-0 mt-2 w-48 rounded-xl glass border border-white/10 overflow-hidden z-50 shadow-glow menu-pop max-h-[380px] overflow-y-auto scrollbar-thin">
             {THEMES.map((t) => (
               <button
                 key={t.id}
+                role="menuitem"
                 onClick={() => change(t.id)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-sm transition-colors ${
                   theme === t.id ? 'bg-white/5 text-neon-cyan' : 'text-gray-300 hover:bg-white/5'

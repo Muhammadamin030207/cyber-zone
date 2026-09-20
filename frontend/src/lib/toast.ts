@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 
-export type ToastType = 'success' | 'error' | 'info';
+export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
 interface Toast {
   id: string;
@@ -37,6 +37,9 @@ export function toastSuccess(message: string) {
 }
 export function toastError(message: string) {
   useToastStore.getState().show(message, 'error');
+}
+export function toastWarning(message: string) {
+  useToastStore.getState().show(message, 'warning');
 }
 export function toastInfo(message: string) {
   useToastStore.getState().show(message, 'info');

@@ -1,18 +1,20 @@
 'use client';
 
-import { CheckCircle2, XCircle, Info, X } from 'lucide-react';
+import { CheckCircle2, XCircle, TriangleAlert, Info, X } from 'lucide-react';
 import { useToastStore } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
 const STYLES = {
   success: 'border-neon-green/40 bg-cyber-800/95 text-neon-green',
   error: 'border-red-500/40 bg-cyber-800/95 text-red-400',
+  warning: 'border-yellow-400/40 bg-cyber-800/95 text-yellow-300',
   info: 'border-neon-cyan/40 bg-cyber-800/95 text-neon-cyan',
 };
 
 const ICONS = {
   success: CheckCircle2,
   error: XCircle,
+  warning: TriangleAlert,
   info: Info,
 };
 
@@ -21,14 +23,14 @@ export default function ToastContainer() {
   const dismiss = useToastStore((s) => s.dismiss);
 
   return (
-    <div className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2 max-w-sm">
+    <div aria-live="polite" aria-atomic="false" className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2 max-w-sm">
       {toasts.map((t) => {
         const Icon = ICONS[t.type];
         return (
           <div
             key={t.id}
             className={cn(
-              'flex items-start gap-2.5 px-4 py-3 rounded-xl border backdrop-blur-xl shadow-lg shadow-black/40 animate-fade-up',
+              'flex items-start gap-2.5 px-4 py-3 rounded-xl border backdrop-blur-xl shadow-lg shadow-black/40 toast-in',
               STYLES[t.type]
             )}
           >

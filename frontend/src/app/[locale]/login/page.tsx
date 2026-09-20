@@ -45,8 +45,9 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
       if (user && user.role === 'SUPER_ADMIN') router.push('/super-admin');
       else router.push(user && user.role !== 'USER' ? '/admin' : '/dashboard');
       router.refresh();
-    } catch (err: any) {
-      setError(err?.response?.data?.message || t('invalid'));
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { message?: string } } };
+      setError(apiError?.response?.data?.message || t('invalid'));
     } finally {
       setSubmitting(false);
     }
@@ -79,8 +80,8 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
           </p>
           <div className="flex flex-wrap gap-2 mt-6">
             <span className="chip chip-success"><Zap size={12} /> 24/7 bron</span>
-            <span className="chip chip-warn">Online to'lov</span>
-            <span className="chip">O'zbek · Русский · English</span>
+            <span className="chip chip-warn">Online to&apos;lov</span>
+            <span className="chip">O&apos;zbek · Русский · English</span>
           </div>
         </div>
 
@@ -166,7 +167,7 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 rounded-xl neon-btn flex items-center justify-center gap-2 disabled:opacity-60 transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                className="w-full py-3 rounded-xl neon-btn flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {submitting ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />}
                 {t('loginBtn')}

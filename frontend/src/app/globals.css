@@ -755,6 +755,96 @@ main {
   background: var(--line);
 }
 
+/* ============================================================
+   UX POLISH — sahifa o'tishlar, panel/dropdown animatsiya,
+   tooltip tizimi, toast kinematikasi, AI FAB
+   ============================================================ */
+
+/* Sahifa kirishi — route o'zgarganda subtle fade + 6px lift */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.page-enter { animation: pageIn 0.28s ease-out both; }
+
+/* Dropdown/menu paydo bo'lishi — opacity + translateY + tiny scale */
+@keyframes menuIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.menu-pop { animation: menuIn 0.16s cubic-bezier(0.22, 1, 0.36, 1) both; transform-origin: top right; }
+
+/* Panel/modal — yuqoridan yumshoq kirish (mobile menu, AI chat) */
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.panel-pop { animation: panelIn 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; transform-origin: top center; }
+
+/* Toast — o'ngdan kirish */
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.toast-in { animation: toastIn 0.24s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* CSS-only tooltip tizimi: [data-tip="Matn"] + ixtiyoriy [data-tip-top] */
+@supports (content: attr(data-tip)) {
+  [data-tip] { position: relative; }
+  [data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%) translateY(2px) scale(0.98);
+    background: var(--bg-3);
+    color: var(--fg);
+    border: 1px solid var(--line-strong);
+    padding: 0.28rem 0.55rem;
+    border-radius: 0.4rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    line-height: 1.25;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.14s ease, transform 0.14s ease;
+    box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.6);
+    z-index: 80;
+  }
+  [data-tip-top]::after {
+    top: calc(100% + 8px);
+    bottom: auto;
+  }
+  [data-tip]:hover::after,
+  [data-tip]:focus-visible::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  [data-tip-top]:hover::after,
+  [data-tip-top]:focus-visible::after {
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+/* Touch qurilmalarda tooltip ko'rsatilmaydi (sticky-hover oldini olish) */
+@media (hover: none) and (pointer: coarse) {
+  [data-tip]::after { display: none; }
+}
+
+/* AI chat tugmasi — tema aksentiga mos yumshoq porlash (hard-coded emas) */
+.ai-fab {
+  transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--acc-a) 30%, transparent) inset,
+    0 12px 30px -12px color-mix(in srgb, var(--acc-a) 60%, transparent);
+}
+.ai-fab:hover {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--acc-a) 45%, transparent) inset,
+    0 16px 36px -12px color-mix(in srgb, var(--acc-a) 70%, transparent);
+}
+
 /* Motion yoqilganlar uchun animatsiyalarni o'chirish */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
