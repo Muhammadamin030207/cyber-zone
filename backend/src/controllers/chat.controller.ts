@@ -72,7 +72,7 @@ export const sendMessage = async (req: AuthRequest, res: Response, next: NextFun
           userId: notifyUserId,
           title: 'Yangi chat xabari',
           message: `${msg.user.fullName}: ${msg.message.slice(0, 60)}`,
-          type: 'bar',
+          type: 'chat',
         },
       }).catch(() => { /* notification muhim emas */ });
     }
@@ -141,6 +141,64 @@ export const getUserChatRooms = async (req: AuthRequest, res: Response, next: Ne
       const firstImg = (r.images as unknown as string[] | null)?.[0] || null;
       return { id: r.id, name: r.name, address: r.address, image: firstImg, unread: r._count.chatMessages };
     }));
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ GET /api/chat/unread — header'da ko'rsatiladigan umumiy o'qilmaganlar ============
+export const getUnreadCount = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const meId = req.user!.userId;
+    const role = req.user!.role;
+
+    // Chat xonalar bo'yicha
+    let rooms = 0;
+    if (role === 'USER') {
+      const memberRoomIds = await prisma.chatMessage.findMany({
+        where: { userId: meId },
+        select: { roomId: true },
+        distinct: ['roomId'],
+      });
+      if (memberRoomIds.length > 0) {
+        rooms = await prisma.chatMessage.count({
+          where: {
+            isRead: false,
+            userId: { not: meId },
+            roomId: { in: memberRoomIds.map((r) => r.roomId) },
+          },
+        });
+      }
+    } else {
+      rooms = await prisma.chatMessage.count({
+        where: { isRead: false, userId: { not: meId }, room: { ownerId: meId } },
+      });
+    }
+
+    // Support / murojaatlar bo'yicha
+    let support = 0;
+    if (role === 'USER') {
+      support = await prisma.supportMessage.count({
+        where: { isRead: false, senderId: { not: meId }, userId: meId },
+      });
+    } else if (role === 'ADMIN') {
+      support = await prisma.supportMessage.count({
+        where: {
+          isRead: false,
+          senderId: { not: meId },
+          OR: [
+            { recipientRole: 'SUPER_ADMIN', userId: meId },
+            { recipientRole: 'ADMIN', room: { ownerId: meId } },
+          ],
+        },
+      });
+    } else {
+      support = await prisma.supportMessage.count({
+        where: { isRead: false, senderId: { not: meId } },
+      });
+    }
+
+    return ok(res, { total: rooms + support, rooms, support });
   } catch (err) {
     next(err);
   }

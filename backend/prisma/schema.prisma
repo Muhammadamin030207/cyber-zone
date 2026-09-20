@@ -43,16 +43,19 @@ enum ComputerStatus {
 }
 
 enum BookingStatus {
-  PENDING        // kutilmoqda (30% to'lov kutilmoqda)
-  CONFIRMED      // tasdiqlangan (30% to'landi)
-  ACTIVE         // foydalanuvchi xonada
-  COMPLETED      // tugatilgan
-  CANCELLED      // bekor qilingan
+  PENDING          // kutilmoqda (depozit to'lov kutilmoqda)
+  PENDING_PAYMENT  // to'lov jarayonida (to'lov sessiyasi yaratildi, hali tasdiqlanmagan)
+  PARTIALLY_PAID   // depozit to'langan, qoldiq qoldiqda (deposit < 100%)
+  PAID             // to'liq to'langan (depozit = 100%)
+  CONFIRMED        // tasdiqlangan (to'lov muvaffaqiyatli → slot band)
+  ACTIVE           // foydalanuvchi xonada
+  COMPLETED        // tugatilgan
+  CANCELLED        // bekor qilingan
 }
 
 enum PaymentType {
-  ADVANCE        // 30% oldindan
-  REMAINING      // 70% qoldiq
+  ADVANCE        // oldindan (depozit)
+  REMAINING      // qoldiq
 }
 
 enum PaymentMethod {
@@ -61,14 +64,28 @@ enum PaymentMethod {
   UZCARD
   HUMO
   UZUM
+  PAYNET
   CASH
 }
 
+enum PaymentProvider {
+  PAYME
+  CLICK
+  UZUM
+  PAYNET
+}
+
 enum PaymentStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  REFUNDED
+  CREATED           // to'lov rekordi yaratildi
+  PENDING           // kutilmoqda (eski/kompat)
+  REDIRECT_REQUIRED // provider checkout'ga yo'naltirish kerak
+  PROCESSING        // provayder tomonidan tasdiqlanmoqda
+  PAID              // muvaffaqiyatli tasdiqlangan (provider verified)
+  COMPLETED         // yakunlangan (CASH / kompat)
+  FAILED            // muvaffaqiyatsiz
+  CANCELLED         // bekor qilingan
+  EXPIRED           // muddati o'tgan
+  REFUNDED          // qaytarilgan
 }
 
 enum BarItemCategory {
@@ -206,8 +223,9 @@ model Booking {
   discountAmount   Decimal       @default(0) @map("discount_amount") @db.Decimal(10, 2)
   finalPrice       Decimal       @map("final_price") @db.Decimal(10, 2)
   pointsUsed       Int           @default(0) @map("points_used") // bonus ballar bilan to'lagan summa (so'm)
-  advanceAmount    Decimal       @map("advance_amount") @db.Decimal(10, 2) // 30%
-  remainingAmount  Decimal       @map("remaining_amount") @db.Decimal(10, 2) // 70%
+  advanceAmount    Decimal       @map("advance_amount") @db.Decimal(10, 2) // depozit summa
+  remainingAmount  Decimal       @map("remaining_amount") @db.Decimal(10, 2) // qoldiq
+  depositPercent   Int           @default(30) @map("deposit_percent") // foydalanuvchi tanlagan depozit foizi
   status           BookingStatus @default(PENDING)
   notes            String?
   createdAt        DateTime      @default(now()) @map("created_at")
@@ -248,21 +266,49 @@ model PromoCode {
 }
 
 model Payment {
-  id            String           @id @default(uuid())
-  bookingId     String           @map("booking_id")
-  userId        String           @map("user_id")
-  amount        Decimal           @db.Decimal(10, 2)
-  type          PaymentType
-  method        PaymentMethod?
-  status        PaymentStatus    @default(PENDING)
-  transactionId String?          @map("transaction_id")
-  paidAt        DateTime?        @map("paid_at")
-  createdAt     DateTime         @default(now()) @map("created_at")
+  id                   String            @id @default(uuid())
+  bookingId            String            @map("booking_id")
+  userId               String            @map("user_id")
+  amount               Decimal           @db.Decimal(10, 2)
+  type                 PaymentType
+  method               PaymentMethod?
+  provider             PaymentProvider?  @map("provider")
+  status               PaymentStatus     @map("status")
+  currency             String            @default("UZS")
+  depositPercent       Int               @default(30) @map("deposit_percent")
+  providerTransactionId String?          @unique @map("provider_transaction_id") // idempotency (provider transaction ID)
+  providerPaymentId    String?           @map("provider_payment_id")
+  transactionId        String?           @map("transaction_id") // eski/kompat
+  metadata             Json?             @map("metadata")
+  failureReason        String?           @map("failure_reason")
+  expiresAt            DateTime?         @map("expires_at")
+  paidAt               DateTime?         @map("paid_at")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @default(now()) @updatedAt @map("updated_at")
 
-  booking Booking @relation(fields: [bookingId], references: [id])
-  user    User    @relation(fields: [userId], references: [id])
+  booking Booking       @relation(fields: [bookingId], references: [id])
+  user    User          @relation(fields: [userId], references: [id])
+  audits  PaymentAuditLog[]
 
   @@map("payments")
+}
+
+// ============ TO'LOV AUDIT LOGI ============
+// Har bir to'lov voqeasi xavfsizlik va qarorlar uchun qatori.
+model PaymentAuditLog {
+  id         String   @id @default(uuid())
+  paymentId  String   @map("payment_id")
+  action     String   @map("action") // payment_created | redirect_generated | webhook_received | payment_verified | payment_failed | booking_confirmed | refund_requested | refund_completed | admin_marked_paid
+  actorId    String?  @map("actor_id")
+  actorRole  String?  @map("actor_role")
+  metadata   Json?    @map("metadata")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([action])
+  @@map("payment_audit_logs")
 }
 
 // ============ BAR (Gaming kafe) ============

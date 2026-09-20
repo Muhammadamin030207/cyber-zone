@@ -25,6 +25,35 @@ export const config = {
     pass: process.env.EMAIL_PASS,
   },
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6380',
+  payments: {
+    mode: (process.env.PAYMENTS_MODE || 'test').toLowerCase() === 'production' ? 'production' : 'test',
+    minDepositPercent: Math.min(100, Math.max(1, parseInt(process.env.MIN_DEPOSIT_PERCENT || '10', 10))),
+    callbackBaseUrl: process.env.PROVIDER_CALLBACK_URL || '',
+    click: {
+      serviceId: process.env.CLICK_SERVICE_ID || '',
+      merchantId: process.env.CLICK_MERCHANT_ID || '',
+      merchantUserId: process.env.CLICK_MERCHANT_USER_ID || '',
+      secretKey: process.env.CLICK_SECRET_KEY || '',
+      endpoint: process.env.CLICK_CHECKOUT_URL || 'https://my.click.uz/services/pay',
+    },
+    payme: {
+      merchantId: process.env.PAYME_MERCHANT_ID || '',
+      merchantKey: process.env.PAYME_MERCHANT_KEY || '',
+      checkoutUrl: process.env.PAYME_CHECKOUT_URL || 'https://checkout.payme.uz',
+      apiEndpoint: process.env.PAYME_API_ENDPOINT || 'https://checkout.payme.uz',
+    },
+    uzum: {
+      merchantId: process.env.UZUM_MERCHANT_ID || '',
+      secretKey: process.env.UZUM_SECRET_KEY || '',
+      checkoutUrl: process.env.UZUM_CHECKOUT_URL || 'https://checkout.uzum.uz',
+    },
+    paynet: {
+      merchantId: process.env.PAYNET_MERCHANT_ID || '',
+      password: process.env.PAYNET_PASSWORD || '',
+      checkoutUrl: process.env.PAYNET_CHECKOUT_URL || '',
+      apiEndpoint: process.env.PAYNET_API_ENDPOINT || '',
+    },
+  },
   ai: {
     geminiApiKey: process.env.GEMINI_API_KEY || '',
     model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',

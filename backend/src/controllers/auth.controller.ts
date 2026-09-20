@@ -276,12 +276,30 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
 };
 
 // ============ UPDATE PROFILE ============
+// Xavfsizlik: faqat ruxsat etilgan maydonlar yangilanadi.
+// Email/role/status/id/password kabi maydonlar hech qachon o'zgartirilmaydi (immutable email).
 export const updateProfile = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { fullName, phone, language, avatarUrl } = req.body;
 
+    // Email va boshqa himoyalangan maydonlar — yangilanishga yo'l qo'yilmaydi
+    if (req.body.email !== undefined) {
+      return badRequest(res, "Email manzilini o'zgartirib bo'lmaydi");
+    }
+    for (const field of ['role', 'status', 'id', 'userId', 'password', 'passwordHash', 'googleId', 'createdAt']) {
+      if (req.body[field] !== undefined) {
+        return badRequest(res, `Ruxsat etilmagan maydon: ${field}`);
+      }
+    }
+
     const data: any = {};
-    if (fullName !== undefined) data.fullName = fullName;
+    if (fullName !== undefined) {
+      const name = String(fullName).trim();
+      if (name.length < 3) {
+        return badRequest(res, "Ism kamida 3 ta belgidan iborat bo'lishi kerak");
+      }
+      data.fullName = name.slice(0, 120);
+    }
     if (phone !== undefined && phone !== '' && phone !== null) {
       const phoneNorm = normalizePhone(String(phone));
       if (!phoneNorm) return badRequest(res, "Telefon +998 XX XXX XX XX formatda bo'lishi kerak");
@@ -289,8 +307,20 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
     } else if (phone === null || phone === '') {
       data.phone = null;
     }
-    if (language !== undefined) data.language = language;
-    if (avatarUrl !== undefined) data.avatarUrl = avatarUrl;
+    if (language !== undefined) {
+      const lang = String(language);
+      if (!['uz', 'ru', 'en'].includes(lang)) {
+        return badRequest(res, "Til uz/ru/en bo'lishi kerak");
+      }
+      data.language = lang;
+    }
+    if (avatarUrl !== undefined) {
+      const url = String(avatarUrl);
+      if (!/^https?:\/\//.test(url)) {
+        return badRequest(res, 'Avatar rasm URL manzili noto\'g\'ri formatda');
+      }
+      data.avatarUrl = url.slice(0, 500);
+    }
 
     const user = await prisma.user.update({
       where: { id: req.user!.userId },
@@ -298,6 +328,25 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
     });
 
     return ok(res, sanitizeUser(user), 'Profil yangilandi');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ UPLOAD AVATAR (multipart) ============
+export const uploadAvatarImage = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.file) return badRequest(res, 'Rasm fayl yuklang');
+
+    const origin = `${req.protocol}://${req.get('host')}`;
+    const avatarUrl = `${origin}/uploads/avatars/${req.file.filename}`;
+
+    const user = await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { avatarUrl },
+    });
+
+    return ok(res, sanitizeUser(user), 'Avatar yangilandi');
   } catch (err) {
     next(err);
   }
@@ -356,7 +405,9 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
 
     return ok(
       res,
-      { devToken: token }, // dev/test uchun (haqiqiy SMTP bo'lmasa)
+      process.env.NODE_ENV === 'production'
+        ? null
+        : { devToken: token }, // faqat dev/test uchun (haqiqiy SMTP bo'lmasa)
       'Parolni tiklash havolasi emailingizga yuborildi'
     );
   } catch (err) {

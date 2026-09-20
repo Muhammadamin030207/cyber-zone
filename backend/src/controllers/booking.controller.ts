@@ -3,9 +3,22 @@ import prisma from '../lib/prisma';
 import { AuthRequest } from '../types';
 import { io } from '../lib/socket';
 import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/response';
-import { toNumber, round2 } from '../utils/money';
+import { toNumber } from '../utils/money';
 import { computeBookingPrice } from '../utils/pricing';
-import { Prisma } from '@prisma/client';
+import { Prisma, BookingStatus } from '@prisma/client';
+import {
+  tashkentTodayISO,
+  tashkentNowHHMM,
+  parseTime,
+  minutesToHHMM,
+  normalizeSlot,
+  slotsOverlap,
+  normalizeWorkingHours,
+  slotWithinWorkingHours,
+  toISODate,
+} from '../utils/time';
+
+const ACTIVE_BOOKING_STATUSES = ['PENDING', 'PENDING_PAYMENT', 'PARTIALLY_PAID', 'PAID', 'CONFIRMED', 'ACTIVE'] as BookingStatus[];
 
 const BOOKING_INCLUDE = {
   user: { select: { id: true, fullName: true, phone: true, email: true } },
@@ -15,12 +28,6 @@ const BOOKING_INCLUDE = {
   promoCode: { select: { id: true, code: true, discountType: true, discountValue: true } },
   payments: true,
 };
-
-// ============ YORDAMCHI: narx hisoblash (tiyingacha aniq) ============
-function timeToMinutes(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
-}
 
 // ============ YORDAMCHI: bron bekor qilinganda ballarni qaytarish ============
 async function refundPoints(tx: Prisma.TransactionClient, booking: { id: string; userId: string; pointsUsed: number }) {
@@ -56,23 +63,42 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
     if (!roomId || !zoneId || !date || !startTime) {
       return badRequest(res, 'roomId, zoneId, date, startTime majburiy');
     }
-    if (!endTime && !durationHours) {
-      return badRequest(res, 'endTime yoki durationHours berilishi shart');
+
+    const startMin = parseTime(startTime);
+    if (startMin === null) return badRequest(res, 'Boshlanish vaqti noto\'g\'ri');
+
+    // Sana (Asia/Tashkent) ni ISO normallashtirish
+    const dateInfo = toISODate(date);
+    if (!dateInfo) return badRequest(res, 'Sana noto\'g\'ri');
+    const { isoDate, date: bookingDate } = dateInfo;
+
+    // Yakuniy vaqt — backend avtoritet: durationHours berilsa endTime undan hisoblanadi
+    if (durationHours !== undefined && durationHours !== null && toNumber(durationHours) > 0) {
+      const durationMin = Math.round(toNumber(durationHours) * 60);
+      if (durationMin <= 0) return badRequest(res, 'Davomiylik noto\'g\'ri', 'INVALID_DURATION');
+      const endMin = startMin + durationMin;
+      if (endMin > 24 * 60) {
+        return badRequest(res, 'Bron 24:00 dan oshib ketyapti', 'INVALID_DURATION');
+      }
+      endTime = minutesToHHMM(endMin);
     }
     if (!endTime) {
-      const startMin = timeToMinutes(startTime);
-      const endMin = startMin + Math.round(toNumber(durationHours) * 60);
-      if (endMin > 24 * 60) return badRequest(res, 'Bron 24:00 dan oshib ketyapti');
-      const h = Math.floor(endMin / 60);
-      const m = endMin % 60;
-      //@ts-ignore
-      endTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      return badRequest(res, 'endTime yoki durationHours berilishi shart');
     }
 
-    const bookingDate = new Date(date);
-    if (isNaN(bookingDate.getTime())) return badRequest(res, 'Sana noto\'g\'ri');
+    const slot = normalizeSlot(startTime, endTime);
+    if (!slot) return badRequest(res, 'Vaqt oralig\'i noto\'g\'ri');
 
-    // Ish vaqti tekshiruvi
+    // Bugun (Toshkent) uchun o'tgan vaqtlarni bloklash
+    const todayISO = tashkentTodayISO();
+    if (isoDate === todayISO) {
+      const nowMin = parseTime(tashkentNowHHMM());
+      if (nowMin !== null && slot.start < nowMin) {
+        return badRequest(res, 'Boshlanish vaqti allaqachon o\'tib ketgan', 'BOOKING_IN_PAST');
+      }
+    }
+
+    // Ish vaqti tekshiruvi (tungi smena va 00:00 yopilishni to'g'ri hisoblaydi)
     const room = await prisma.computerRoom.findUnique({ where: { id: roomId } });
     if (!room) return notFoundMsg(res, 'Xona topilmadi');
     if (room.status !== 'ACTIVE') return badRequest(res, 'Xona faol emas');
@@ -80,11 +106,9 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
     const zone = await prisma.zone.findUnique({ where: { id: zoneId } });
     if (!zone || zone.roomId !== roomId) return notFoundMsg(res, 'Zona topilmadi');
 
-    const wh: any = room.workingHours || { open: '09:00', close: '23:00' };
-    const open = wh.open || '09:00';
-    const close = wh.close || '23:00';
-    if (timeToMinutes(startTime) < timeToMinutes(open) || timeToMinutes(endTime as string) > timeToMinutes(close)) {
-      return badRequest(res, `Ish vaqti: ${open} - ${close}`);
+    const wh = normalizeWorkingHours(room.workingHours as { open?: string; close?: string } | null);
+    if (!slotWithinWorkingHours(slot, wh)) {
+      return badRequest(res, `Ish vaqti: ${minutesToHHMM(wh.open)} - ${minutesToHHMM(wh.close)}`, 'BOOKING_OUTSIDE_WORKING_HOURS');
     }
 
     // Promo-kodni tekshirish (agar berilgan bo'lsa)
@@ -107,73 +131,79 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
     // Transaktsiya: kompyuter lock + to'qnashuv tekshiruvi + yaratish
     try {
       const booking = await prisma.$transaction(async (tx) => {
-        let selectedComputerId = computerId || null;
+        const candidateIds: string[] = [];
 
-        if (selectedComputerId) {
+        if (computerId) {
           // Tanlangan kompyuterni lock qilamiz
-          const locked: any[] = await tx.$queryRaw`SELECT id FROM computers WHERE id = ${selectedComputerId} FOR UPDATE`;
+          const locked: Array<{ id: string }> = await tx.$queryRaw`SELECT id FROM computers WHERE id = ${computerId} FOR UPDATE`;
           if (locked.length === 0) throw new Error('COMPUTER_NOT_FOUND');
 
-          const comp = await tx.computer.findUnique({
-            where: { id: selectedComputerId },
-            include: { zone: true },
-          });
-          if (!comp || comp.zoneId !== zoneId || comp.zone.roomId !== roomId) {
-            throw new Error('COMPUTER_MISMATCH');
-          }
+          const comp: any = await tx.computer.findUnique({ where: { id: computerId }, include: { zone: true } });
+          if (!comp || comp.zoneId !== zoneId || comp.zone.roomId !== roomId) throw new Error('COMPUTER_MISMATCH');
           if (comp.status !== 'AVAILABLE') throw new Error('COMPUTER_BUSY');
+          candidateIds.push(computerId);
         } else {
-          // Avtomatik: bo'sh kompyuter tanlash
-          const free = await tx.computer.findFirst({
-            where: {
-              zoneId,
-              status: 'AVAILABLE',
-              bookings: {
-                none: {
-                  date: bookingDate,
-                  status: { in: ['PENDING', 'CONFIRMED', 'ACTIVE'] },
-                  AND: [
-                    { startTime: { lt: endTime as string } },
-                    { endTime: { gt: startTime } },
-                  ],
-                },
-              },
-            },
-          });
-          if (!free) throw new Error('NO_FREE_COMPUTER');
-          selectedComputerId = free.id;
+          // Avtomatik: butun zona kompyuterlarini lock qilamiz (TOCTOU muammosini bartaraf qiladi)
+          const locked: Array<{ id: string }> = await tx.$queryRaw`SELECT id FROM computers WHERE zone_id = ${zoneId} FOR UPDATE`;
+          if (locked.length === 0) throw new Error('NO_FREE_COMPUTER');
+          candidateIds.push(...locked.map((r) => r.id));
         }
 
-        // To'qnashuvni aniq tekshirish (atomic)
-        const conflictCount = await tx.booking.count({
-          where: {
-            computerId: selectedComputerId,
-            date: bookingDate,
-            status: { in: ['PENDING', 'CONFIRMED', 'ACTIVE'] },
-            AND: [
-              { startTime: { lt: endTime as string } },
-              { endTime: { gt: startTime } },
-            ],
-          },
+        const computers = await tx.computer.findMany({
+          where: { id: { in: candidateIds }, zoneId, status: 'AVAILABLE' },
+          select: { id: true },
         });
-        if (conflictCount > 0) {
-          const existing = await tx.booking.findFirst({
-            where: {
-              computerId: selectedComputerId,
-              date: bookingDate,
-              status: { in: ['PENDING', 'CONFIRMED', 'ACTIVE'] },
-              AND: [
-                { startTime: { lt: endTime as string } },
-                { endTime: { gt: startTime } },
-              ],
-            },
-            select: { startTime: true, endTime: true },
-          });
-          throw new Error(`CONFLICT_${existing?.startTime}_${existing?.endTime}`);
+        const availableIds = new Set(computers.map((c) => c.id));
+
+        if (computerId && !availableIds.has(computerId)) {
+          const existing = await tx.computer.findUnique({ where: { id: computerId }, select: { zoneId: true } });
+          if (!existing || existing.zoneId !== zoneId) throw new Error('COMPUTER_NOT_FOUND');
+          throw new Error('COMPUTER_BUSY');
+        }
+
+        // Ushbu kun uchun faol bronlarni olib, vaqtlarni JS'da normallashtiramiz
+        const dayBookings = await tx.booking.findMany({
+          where: {
+            zoneId,
+            computerId: { in: candidateIds },
+            date: bookingDate,
+            status: { in: ACTIVE_BOOKING_STATUSES },
+          },
+          select: { computerId: true, startTime: true, endTime: true },
+        });
+
+        const bookedByComputer = new Map<string, Array<{ start: number; end: number }>>();
+        for (const b of dayBookings) {
+          if (!b.computerId) continue;
+          const s = normalizeSlot(b.startTime, b.endTime);
+          if (!s) continue;
+          const list = bookedByComputer.get(b.computerId) ?? [];
+          list.push(s);
+          bookedByComputer.set(b.computerId, list);
+        }
+
+        let selectedComputerId: string | null = null;
+        let conflictSlot: { start: number; end: number } | null = null;
+        for (const id of candidateIds) {
+          if (!availableIds.has(id)) continue;
+          const conflict = bookedByComputer.get(id)?.find((s) => slotsOverlap(slot, s)) ?? null;
+          if (!conflict) {
+            selectedComputerId = id;
+            break;
+          }
+          conflictSlot = conflict;
+        }
+
+        if (!selectedComputerId) {
+          if (computerId && conflictSlot) {
+            throw new Error(`CONFLICT_${minutesToHHMM(conflictSlot.start)}_${minutesToHHMM(conflictSlot.end)}`);
+          }
+          if (computerId) throw new Error('COMPUTER_BUSY');
+          throw new Error('NO_FREE_COMPUTER');
         }
 
         // Narxni hisoblash — barchasi tiyingacha yaxlitlanadi (float xatolik yo'q)
-        const duration = toNumber(durationHours) || (timeToMinutes(endTime as string) - timeToMinutes(startTime)) / 60;
+        const duration = toNumber(durationHours) || Math.round(((slot.end - slot.start) / 60) * 100) / 100;
 
         // Bonus ballarni tekshirish (1 ball = 1 so'm), sarflash transaktsiya ichida
         // Frontend boolean (usePoints) yuboradi — barcha mavjud bal taklif qilinadi,
@@ -270,11 +300,12 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
       if (msg === 'COMPUTER_NOT_FOUND') return notFoundMsg(res, 'Kompyuter topilmadi');
       if (msg === 'COMPUTER_MISMATCH') return badRequest(res, 'Kompyuter zona/xonaga mos emas');
       if (msg === 'COMPUTER_BUSY') return badRequest(res, 'Bu kompyuter hozirda band');
-      if (msg === 'NO_FREE_COMPUTER') return badRequest(res, 'Ushbu vaqt uchun bo\'sh kompyuter yo\'q');
+      if (msg === 'NO_FREE_COMPUTER') return badRequest(res, 'Ushbu vaqt uchun bo\'sh kompyuter yo\'q', 'ROOM_FULL');
+      if (msg === 'INSUFFICIENT_POINTS') return badRequest(res, 'Bonus ballaringiz yetarli emas');
       if (msg === 'MIN_AMOUNT_NOT_REACHED') return badRequest(res, 'Promo-kod uchun minimal narx yetishmayapti');
       if (msg.startsWith('CONFLICT_')) {
         const [, s, e] = msg.split('_');
-        return badRequest(res, `Bu kompyuter ${s} - ${e} vaqtda band`);
+        return badRequest(res, `Bu kompyuter ${s} - ${e} vaqtda band`, 'BOOKING_TIME_ALREADY_RESERVED');
       }
       throw txErr;
     }
@@ -366,7 +397,10 @@ export const getRoomBookings = async (req: AuthRequest, res: Response, next: Nex
     }
 
     const where: any = { roomId: room.id };
-    if (date) where.date = new Date(date);
+    if (date) {
+      const di = toISODate(date);
+      if (di) where.date = di.date;
+    }
     if (status) where.status = status.toUpperCase();
 
     const [bookings, total] = await Promise.all([
@@ -390,7 +424,7 @@ export const getRoomBookings = async (req: AuthRequest, res: Response, next: Nex
 export const updateBookingStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { status } = req.body;
-    const allowedStatuses = ['CONFIRMED', 'CANCELLED', 'COMPLETED', 'ACTIVE'];
+    const allowedStatuses = ['CONFIRMED', 'CANCELLED', 'COMPLETED', 'ACTIVE', 'PARTIALLY_PAID', 'PAID'];
     if (!status || !allowedStatuses.includes(status.toUpperCase())) {
       return badRequest(res, `Status: ${allowedStatuses.join(', ')} bo\'lishi kerak`);
     }
@@ -407,9 +441,9 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response, next:
 
     const newStatus = status.toUpperCase();
 
-    // Admin CONFIRMED qilganda: kassada qabul qilingan PENDING CASH to'lovlar
-    // ham COMPLETED bo'ladi — pul to'g'ri saqlansin
-    if (newStatus === 'CONFIRMED') {
+    // Admin to'lov-secured statusga o'tkazganda: kassada qabul qilingan PENDING CASH
+    // to'lovlar ham COMPLETED bo'ladi — pul to'g'ri saqlansin
+    if (['CONFIRMED', 'PARTIALLY_PAID', 'PAID'].includes(newStatus)) {
       const pendingCash = await prisma.payment.findMany({
         where: { bookingId: booking.id, status: 'PENDING', method: 'CASH' },
         select: { id: true },
@@ -464,7 +498,9 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response, next:
 export const getAvailability = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { date } = req.query as { date?: string };
-    const availabilityDate = date ? new Date(date) : new Date();
+    const refDate = date ? String(date).slice(0, 10) : tashkentTodayISO();
+    const availabilityDate = new Date(`${refDate}T00:00:00.000Z`);
+    if (isNaN(availabilityDate.getTime())) return badRequest(res, 'Sana noto\'g\'ri');
 
     const room = await prisma.computerRoom.findUnique({
       where: { id: req.params.roomId },
@@ -472,20 +508,38 @@ export const getAvailability = async (req: Request, res: Response, next: NextFun
     });
     if (!room) return notFoundMsg(res, 'Xona topilmadi');
 
-    // Har bir zona uchun: jami kompyuterlar, band bo'lganlari, bo'shlari
+    // Har bir zona uchun: jami kompyuterlar, band bo'lganlari, bo'shlari va band vaqtlar
     const zones = [];
     for (const zone of room.zones) {
-      const bookedComputers = await prisma.booking.findMany({
+      const dayBookings = await prisma.booking.findMany({
         where: {
           zoneId: zone.id,
           date: availabilityDate,
-          status: { in: ['PENDING', 'CONFIRMED', 'ACTIVE'] },
+          status: { in: ACTIVE_BOOKING_STATUSES },
         },
-        select: { computerId: true },
-        distinct: ['computerId'],
+        select: { computerId: true, startTime: true, endTime: true },
       });
-      const bookedIds = new Set(bookedComputers.map((b) => b.computerId).filter(Boolean));
-      const availableComputers = zone.computers.filter((c) => c.status === 'AVAILABLE' && !bookedIds.has(c.id));
+
+      const bookedIds = new Set<string>();
+      const slotsByComputer = new Map<string, Array<{ start: string; end: string }>>();
+      for (const b of dayBookings) {
+        if (!b.computerId) continue;
+        bookedIds.add(b.computerId);
+        const list = slotsByComputer.get(b.computerId) ?? [];
+        list.push({ start: b.startTime, end: b.endTime });
+        slotsByComputer.set(b.computerId, list);
+      }
+
+      const allComputers = zone.computers.map((c) => ({
+        id: c.id,
+        name: c.name,
+        specs: c.specs,
+        status: c.status,
+        canBook: c.status === 'AVAILABLE' && !bookedIds.has(c.id),
+        bookedSlots: slotsByComputer.get(c.id) ?? [],
+      }));
+
+      const availableComputers = allComputers.filter((c) => c.canBook);
 
       zones.push({
         id: zone.id,
@@ -496,17 +550,11 @@ export const getAvailability = async (req: Request, res: Response, next: NextFun
         bookedComputers: bookedIds.size,
         availableComputers: availableComputers.length,
         computers: availableComputers.map((c) => ({ id: c.id, name: c.name, specs: c.specs })),
-        allComputers: zone.computers.map((c) => ({
-          id: c.id,
-          name: c.name,
-          specs: c.specs,
-          status: c.status,
-          canBook: c.status === 'AVAILABLE' && !bookedIds.has(c.id),
-        })),
+        allComputers,
       });
     }
 
-    return ok(res, { date: availabilityDate.toISOString().slice(0, 10), zones });
+    return ok(res, { date: refDate, timezone: 'Asia/Tashkent', zones });
   } catch (err) {
     next(err);
   }

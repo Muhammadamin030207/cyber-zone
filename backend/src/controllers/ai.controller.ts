@@ -13,10 +13,35 @@ import { ok } from '../utils/response';
 const INTRO = 'Men Cyber-ZONE AI yordamchisiman 🎮👋';
 
 // ---------- Haqiqiy Gemini chaqiruv ----------
+interface ChatHistoryItem {
+  role: string;
+  content: string;
+}
+
+/** Frontend'dan kelgan suhbat tarixini xavfsiz normallashtirish (token himoyasi). */
+function sanitizeHistory(value: unknown): ChatHistoryItem[] {
+  if (!Array.isArray(value)) return [];
+  const out: ChatHistoryItem[] = [];
+  let total = 0;
+  for (const item of value.slice(-8)) {
+    if (!item || typeof item !== 'object') continue;
+    const raw: any = item;
+    const role = raw.role;
+    const content = typeof raw.content === 'string' ? raw.content.slice(0, 800) : '';
+    const roleOk = role === 'user' || role === 'assistant' || role === 'model' || role === 'bot';
+    if (!roleOk || !content.trim()) continue;
+    total += content.length;
+    if (total > 2000) break;
+    out.push({ role: role === 'bot' || role === 'model' ? 'assistant' : 'user', content: content.trim() });
+  }
+  return out;
+}
+
 async function geminiChat(
   message: string,
   context: string,
-  model: string
+  model: string,
+  history: ChatHistoryItem[]
 ): Promise<string | null> {
   const key = config.ai.geminiApiKey;
   if (!key) return null;
@@ -33,7 +58,10 @@ async function geminiChat(
 
   const body = {
     system_instruction: { parts: [{ text: system + '\n\n===== PLATFORMA KONTEKSTI =====\n' + context }] },
-    contents: [{ role: 'user', parts: [{ text: message }] }],
+    contents: [
+      ...history.map((h) => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.content }] })),
+      { role: 'user', parts: [{ text: message }] },
+    ],
     generationConfig: {
       temperature: config.ai.temperature,
       maxOutputTokens: config.ai.maxTokens,
@@ -53,8 +81,8 @@ async function geminiChat(
     if (!resp.ok) {
       const errText = await resp.text().catch(() => '');
       console.warn(`[AI] Gemini ${model} xatosi ${resp.status}: ${errText.slice(0, 160)}`);
-      if (resp.status === 429 || resp.status === 500 || resp.status === 503) {
-        const fallback = await geminiChatWithModel(message, context, config.ai.fallbackModel);
+      if (resp.status === 400 || resp.status === 429 || resp.status === 500 || resp.status === 503) {
+        const fallback = await geminiChatWithModel(message, context, config.ai.fallbackModel, history);
         if (fallback) return fallback;
       }
       return null;
@@ -69,12 +97,17 @@ async function geminiChat(
     return text;
   } catch (err) {
     console.warn('[AI] Gemini chaqiruv xatoligi:', (err as Error).message);
-    const fallback = await geminiChatWithModel(message, context, config.ai.fallbackModel);
+    const fallback = await geminiChatWithModel(message, context, config.ai.fallbackModel, history);
     return fallback;
   }
 }
 
-async function geminiChatWithModel(message: string, context: string, model: string): Promise<string | null> {
+async function geminiChatWithModel(
+  message: string,
+  context: string,
+  model: string,
+  history: ChatHistoryItem[]
+): Promise<string | null> {
   const key = config.ai.geminiApiKey;
   if (!key || !model) return null;
   const tmp = { ...config.ai, model };
@@ -83,7 +116,10 @@ async function geminiChatWithModel(message: string, context: string, model: stri
     system_instruction: {
       parts: [{ text: 'Sen Cyber-ZONE AI yordamchisisan. O\'zbek tilida qisqa va aniq javob ber. Kontekstdan foydalan:\n' + context }],
     },
-    contents: [{ role: 'user', parts: [{ text: message }] }],
+    contents: [
+      ...history.map((h) => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.content }] })),
+      { role: 'user', parts: [{ text: message }] },
+    ],
     generationConfig: { temperature: tmp.temperature, maxOutputTokens: tmp.maxTokens, candidateCount: 1 },
   };
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
@@ -294,12 +330,14 @@ async function fallbackReply(message: string, lat?: number, lng?: number): Promi
 // ============ POST /api/ai/chat — AI yordamchi ============
 export const chat = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { message } = req.body as { message?: string; lat?: number; lng?: number };
+    const { message, history } = req.body as { message?: string; history?: unknown; lat?: number; lng?: number };
     if (!message || !message.trim()) {
       return ok(res, { reply: `${INTRO}\n\nNarxlar, xonalar, ish vaqti, promo-kodlar va bron haqida so'rashingiz mumkin.` });
     }
 
-    const msg = message.trim();
+    // Xarajat himoyasi: xabarni cheklaymiz
+    const msg = message.trim().slice(0, 500);
+    const hist = sanitizeHistory(history);
     const { lat, lng } = req.query as { lat?: string; lng?: string };
     const latN = Number(lat);
     const lngN = Number(lng);
@@ -308,7 +346,7 @@ export const chat = async (req: Request, res: Response, next: NextFunction) => {
     const context = await buildContext();
     let reply: string | null = null;
     try {
-      reply = await geminiChat(msg, context, config.ai.model);
+      reply = await geminiChat(msg, context, config.ai.model, hist);
     } catch (err) {
       console.warn('[AI] Gemini chat xatoligi:', (err as Error).message);
     }

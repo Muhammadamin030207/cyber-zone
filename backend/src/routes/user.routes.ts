@@ -17,6 +17,6 @@ router.get('/stats', authenticate, authorize('SUPER_ADMIN'), getSuperAdminStats)
 router.post('/admins', authenticate, authorize('SUPER_ADMIN'), createAdmin);
 router.patch('/:id/status', authenticate, authorize('SUPER_ADMIN'), toggleUserStatus);
 router.delete('/:id', authenticate, authorize('SUPER_ADMIN'), deleteUser);
-router.get('/:id', authenticate, getUserById);
+router.get('/:id', authenticate, authorize('SUPER_ADMIN'), getUserById);
 
 export default router;

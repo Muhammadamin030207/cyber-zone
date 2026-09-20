@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
+import path from 'path';
 import { config } from './config';
 import { execSync } from 'child_process';
 import authRoutes from './routes/auth.routes';
@@ -20,6 +21,7 @@ import supportRoutes from './routes/support.routes';
 import loyaltyRoutes from './routes/loyalty.routes';
 import { errorHandler, notFound } from './middlewares/error';
 import prisma from './lib/prisma';
+import { verifyAccessToken } from './lib/jwt';
 import { io } from './lib/socket';
 import { redisClient } from './lib/redis';
 
@@ -42,14 +44,26 @@ if (process.env.NODE_ENV === 'production' && !process.env.SKIP_MIGRATE_ON_BOOT) 
 io.attach(httpServer);
 
 io.on('connection', (socket) => {
-  console.log('[SOCKET] Connected:', socket.id);
-
-  // User o'z xonasiga ulansin (faqat o'ziga tegishli xabarlarni olish uchun)
-  const userId = (socket.handshake.query as any).userId as string | undefined;
-  if (userId) socket.join(`user:${userId}`);
+  // Xavfsizlik: faqat haqiqiy, faol foydalanuvchilar ulanadi.
+  const token = (socket.handshake.auth as any)?.token || (socket.handshake.query as any)?.token;
+  let decoded: any = null;
+  try {
+    decoded = verifyAccessToken(token);
+  } catch {
+    /* ignore */
+  }
+  if (!decoded) {
+    socket.disconnect(true);
+    return;
+  }
+  socket.data.userId = decoded.userId;
+  socket.data.role = decoded.role;
+  socket.join(`user:${decoded.userId}`);
+  console.log('[SOCKET] Connected:', socket.id, decoded.userId);
 
   socket.on('register', (id: string) => {
-    if (id) socket.join(`user:${id}`);
+    // Faqat o'z xonasiga ulanishi mumkin
+    if (id && id === socket.data.userId) socket.join(`user:${id}`);
   });
 
   // Chat: xona chatlariga qo'shilish (jonli yangilanish uchun)
@@ -57,14 +71,14 @@ io.on('connection', (socket) => {
     if (roomId) socket.join(`chat:room:${roomId}`);
   });
 
-  // Support: super_admin xonasi — yangi murojaatlar avtomatik keladi
+  // Support: super_admin xonasi — faqat adminlar/super admin
   socket.on('joinSupport', () => {
-    socket.join('support:sadmin');
+    if (['ADMIN', 'SUPER_ADMIN'].includes(socket.data.role)) socket.join('support:sadmin');
   });
 
-  // Support: alohida thread kuzatuvi (user/admin/super_admin)
+  // Support: alohida thread kuzatuvi (faqat o'z tredini ko'radi; super admin — barchasini)
   socket.on('joinSupportThread', (threadUserId: string, channel?: string) => {
-    if (threadUserId) {
+    if (threadUserId && (socket.data.role === 'SUPER_ADMIN' || threadUserId === socket.data.userId)) {
       socket.join(`support:${threadUserId}`);
       socket.join(`support:${channel === 'ADMIN' ? 'ADMIN' : 'SUPER_ADMIN'}:${threadUserId}`);
     }
@@ -88,6 +102,9 @@ app.use(
 );
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Yuklangan fayllar (avatar rasmlar) — /uploads osti orqali serv qilinadi
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), { maxAge: '7d', immutable: false }));
 
 // API himoyasi — rate limit (IP bo'yicha)
 app.use(

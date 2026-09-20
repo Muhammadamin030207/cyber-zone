@@ -5,22 +5,52 @@ import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/respon
 import { toNumber, round2, isValidAmount } from '../utils/money';
 import { io } from '../lib/socket';
 import { Prisma } from '@prisma/client';
+import { getProvider, getProviderAvailability, ProviderNotConfiguredError, ProviderUnavailableError } from '../services/payments';
+import { config } from '../config';
 
 type TxClient = Prisma.TransactionClient;
 
+const PAID_STATUSES = ['PAID', 'COMPLETED'] as const;
+
 // ============ YORDAMCHILAR ============
 
-function paidAmount(payments: Array<{ amount: any; status: string }>, status: string): number {
+const STATUS_RANK: Record<string, number> = {
+  PENDING: 0,
+  PENDING_PAYMENT: 1,
+  PARTIALLY_PAID: 2,
+  PAID: 3,
+  CONFIRMED: 4,
+  ACTIVE: 5,
+  COMPLETED: 6,
+  CANCELLED: -1,
+};
+
+function paidAmount(payments: Array<{ amount: any; status: string }>): number {
   let sum = 0;
   for (const p of payments) {
-    if (p.status === status) sum = round2(sum + round2(toNumber(p.amount)));
+    if ((PAID_STATUSES as readonly string[]).includes(p.status)) sum = round2(sum + round2(toNumber(p.amount)));
   }
   return round2(sum);
 }
 
+async function auditLog(
+  tx: TxClient,
+  args: { paymentId: string; action: string; actorId?: string | null; actorRole?: string | null; metadata?: Record<string, any> }
+) {
+  await tx.paymentAuditLog.create({
+    data: {
+      paymentId: args.paymentId,
+      action: args.action,
+      actorId: args.actorId || null,
+      actorRole: args.actorRole || null,
+      metadata: (args.metadata as any) || undefined,
+    },
+  });
+}
+
 /**
- * Bonus ball berish — har bir muvaffaqiyatli to'lovdan so'ng (1% ball = so'm).
- * Bron yaratishda sarflangan ballar avtomatik qaytarilmaydi (REFUND faqat bekor qilishda).
+ * Bonus ball berish — har bir muvaffaqiyatli to'lovda (1% ball = so'm).
+ * Faqat to'lov birinchi marta PAID holatiga o'tganda to'lanadi (idempotent).
  */
 async function awardPoints(tx: TxClient, args: { userId: string; bookingId: string; amount: number; description?: string }) {
   const earn = Math.floor(toNumber(args.amount) * 0.01);
@@ -43,119 +73,410 @@ async function awardPoints(tx: TxClient, args: { userId: string; bookingId: stri
   return earn;
 }
 
-/**
- * To'lovni COMPLETED qiladi va qancha to'langaniga qarab bronni CONFIRMED ga olib keladi.
- * Qoida: bron faqat 30% avans to'liq to'langandagina tasdiqlanadi.
- */
-async function settlePayment(tx: TxClient, id: string) {
-  const paid = await tx.payment.update({
-    where: { id },
-    data: { status: 'COMPLETED', paidAt: new Date() },
-  });
-
-  const payments = await tx.payment.findMany({
-    where: { bookingId: paid.bookingId, status: 'COMPLETED' },
-    select: { amount: true, status: true },
-  });
-  const totalPaid = paidAmount(payments, 'COMPLETED');
-
-  const booking = await tx.booking.findUnique({
-    where: { id: paid.bookingId },
-    select: { advanceAmount: true, finalPrice: true, status: true, roomId: true, id: true, userId: true },
-  });
-  if (!booking) return { paid, booking: null, totalPaid };
-
-  const advance = round2(toNumber(booking.advanceAmount));
-  const shouldConfirm = booking.status === 'PENDING' && totalPaid >= advance - 0.004;
-
-  const updatedBooking = shouldConfirm
-    ? await tx.booking.update({
-        where: { id: booking.id },
-        data: { status: 'CONFIRMED' },
-        include: { room: { select: { id: true, ownerId: true } } },
-      })
-    : null;
-
-  // To'lov muvaffaqiyatli — bonus ballari to'lanadi
-  await awardPoints(tx, {
-    userId: booking.userId,
-    bookingId: booking.id,
-    amount: toNumber(paid.amount),
-  });
-
-  return { paid, booking: updatedBooking, totalPaid };
+interface BookingInfo {
+  id: string;
+  roomId: string;
+  finalPrice: any;
+  depositPercent: number;
+  status: string;
+  userId: string;
 }
 
-// ============ POST /api/payments/create — USER: to'lov yaratish ============
+/**
+ * To'lovni PAID qiladi (birinchi marta — idempotent), so'ng bronni
+ * yangi moliyaviy holatga o'tkazadi:
+ *   - jami to'lov == finalPrice        → PAID (to'liq to'langan)
+ *   - jami to'lov >= depozit talabi    → PARTIALLY_PAID
+ * Bron hech qachon qaytgan bosqichga tushirilmaydi.
+ */
+async function settleVerifiedPayment(
+  tx: TxClient,
+  args: { id: string; actorId?: string | null; actorRole?: string | null; audit?: Record<string, any> }
+) {
+  const now = new Date();
+  const timed = await tx.payment.updateMany({
+    where: { id: args.id, status: { notIn: [...PAID_STATUSES] } },
+    data: { status: 'PAID', paidAt: now },
+  });
+  if (timed.count === 0) {
+    const already = await tx.payment.findUnique({ where: { id: args.id } });
+    return { settled: false, paid: already, booking: null, totalPaid: 0 };
+  }
+
+  await auditLog(tx, {
+    paymentId: args.id,
+    action: 'payment_verified',
+    actorId: args.actorId,
+    actorRole: args.actorRole,
+    metadata: { ...(args.audit || {}), paidAt: now.toISOString() },
+  });
+
+  const paid = await tx.payment.findUnique({ where: { id: args.id } });
+  if (!paid) return { settled: false, paid: null, booking: null, totalPaid: 0 };
+
+  const payments = await tx.payment.findMany({
+    where: { bookingId: paid.bookingId, status: { in: [...PAID_STATUSES] } },
+    select: { amount: true, status: true },
+  });
+  const totalPaid = paidAmount(payments);
+
+  const booking: BookingInfo | null = await tx.booking.findUnique({
+    where: { id: paid.bookingId },
+    select: { id: true, roomId: true, finalPrice: true, depositPercent: true, status: true, userId: true },
+  });
+  if (!booking) return { settled: true, paid, booking: null, totalPaid };
+
+  const finalPrice = round2(toNumber(booking.finalPrice));
+  const requiredDeposit = round2((finalPrice * booking.depositPercent) / 100);
+
+  let nextStatus: string | null = null;
+  if (totalPaid >= finalPrice - 0.004) nextStatus = 'PAID';
+  else if (totalPaid >= requiredDeposit - 0.004) nextStatus = 'PARTIALLY_PAID';
+
+  let updatedBooking: any = null;
+  if (nextStatus && (STATUS_RANK[nextStatus] ?? -1) > (STATUS_RANK[booking.status] ?? -1)) {
+    updatedBooking = await tx.booking.update({
+      where: { id: booking.id },
+      data: { status: nextStatus as any },
+      include: { room: { select: { id: true, ownerId: true } } },
+    });
+    await auditLog(tx, {
+      paymentId: paid.id,
+      action: nextStatus === 'PAID' ? 'booking_fully_paid' : 'booking_partially_paid',
+      actorId: args.actorId,
+      actorRole: args.actorRole,
+      metadata: { bookingId: booking.id, totalPaid, finalPrice, depositPercent: booking.depositPercent },
+    });
+  }
+
+  // Bonus ballari — to'lov summasi uchun
+  await awardPoints(tx, { userId: booking.userId, bookingId: booking.id, amount: toNumber(paid.amount) });
+
+  return { settled: true, paid, booking: updatedBooking, totalPaid };
+}
+
+function bookingInfoOf(payment: any): { roomId?: string; bookingId?: string; computerId?: string } {
+  return {
+    roomId: payment?.booking?.room?.id ?? payment?.booking?.roomId,
+    bookingId: payment?.bookingId,
+    computerId: payment?.booking?.computerId,
+  };
+}
+
+/** Provider callback URL — serverga qaytadigan (webhook) mutlaq manzil */
+function providerCallbackUrl(method: string): string {
+  const base = config.payments.callbackBaseUrl || `http://localhost:${config.port}`;
+  return `${base.replace(/\/$/, '')}/api/payments/webhook/${method.toLowerCase()}`;
+}
+
+function normalizeMethod(method: string): { method: string; providerId: string; cash: boolean } {
+  const m = String(method || '').toUpperCase();
+  if (m === 'CASH') return { method: 'CASH', providerId: '', cash: true };
+  if (m === 'TEST') return { method: '', providerId: 'TEST', cash: false };
+  if (['PAYME', 'CLICK', 'UZUM', 'PAYNET'].includes(m)) {
+    return { method: m, providerId: m, cash: false };
+  }
+  // Legacy nomlar -> provider'ga moslash
+  const legacy: Record<string, string> = { UZCARD: 'PAYME', HUMO: 'PAYME' };
+  if (legacy[m]) return { method: m, providerId: legacy[m], cash: false };
+  return { method: '', providerId: m, cash: false };
+}
+
+// ============ POST /api/payments/create — USER: to'lov sessiyasi yaratish ============
 export const createPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { bookingId, amount, method } = req.body;
-    const amt = round2(toNumber(amount));
+    const { bookingId, method, depositPercent } = req.body as { bookingId?: string; method?: string; depositPercent?: number };
 
-    if (!bookingId || method === undefined) return badRequest(res, 'bookingId va method majburiy');
-    if (!isValidAmount(amt)) return badRequest(res, 'To\'lov miqdori noto\'g\'ri');
+    if (!bookingId) return badRequest(res, 'bookingId majburiy');
+    if (!method) return badRequest(res, 'method majburiy');
+    if (depositPercent !== undefined && (!Number.isInteger(depositPercent) || depositPercent < 1 || depositPercent > 100)) {
+      return badRequest(res, 'Depozit foizi 1-100 oralig\'ida bo\'lishi kerak');
+    }
+
+    const { method: normMethod, providerId, cash } = normalizeMethod(method);
+    if (!cash && !providerId) {
+      return badRequest(res, 'To\'lov metodi qo\'llab-quvvatlanmaydi');
+    }
+
+    let provider = null;
+    let checkoutUrl: string | null = null;
+    if (!cash) {
+      try {
+        provider = getProvider(providerId);
+      } catch {
+        return badRequest(res, `Noma'lum to'lov metodi: ${method}`);
+      }
+      if (!provider.isConfigured()) {
+        return badRequest(res, provider.label + ' to\'lov xizmati hali ulangan emas. Boshqa usulni tanlang.');
+      }
+    }
 
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { room: true, payments: true },
+      include: { room: true },
     });
     if (!booking) return notFoundMsg(res, 'Bron topilmadi');
     if (booking.userId !== req.user!.userId) return forbidden(res, 'Bu bron sizniki emas');
-    if (booking.status === 'CANCELLED' || booking.status === 'COMPLETED') {
+    if (['CANCELLED', 'COMPLETED'].includes(booking.status)) {
       return badRequest(res, 'Bu bron uchun to\'lov mumkin emas');
     }
 
+    // Muddati o'tgan eski sessiyalarni tozalaymiz (yopiq checkout qoldiqlari)
+    if (!cash) {
+      const stale = await prisma.payment.findMany({
+        where: {
+          bookingId,
+          status: { in: ['CREATED', 'REDIRECT_REQUIRED', 'PROCESSING'] },
+          expiresAt: { lt: new Date() },
+        },
+        select: { id: true },
+      });
+      if (stale.length) {
+        await prisma.$transaction(async (tx) => {
+          await tx.payment.updateMany({ where: { id: { in: stale.map((s) => s.id) } }, data: { status: 'EXPIRED' } });
+          for (const s of stale) await auditLog(tx, { paymentId: s.id, action: 'payment_expired', actorId: req.user!.userId, actorRole: 'SYSTEM', metadata: { source: 'create_cleanup' } });
+        });
+      }
+    }
+
     const finalPrice = round2(toNumber(booking.finalPrice));
-    const advanceAmount = round2(toNumber(booking.advanceAmount));
-    const totalPaid = paidAmount(booking.payments, 'COMPLETED');
-    const remainingDue = round2(finalPrice - totalPaid);
+    const prevPayments = await prisma.payment.findMany({
+      where: { bookingId, status: { in: [...PAID_STATUSES] } },
+      select: { amount: true, status: true },
+    });
+    const totalPaid = paidAmount(prevPayments);
+    if (totalPaid >= finalPrice - 0.004) return badRequest(res, 'Bron to\'liq to\'langan');
 
-    // Ortiqcha to'lovni qat'iy rad etamiz (0.01 tiyinga tolerance bilan)
-    if (remainingDue <= 0.004) return badRequest(res, 'Bron to\'liq to\'langan');
-    if (amt > remainingDue + 0.004) return badRequest(res, `To\'lov miqdori qoldiqdan oshmaydi. Qoldiq: ${remainingDue} so'm`);
+    // Depozit foizini server tomonidan qo'llash (default 30, min 20-ish)
+    const percent = cash ? Math.min(100, Math.max(config.payments.minDepositPercent, booking.depositPercent || 30)) : Math.min(100, Math.max(config.payments.minDepositPercent, depositPercent ?? booking.depositPercent ?? 30));
+    const requiredDeposit = round2((finalPrice * percent) / 100);
+    const depositAlreadyPaid = round2(Math.min(totalPaid, requiredDeposit));
+    const amount = round2(Math.max(0, requiredDeposit - depositAlreadyPaid));
 
-    const advancePaid = paidAmount(booking.payments.filter((p) => p.type === 'ADVANCE'), 'COMPLETED');
-    const advanceOwed = round2(advanceAmount - advancePaid);
-    const after = round2(totalPaid + amt);
+    if (!isValidAmount(amount)) return badRequest(res, 'To\'lov miqdori noto\'g\'ri');
+    if (amount > round2(finalPrice - totalPaid) + 0.004) {
+      return badRequest(res, `To'lov miqdori qoldiqdan oshmaydi. Qoldiq: ${round2(finalPrice - totalPaid)} so'm`);
+    }
 
-    // Tipani aniqlash: oxirgi qoldiq to'lovi => REMAINING, avans yetarli => ADVANCE
-    const isAdvance = after < finalPrice - 0.004 && amt <= advanceOwed + 0.004;
-
-    const payment = await prisma.payment.create({
-      data: {
-        bookingId,
-        userId: req.user!.userId,
-        amount: amt,
-        type: isAdvance ? 'ADVANCE' : 'REMAINING',
-        method,
-        status: 'PENDING',
-      },
+    // Bron depozit foizini yozamiz (avans/remaining ham shunga moslab yangilanadi)
+    const newAdvance = round2((finalPrice * percent) / 100);
+    const newRemaining = round2(Math.max(0, finalPrice - newAdvance));
+    const normalizedBooking = await prisma.booking.update({
+      where: { id: booking.id },
+      data: { depositPercent: percent, advanceAmount: newAdvance, remainingAmount: newRemaining },
     });
 
-    // CASH to'lov — admin kassada qabul qiladi (xabarnoma yuboramiz)
-    if (method === 'CASH') {
+    const isAdvance = amount < round2(finalPrice - totalPaid) - 0.004;
+
+    const payment = await prisma.$transaction(async (tx) => {
+      const p = await tx.payment.create({
+        data: {
+          bookingId,
+          userId: req.user!.userId,
+          amount,
+          type: isAdvance ? 'ADVANCE' : 'REMAINING',
+          method: cash ? 'CASH' : (normMethod || null) as any,
+          provider: (!cash && providerId !== 'TEST' ? providerId : null) as any,
+          status: cash ? 'PENDING' : 'CREATED',
+          currency: 'UZS',
+          depositPercent: percent,
+          metadata: (!cash && providerId === 'TEST' ? { providerMethod: 'test' } : (cash ? null : { providerMethod: providerId.toLowerCase() })) as any,
+        },
+      });
+      await auditLog(tx, { paymentId: p.id, action: 'payment_created', actorId: req.user!.userId, actorRole: req.user!.role as string, metadata: { method, percent, amount } });
+      return p;
+    });
+
+    // Online to'lov — provider checkout sessiyasi
+    if (!cash && provider) {
+      try {
+        const prepared = await provider.createPayment({
+          paymentId: payment.id,
+          bookingId: booking.id,
+          amount,
+          currency: 'UZS',
+          depositPercent: percent,
+          description: `Cyber-ZONE bron ${booking.id}`,
+          callbackUrl: providerCallbackUrl(providerId),
+          returnUrl: `${config.frontendUrls[0] || ''}/checkout/${booking.id}/pay?pid=${payment.id}`,
+          userId: req.user!.userId,
+        });
+
+        await prisma.$transaction(async (tx) => {
+          await tx.payment.update({
+            where: { id: payment.id },
+            data: {
+              status: prepared.status === 'REDIRECT_REQUIRED' ? 'REDIRECT_REQUIRED' : prepared.status === 'PROCESSING' ? 'PROCESSING' : 'CREATED',
+              providerTransactionId: prepared.providerTransactionId || null,
+              providerPaymentId: prepared.providerPaymentId || null,
+              expiresAt: prepared.expiresAt || new Date(Date.now() + 30 * 60 * 1000),
+              metadata: { ...((payment.metadata as any) || {}), ...(prepared.raw || {}) } as any,
+            },
+          });
+          await tx.booking.update({
+            where: { id: booking.id },
+            data: { status: 'PENDING_PAYMENT' as any },
+          });
+          await auditLog(tx, {
+            paymentId: payment.id,
+            action: 'redirect_generated',
+            actorId: req.user!.userId,
+            actorRole: req.user!.role as string,
+            metadata: { checkoutUrl: prepared.checkoutUrl, providerTransactionId: prepared.providerTransactionId },
+          });
+        });
+
+        checkoutUrl = prepared.checkoutUrl;
+      } catch (err) {
+        // Provider bilan bog'lanishda xato — to'lovni bekor qilib, foydalanuvchiga xabar beramiz
+        await prisma.$transaction(async (tx) => {
+          await tx.payment.update({ where: { id: payment.id }, data: { status: 'FAILED', failureReason: (err as Error).message } });
+          await tx.booking.update({ where: { id: booking.id }, data: { status: 'PENDING' } });
+          await auditLog(tx, {
+            paymentId: payment.id,
+            action: 'payment_failed',
+            actorId: req.user!.userId,
+            actorRole: req.user!.role as string,
+            metadata: { reason: (err as Error).message },
+          });
+        });
+        if (err instanceof ProviderNotConfiguredError) {
+          return badRequest(res, err.message);
+        }
+        if (err instanceof ProviderUnavailableError) {
+          return res.status(503).json({ success: false, message: err.message, code: 'PROVIDER_UNAVAILABLE' });
+        }
+        return res.status(502).json({ success: false, message: 'To\'lov xizmati bilan bog\'lanishda xatolik yuz berdi' });
+      }
+    }
+
+    // CASH to'lov — admin kassada qabul qiladi
+    if (cash) {
       await prisma.notification.create({
         data: {
           userId: booking.room.ownerId,
           title: 'Yangi kassa to\'lovi kutilmoqda',
-          message: `${amt.toLocaleString('ru-RU')} so'm ${isAdvance ? 'avans' : 'qoldiq'} to'lov kassada. Tasdiqlash kerak.`,
+          message: `${amount.toLocaleString('ru-RU')} so'm depozit to'lov kassada. Tasdiqlash kerak.`,
           type: 'payment',
         },
       });
-      io.emit('notification_new', { userId: booking.room.ownerId, type: 'payment' });
       io.to(`user:${booking.room.ownerId}`).emit('notification_new', { userId: booking.room.ownerId, type: 'payment' });
     }
 
-    return created(res, payment, 'To\'lov yaratildi');
+    return created(res, {
+      payment,
+      checkoutUrl,
+      depositPercent: percent,
+      requiredDeposit: round2(Math.max(0, requiredDeposit - totalPaid)),
+      amount,
+      mode: config.payments.mode,
+      isTest: providerId === 'TEST',
+    }, 'To\'lov sessiyasi yaratildi');
   } catch (err) {
     next(err);
   }
 };
 
-// ============ POST /api/payments/:id/pay — USER: onlayn to'lov (PSP simulyatsiya) ============
-export const payOnline = async (req: AuthRequest, res: Response, next: NextFunction) => {
+// ============ GET /api/payments/providers — To'lov xizmatlari holati ============
+export const getProviders = async (_req: Request, res: Response) => {
+  return ok(res, {
+    providers: getProviderAvailability(),
+    mode: config.payments.mode,
+    minDepositPercent: config.payments.minDepositPercent,
+    isTestMode: config.payments.mode === 'test',
+  });
+};
+
+// ============ GET /api/payments/:id/status — USER: to'lov holati (poll + verify) ============
+const lastVerifyAt = new Map<string, number>();
+
+export const getPaymentByIdStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { cardNumber, cardHolder } = req.body || {};
+    const payment = await prisma.payment.findUnique({
+      where: { id: req.params.id },
+      include: { booking: { include: { room: { select: { id: true, ownerId: true } } } } },
+    });
+    if (!payment) return notFoundMsg(res, 'To\'lov topilmadi');
+    if (payment.userId !== req.user!.userId && payment.booking.room.ownerId !== req.user!.userId && req.user!.role !== 'SUPER_ADMIN') {
+      return forbidden(res, 'Bu to\'lov sizniki emas');
+    }
+
+    const isOnline = (payment.metadata as any)?.providerMethod || (payment.method && payment.method !== 'CASH');
+
+    // Muddati o'tgan sessiya — CREATED/REDIRECT_REQUIRED, hali ishlanmagan
+    if (['CREATED', 'REDIRECT_REQUIRED'].includes(payment.status) && payment.expiresAt && payment.expiresAt.getTime() < Date.now()) {
+      await prisma.$transaction(async (tx) => {
+        await tx.payment.update({ where: { id: payment.id }, data: { status: 'EXPIRED' } });
+        await auditLog(tx, { paymentId: payment.id, action: 'payment_expired' });
+        const unpaid = await tx.payment.count({
+          where: { bookingId: payment.bookingId, status: { in: [...PAID_STATUSES] } },
+        });
+        if (unpaid === 0) {
+          await tx.booking.update({ where: { id: payment.bookingId }, data: { status: 'PENDING' } });
+        }
+      });
+      return ok(res, { payment: await prisma.payment.findUnique({ where: { id: payment.id } }), bookingStatus: (await prisma.booking.findUnique({ where: { id: payment.bookingId }, select: { status: true } }))?.status });
+    }
+
+    // Providerdan jonli holat so'rash (throttle: 10 soniyada 1 marta)
+    let verified = false;
+    if (['REDIRECT_REQUIRED', 'PROCESSING', 'CREATED'].includes(payment.status) && isOnline) {
+      const method = (payment.provider as string) || (payment.metadata as any)?.providerMethod;
+      if (method && method !== 'CASH') {
+        const now = Date.now();
+        const last = lastVerifyAt.get(payment.id) || 0;
+        if (now - last > 10_000) {
+          lastVerifyAt.set(payment.id, now);
+          try {
+            const provider = getProvider(method === 'TEST' ? 'test' : method.toLowerCase());
+            const result = await provider.verifyPayment({
+              paymentId: payment.id,
+              providerTransactionId: payment.providerTransactionId,
+              providerPaymentId: payment.providerPaymentId,
+              amount: toNumber(payment.amount),
+              currency: payment.currency,
+              storedMetadata: payment.metadata as any,
+            });
+            if (result.status === 'PAID' && (payment.providerPaymentId || method === 'TEST')) {
+              const txResult = await prisma.$transaction(async (tx) => {
+                const r = await settleVerifiedPayment(tx, { id: payment.id, audit: { source: 'status_poll', provider: method } });
+                return r;
+              });
+              verified = txResult.settled;
+              void txResult;
+            } else if (result.status === 'CANCELLED' && ['REDIRECT_REQUIRED', 'CREATED'].includes(payment.status)) {
+              await prisma.payment.update({ where: { id: payment.id }, data: { status: 'CANCELLED' } });
+            } else if (result.status === 'PROCESSING' && payment.status === 'CREATED') {
+              await prisma.payment.update({ where: { id: payment.id }, data: { status: 'PROCESSING' } });
+            }
+          } catch {
+            // Provider mavjud emas yoki ishlamayapti — keyingi so'rovda qayta uriniladi
+          }
+        }
+      }
+    }
+
+    const fresh = await prisma.payment.findUnique({ where: { id: payment.id } });
+    const booking = await prisma.booking.findUnique({ where: { id: payment.bookingId }, select: { status: true, depositPercent: true } });
+
+    return ok(res, {
+      payment: fresh,
+      verified,
+      bookingStatus: booking?.status,
+      depositPercent: booking?.depositPercent,
+      status: fresh?.status,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ POST /api/payments/test/:id/confirm — USER: TEST rejimda tasdiqlash ============
+export const confirmTestPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (config.payments.mode !== 'test') return notFoundMsg(res, 'Topilmadi');
+    const provider = getProvider('test');
+    if (!provider.isConfigured()) return badRequest(res, 'TEST provayder faqat test rejimda ishlaydi');
 
     const payment = await prisma.payment.findUnique({
       where: { id: req.params.id },
@@ -163,52 +484,156 @@ export const payOnline = async (req: AuthRequest, res: Response, next: NextFunct
     });
     if (!payment) return notFoundMsg(res, 'To\'lov topilmadi');
     if (payment.userId !== req.user!.userId) return forbidden(res, 'Bu to\'lov sizniki emas');
-    if (payment.status !== 'PENDING') return badRequest(res, 'Bu to\'lov allaqachon yakunlangan');
-
-    const onlineMethods = ['PAYME', 'CLICK', 'UZCARD', 'HUMO', 'UZUM'];
-    const method = payment.method as string;
-    if (!method || !onlineMethods.includes(method)) {
-      return badRequest(res, 'Kassa to\'lovi faqat admin tomonidan tasdiqlanadi');
+    if (!['CREATED', 'REDIRECT_REQUIRED', 'PROCESSING'].includes(payment.status)) {
+      return badRequest(res, 'Bu to\'lov yakunlangan yoki bekor qilingan');
+    }
+    if ((payment.metadata as any)?.providerMethod !== 'test' && payment.provider !== null) {
+      return badRequest(res, 'Bu TEST provayder to\'lovi emas');
     }
 
-    // Karta validatsiyasi (simulyatsiya)
-    const digits = (cardNumber || '').replace(/\s/g, '');
-    if (digits && !/^\d+$/.test(digits)) {
-      return badRequest(res, 'Karta raqami noto\'g\'ri');
-    }
-    void cardHolder;
-
-    const transactionId = `TXN-${method}-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-
-    const updated = await prisma.$transaction(async (tx) => {
-      // transactionId'ni avval yozamiz, so'ng hisobni qayta hisoblash
+    const txResult = await prisma.$transaction(async (tx) => {
       await tx.payment.update({
         where: { id: payment.id },
-        data: { transactionId },
+        data: { metadata: { ...((payment.metadata as any) || {}), test_confirmed_at: new Date().toISOString() } as any },
       });
-      const res = await settlePayment(tx, payment.id);
-      if (res.booking) {
-        io.emit('booking_status_changed', {
-          roomId: payment.booking.roomId,
-          bookingId: payment.bookingId,
-          type: 'CONFIRMED',
-        });
+      const r = await settleVerifiedPayment(tx, {
+        id: payment.id,
+        actorId: req.user!.userId,
+        actorRole: req.user!.role as string,
+        audit: { source: 'test_confirm' },
+      });
+      if (r.booking) {
+        const info = bookingInfoOf(payment);
+        io.emit('booking_status_changed', { roomId: info.roomId ?? payment.booking.roomId, bookingId: payment.bookingId, type: r.booking.status });
       }
-      return res;
+      return r;
     });
 
-    return ok(res, updated, 'To\'lov muvaffaqiyatli yakunlandi');
+    return ok(res, { paid: txResult.paid, booking: txResult.booking, totalPaid: txResult.totalPaid }, 'TEST to\'lov tasdiqlandi');
   } catch (err) {
     next(err);
   }
 };
 
-// ============ GET /api/payments/:bookingId — USER: to'lov holati ============
+// ============ POST /api/payments/webhook/:provider — PROVIDER: webhook (haqiqiy manba) ============
+export const webhookPayment = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const method = String(req.params.provider || '').toLowerCase();
+    const provider = getProvider(method === 'test' ? 'test' : method);
+    if (provider.id === 'TEST') return res.status(404).json({ error: 'not found' });
+
+    const ctx = {
+      provider: provider.id,
+      body: (req as any).body || {},
+      query: req.query as Record<string, string | undefined>,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+      url: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
+    };
+
+    let result;
+    try {
+      result = await provider.handleWebhook(ctx);
+    } catch {
+      return res.status(400).json({ error: 'invalid webhook' });
+    }
+
+    if (!result || !result.acknowledged) {
+      return res.status(400).json({ error: 'invalid webhook' });
+    }
+
+    const merchantTransactionId = result.providerTransactionId;
+    if (merchantTransactionId) {
+      // Idempotency: transaction id bo'yicha payment'ni topamiz
+      const payment = await prisma.payment.findUnique({
+        where: { providerTransactionId: merchantTransactionId },
+        include: { booking: { include: { room: true } } },
+      });
+
+      if (payment) {
+        const amountOk = Math.abs(round2(toNumber(result.amount ?? payment.amount)) - round2(toNumber(payment.amount))) <= 1;
+
+        if (['PAID'].includes(result.status as string) && amountOk) {
+          const txResult = await prisma.$transaction(async (tx) => {
+            const r = await settleVerifiedPayment(tx, {
+              id: payment.id,
+              actorId: null,
+              actorRole: `PROVIDER:${provider.id}`,
+              audit: { source: 'webhook', action: result.action, webhookAmount: result.amount },
+            });
+            if (r.booking) {
+              const info = bookingInfoOf(payment);
+              io.emit('booking_status_changed', { roomId: info.roomId ?? payment.booking.roomId, bookingId: payment.bookingId, type: r.booking.status });
+            }
+            return r;
+          });
+          if (txResult.settled) {
+            await auditLog(prisma as any as TxClient, {
+              paymentId: payment.id,
+              action: 'webhook_received',
+              actorRole: `PROVIDER:${provider.id}`,
+              metadata: { action: result.action, amount: result.amount },
+            });
+          }
+        } else if (['PROCESSING'].includes(result.status as string) && !['PAID', 'COMPLETED'].includes(payment.status)) {
+          await prisma.payment.update({
+            where: { id: payment.id },
+            data: { status: 'PROCESSING', providerTransactionId: result.providerTransactionId || payment.providerTransactionId || null, providerPaymentId: result.providerPaymentId || payment.providerPaymentId || null },
+          });
+        } else if (['CANCELLED'].includes(result.status as string) && !['PAID', 'COMPLETED'].includes(payment.status)) {
+          await prisma.$transaction(async (tx) => {
+            await tx.payment.update({ where: { id: payment.id }, data: { status: 'CANCELLED', failureReason: 'provayder tomonidan bekor qilindi' } });
+            await auditLog(tx, { paymentId: payment.id, action: 'payment_failed', actorRole: `PROVIDER:${provider.id}`, metadata: { reason: 'cancelled', action: result.action } });
+            const unpaid = await tx.payment.count({ where: { bookingId: payment.bookingId, status: { in: [...PAID_STATUSES] } } });
+            if (unpaid === 0) {
+              await tx.booking.update({ where: { id: payment.bookingId }, data: { status: 'PENDING' } });
+            }
+          });
+        }
+      }
+    }
+
+    if (result.response !== undefined) {
+      return res.json(result.response);
+    }
+    return res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ GET /api/payments/history — USER: o'z to'lovlari tarixi ============
+export const getPaymentHistory = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+
+    const [payments, total] = await Promise.all([
+      prisma.payment.findMany({
+        where: { userId: req.user!.userId },
+        include: {
+          booking: {
+            select: { id: true, date: true, startTime: true, endTime: true, finalPrice: true, status: true, room: { select: { name: true } } },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      prisma.payment.count({ where: { userId: req.user!.userId } }),
+    ]);
+
+    return ok(res, { payments, total, limit, offset });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ GET /api/payments/:bookingId — USER: bron to'lov holati ============
 export const getPaymentStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const booking = await prisma.booking.findUnique({ where: { id: req.params.bookingId } });
     if (!booking) return notFoundMsg(res, 'Bron topilmadi');
-    if (booking.userId !== req.user!.userId) return forbidden(res);
+    if (booking.userId !== req.user!.userId && req.user!.role !== 'SUPER_ADMIN') return forbidden(res);
 
     const payments = await prisma.payment.findMany({
       where: { bookingId: booking.id },
@@ -216,19 +641,18 @@ export const getPaymentStatus = async (req: AuthRequest, res: Response, next: Ne
     });
 
     const finalPrice = round2(toNumber(booking.finalPrice));
-    const totalPaid = paidAmount(payments, 'COMPLETED');
-    const advancePaid = paidAmount(payments.filter((p) => p.type === 'ADVANCE'), 'COMPLETED');
-    const remainingPaid = paidAmount(payments.filter((p) => p.type === 'REMAINING'), 'COMPLETED');
+    const totalPaid = paidAmount(payments);
     const remainingDue = round2(Math.max(0, finalPrice - totalPaid));
+    const requiredDeposit = round2((finalPrice * booking.depositPercent) / 100);
 
     return ok(res, {
       bookingId: booking.id,
       bookingStatus: booking.status,
+      depositPercent: booking.depositPercent,
       totalPrice: booking.finalPrice,
       advanceAmount: booking.advanceAmount,
       remainingAmount: booking.remainingAmount,
-      advancePaid,
-      remainingPaid,
+      requiredDeposit,
       totalPaid,
       remainingDue,
       isFullyPaid: remainingDue <= 0.004,
@@ -251,21 +675,19 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
     if (payment.booking.room.ownerId !== req.user!.userId && req.user!.role !== 'SUPER_ADMIN') {
       return forbidden(res);
     }
-    if (payment.status !== 'PENDING') return badRequest(res, 'Bu to\'lov allaqachon yakunlangan');
+    if (!['PENDING', 'CREATED', 'REDIRECT_REQUIRED', 'PROCESSING'].includes(payment.status)) return badRequest(res, 'Bu to\'lov allaqachon yakunlangan');
     if (payment.method && payment.method !== 'CASH') {
-      return badRequest(res, 'Onlayn to\'lovni admin emas, foydalanuvchi yakunlaydi');
+      return badRequest(res, 'Onlayn to\'lovni admin emas, provereng va provayder orqali yakunlanadi');
     }
 
     const txResult = await prisma.$transaction(async (tx) => {
-      const result = await settlePayment(tx, payment.id);
-      if (result.booking) {
-        io.emit('booking_status_changed', {
-          roomId: payment.booking.roomId,
-          bookingId: payment.bookingId,
-          type: 'CONFIRMED',
-        });
+      await auditLog(tx, { paymentId: payment.id, action: 'admin_marked_paid', actorId: req.user!.userId, actorRole: req.user!.role as string });
+      const r = await settleVerifiedPayment(tx, { id: payment.id, actorId: req.user!.userId, actorRole: req.user!.role as string, audit: { source: 'admin_cash_confirm' } });
+      if (r.booking) {
+        const info = bookingInfoOf(payment);
+        io.emit('booking_status_changed', { roomId: info.roomId ?? payment.booking.roomId, bookingId: payment.bookingId, type: r.booking.status });
       }
-      return result;
+      return r;
     });
 
     return ok(res, txResult.paid, 'To\'lov tasdiqlandi');
@@ -294,7 +716,7 @@ export const getAllPayments = async (req: AuthRequest, res: Response, next: Next
       }),
       prisma.payment.count({ where }),
       prisma.payment.aggregate({
-        where: { status: 'COMPLETED' },
+        where: { status: { in: [...PAID_STATUSES] } },
         _sum: { amount: true },
       }),
     ]);

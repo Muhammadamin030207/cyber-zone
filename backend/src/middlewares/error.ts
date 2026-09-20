@@ -9,6 +9,9 @@ export function errorHandler(err: any, req: Request, res: Response, next: NextFu
   if (err.code === 'P2025') {
     return res.status(404).json({ success: false, message: 'Topilmadi' });
   }
+  if (err.code === 'P2003') {
+    return res.status(400).json({ success: false, message: 'Bog\'liq ma\'lumot topilmadi yoki noto\'g\'ri' });
+  }
 
   const status = err.status || 500;
   return res.status(status).json({

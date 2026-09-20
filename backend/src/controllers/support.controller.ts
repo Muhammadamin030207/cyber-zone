@@ -33,9 +33,24 @@ async function syncSupportUpdate(
   }
 }
 
-// Muayyan xabarni tahrirlash/o'chirish huquqi: muallif O'ZI yoki ADMIN/SUPER_ADMIN
-function canManageSupportMessage(me: { userId: string; role: string }, msg: { senderId: string | null }) {
-  return msg.senderId === me.userId || isAdmin(me.role) || isSuperAdmin(me.role);
+// Xabarni tahrirlash/o'chirish huquqi:
+//  - muallif O'ZI
+//  - SUPER_ADMIN hammasini
+//  - ADMIN faqat O'Z xonasidagi ADMIN-kanal murojaatlarini
+function canManageSupportMessage(
+  me: { userId: string; role: string },
+  msg: { senderId: string | null; recipientRole: string; roomId: string | null },
+  myRoomId?: string | null,
+): boolean {
+  if (msg.senderId === me.userId) return true;
+  if (me.role === 'SUPER_ADMIN') return true;
+  if (me.role === 'ADMIN' && msg.recipientRole === 'ADMIN' && myRoomId && msg.roomId === myRoomId) return true;
+  return false;
+}
+
+async function myAdminRoomId(userId: string): Promise<string | null> {
+  const room = await prisma.computerRoom.findUnique({ where: { ownerId: userId }, select: { id: true } }).catch(() => null);
+  return room?.id ?? null;
 }
 
 /**
@@ -336,7 +351,8 @@ export const editSupportMessage = async (req: AuthRequest, res: Response, next: 
       include: SUPPORT_INCLUDE,
     });
     if (!msg) return notFoundMsg(res, 'Xabar topilmadi');
-    if (!canManageSupportMessage(req.user!, msg)) return forbidden(res, 'Ruxsat yo\'q');
+    const myRoomId = req.user!.role === 'ADMIN' ? await myAdminRoomId(req.user!.userId) : null;
+    if (!canManageSupportMessage(req.user!, msg, myRoomId)) return forbidden(res, 'Ruxsat yo\'q');
 
     if (msg.message === text) return ok(res, msg);
 
@@ -361,7 +377,8 @@ export const deleteSupportMessage = async (req: AuthRequest, res: Response, next
   try {
     const msg = await prisma.supportMessage.findUnique({ where: { id: req.params.id } });
     if (!msg) return notFoundMsg(res, 'Xabar topilmadi');
-    if (!canManageSupportMessage(req.user!, msg)) return forbidden(res, 'Ruxsat yo\'q');
+    const myRoomId = req.user!.role === 'ADMIN' ? await myAdminRoomId(req.user!.userId) : null;
+    if (!canManageSupportMessage(req.user!, msg, myRoomId)) return forbidden(res, 'Ruxsat yo\'q');
 
     await prisma.supportMessage.delete({ where: { id: msg.id } });
     await syncSupportUpdate(msg, 'support:deleted', { userId: msg.userId, messageId: msg.id, roomId: msg.roomId });
