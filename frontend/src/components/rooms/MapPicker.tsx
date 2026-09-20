@@ -19,6 +19,9 @@ const NOMINATIM = 'https://nominatim.openstreetmap.org';
  * - Xaritaga bosing -> marker + avtomatik manzil (reverse geocode)
  * - "Mening joylashuvim" -> brauzer geolokatsiyasi (avtomatik o'qish)
  * - Manzil qidirish -> Nominatim (OSM) bo'yicha qidiruv + tanlash
+ *
+ * Map xaritani siqmaydigan katta responive maydon (camdan 360px, tablet 420px,
+ * desktop 480px), qidiruv esa xarita ustida FLYING search bar ko'rinishida turadi.
  */
 export default function MapPicker({
   lat,
@@ -26,7 +29,7 @@ export default function MapPicker({
   onChange,
   onAddress,
   district,
-  height = 260,
+  height,
 }: {
   lat: number | null;
   lng: number | null;
@@ -53,12 +56,12 @@ export default function MapPicker({
     const icon = L.divIcon({
       className: '',
       html: `<div style="
-        width:36px;height:36px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+        width:38px;height:38px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
         background:linear-gradient(135deg,#10b981,#f59e0b);border:2.5px solid #fff;
-        box-shadow:0 6px 16px rgba(16,185,129,.55);display:flex;align-items:center;justify-content:center;
+        box-shadow:0 6px 18px rgba(16,185,129,.55);display:flex;align-items:center;justify-content:center;
       "><div style="transform:rotate(45deg);font-size:14px;color:#000;font-weight:900;">PC</div></div>`,
-      iconSize: [36, 36],
-      iconAnchor: [8, 33],
+      iconSize: [38, 38],
+      iconAnchor: [8, 34],
     });
     markerRef.current = L.marker([la, ln], { icon }).addTo(mapRef.current!);
   };
@@ -109,9 +112,12 @@ export default function MapPicker({
       center: [TASHKENT_CENTER.lat, TASHKENT_CENTER.lng],
       zoom: 13,
       scrollWheelZoom: false,
-      zoomControl: true,
+      zoomControl: false,
     });
     mapRef.current = map;
+
+    // Zoom tugmalari — qidiruv bar bilan yopishib qolmasligi uchun chap pastki
+    L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
@@ -128,7 +134,22 @@ export default function MapPicker({
       reverseGeocode(lat, lng);
     }
 
+    // Yashirin/siqilgan (collapsible) formada ochilganda Leaflet to'g'ri
+    // o'lcham olmagani uchun size'ni qayta hisoblaymiz.
+    const reflow = () => map.invalidateSize();
+    const t1 = window.setTimeout(reflow, 80);
+    const t2 = window.setTimeout(reflow, 320);
+
+    const ro =
+      typeof ResizeObserver !== 'undefined' && containerRef.current
+        ? new ResizeObserver(reflow)
+        : null;
+    if (ro) ro.observe(containerRef.current);
+
     return () => {
+      ro?.disconnect();
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
       revAbort.current?.abort();
       map.remove();
       mapRef.current = null;
@@ -205,67 +226,84 @@ export default function MapPicker({
   };
 
   return (
-    <div className="rounded-xl overflow-hidden border border-neon-cyan/20">
+    <div className="map-picker overflow-hidden rounded-2xl border border-neon-cyan/20 bg-cyber-900/60">
+      {/* XARITA — katta responive maydon (CSS klass orqali: 360/420/480px) */}
       <div className="relative">
-        <div style={{ height }} ref={containerRef} />
+        <div
+          ref={containerRef}
+          className="map-picker-canvas"
+          style={height != null && height > 0 ? { height } : undefined}
+        />
 
-        {/* Qidiruv — yuqori chap */}
-        <div className="absolute top-2 left-2 right-2 z-[1000]">
-          <div className="flex items-center gap-1.5 glass rounded-xl px-3 py-2 shadow-lg">
-            <Search size={14} className="text-neon-cyan shrink-0" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onFocus={() => results.length && setShowResults(true)}
-              onBlur={() => setTimeout(() => setShowResults(false), 200)}
-              placeholder="Manzilni qidiring (masalan: Yunusobod...)..."
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-gray-500"
-            />
-            {searching && <Loader2 size={13} className="animate-spin text-gray-500 shrink-0" />}
-          </div>
-          {showResults && results.length > 0 && (
-            <div className="glass rounded-xl mt-1.5 max-h-48 overflow-y-auto scrollbar-thin shadow-lg">
+        {/* Floating qidiruv bar — xarita ustida, xaritadan joy ajratmaydi */}
+        <div className="absolute left-3 top-3 right-3 z-[1000] flex items-center gap-1.5 glass rounded-xl px-3 py-2 shadow-lg">
+          <Search size={15} className="text-neon-cyan shrink-0" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => results.length && setShowResults(true)}
+            onBlur={() => setTimeout(() => setShowResults(false), 200)}
+            placeholder="Manzilni qidiring (masalan: Yunusobod 9-uy)..."
+            aria-label="Xaritada manzil qidirish"
+            className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-gray-500"
+          />
+          {searching && <Loader2 size={14} className="animate-spin text-gray-500 shrink-0" />}
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              useMyLocation();
+            }}
+            title="Mening joylashuvim"
+            aria-label="Mening joylashuvimni ishlatish"
+            className="shrink-0 ml-0.5 w-8 h-8 grid place-items-center rounded-lg text-neon-cyan hover:bg-white/10 active:scale-95 transition-colors"
+          >
+            {locating ? <Loader2 size={15} className="animate-spin" /> : <LocateFixed size={16} />}
+          </button>
+        </div>
+
+        {/* Qidiruv natijalari */}
+        {showResults && results.length > 0 && (
+          <div className="absolute left-3 right-3 top-[52px] z-[1000] overflow-hidden rounded-xl glass shadow-xl menu-pop">
+            <div className="max-h-52 overflow-y-auto scrollbar-thin divide-y divide-white/5">
               {results.map((r, i) => (
                 <button
                   key={`${r.lat}-${r.lng}-${i}`}
+                  type="button"
                   onMouseDown={() => pickResult(r)}
-                  className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-white/10 flex items-start gap-2"
+                  className="w-full text-left px-3.5 py-2.5 text-xs text-gray-200 hover:bg-white/10 flex items-start gap-2"
                 >
-                  <MapPin size={12} className="text-neon-cyan shrink-0 mt-0.5" /> {r.label}
+                  <MapPin size={13} className="text-neon-cyan shrink-0 mt-0.5" /> {r.label}
                 </button>
               ))}
             </div>
-          )}
-        </div>
-
-        {/* Geolokatsiya tugmasi — yuqori o'ng */}
-        <button
-          onMouseDown={(e) => {
-            e.preventDefault();
-            useMyLocation();
-          }}
-          title="Mening joylashuvim"
-          className="absolute top-2 right-2 z-[1000] w-9 h-9 rounded-xl glass grid place-items-center text-neon-cyan hover:bg-white/10 transition-colors shadow-lg"
-        >
-          {locating ? <Loader2 size={15} className="animate-spin" /> : <LocateFixed size={15} />}
-        </button>
+          </div>
+        )}
       </div>
 
-      <div className="px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400 bg-cyber-900">
-        <span className="flex items-center gap-1.5">
-          <MapPin size={13} className="text-neon-cyan shrink-0" />
-          {resolved ? resolved.slice(0, 90) : 'Xaritaga bosing — manzil avtomatik aniqlanadi'}
+      {/* Tanlangan joy — compact professional footer */}
+      <div className="px-3.5 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-gray-400 border-t border-white/5">
+        <span className="flex items-center gap-1.5 min-w-0 flex-1">
+          <MapPin size={14} className="text-neon-cyan shrink-0" />
+          <span className="truncate">
+            {resolved
+              ? resolved
+              : lat != null && lng != null
+                ? `Tanlangan joy (${lat.toFixed(4)}, ${lng.toFixed(4)})`
+                : 'Xaritaga bosing — manzil avtomatik aniqlanadi'}
+          </span>
         </span>
         {lat != null && lng != null && (
           <button
+            type="button"
             onClick={openInMaps}
-            className="ml-auto inline-flex items-center gap-1 font-bold text-neon-cyan hover:underline"
+            className="ml-auto inline-flex items-center gap-1 font-bold text-neon-cyan hover:underline shrink-0"
           >
-            <Navigation size={11} /> Google Maps
+            <Navigation size={12} /> Google Maps
           </button>
         )}
       </div>
-      {geoErr && <div className="px-3 pb-1.5 text-xs text-red-400 bg-cyber-900">{geoErr}</div>}
+      {geoErr && <div className="px-3.5 pb-2 text-xs text-red-400">{geoErr}</div>}
     </div>
   );
 }
