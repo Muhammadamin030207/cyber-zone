@@ -2,12 +2,13 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import api, { setAccessToken, getApiErrorMessage } from '@/lib/api';
+import api, { setAccessToken, setRefreshToken, getApiErrorMessage } from '@/lib/api';
 import type { AuthResponse, User } from '@/lib/types';
 
 interface AuthState {
   user: User | null;
   token: string | null;
+  refreshToken: string | null;
   initialized: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
@@ -25,13 +26,15 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       token: null,
+      refreshToken: null,
       initialized: false,
       loading: false,
       error: null,
 
       setAuth: (auth) => {
         setAccessToken(auth.accessToken);
-        set({ user: auth.user, token: auth.accessToken, error: null });
+        setRefreshToken(auth.refreshToken || null);
+        set({ user: auth.user, token: auth.accessToken, refreshToken: auth.refreshToken || null, error: null });
       },
 
       login: async (email, password) => {
@@ -85,7 +88,8 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         setAccessToken(null);
-        set({ user: null, token: null });
+        setRefreshToken(null);
+        set({ user: null, token: null, refreshToken: null });
       },
 
       fetchMe: async () => {
@@ -94,12 +98,14 @@ export const useAuthStore = create<AuthState>()(
           return;
         }
         setAccessToken(get().token);
+        setRefreshToken(get().refreshToken || null);
         try {
           const { data } = await api.get<{ success: boolean; data: User }>('/api/auth/me');
           set({ user: data.data, initialized: true });
         } catch {
-          set({ user: null, token: null, initialized: true });
+          set({ user: null, token: null, refreshToken: null, initialized: true });
           setAccessToken(null);
+          setRefreshToken(null);
         }
       },
 
@@ -107,7 +113,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'cyber-zone-auth',
-      partialize: (state) => ({ token: state.token, user: state.user }),
+      partialize: (state) => ({ token: state.token, refreshToken: state.refreshToken, user: state.user }),
     }
   )
 );

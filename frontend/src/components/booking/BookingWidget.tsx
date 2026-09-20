@@ -17,6 +17,7 @@ interface Props {
   date: string;
   onDateChange: (date: string) => void;
   availability: AvailabilityZone[];
+  availabilityLoading?: boolean;
 }
 
 interface PromoCheck {
@@ -43,7 +44,7 @@ function slotsOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string
   return a0 < b1 && a1 > b0;
 }
 
-export default function BookingWidget({ room, date, onDateChange, availability }: Props) {
+export default function BookingWidget({ room, date, onDateChange, availability, availabilityLoading = false }: Props) {
   const t = useTranslations('booking');
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -69,6 +70,15 @@ export default function BookingWidget({ room, date, onDateChange, availability }
   useEffect(() => {
     if (availability.length && !zoneId) {
       setZoneId(availability[0].id);
+    }
+  }, [availability, zoneId]);
+
+  // Sana/mavjudlik o'zgarganda eski tanlov yangi sanaga "ko'chib" qolmasligi uchun
+  // tanlangan zona mavjud emas bo'lsa — birinchi zonaga qaytamiz va kompyuterni tozalaymiz.
+  useEffect(() => {
+    if (zoneId && availability.length && !availability.some((z) => z.id === zoneId)) {
+      setZoneId(availability[0].id);
+      setComputerId('');
     }
   }, [availability, zoneId]);
 
@@ -203,10 +213,15 @@ async function submit() {
       const bookingId = data.data?.id;
       router.push(bookingId ? `/checkout/${bookingId}` : '/dashboard');
       setSuccess(true);
-    } catch (err) {
+    } catch (err: any) {
+      const code = err?.response?.data?.code as string | undefined;
       const msg = getApiErrorMessage(err, t('notAvailable'));
-      if (/CONFLICT_/.test(msg)) {
-        setError('Tanlangan vaqt band. Boshqa vaqtni tanlang.');
+      if (code === 'BOOKING_TIME_ALREADY_RESERVED') {
+        setError('Tanlangan vaqt band. Boshqa vaqt yoki kompyuterni tanlang.');
+      } else if (code === 'BOOKING_OUTSIDE_WORKING_HOURS') {
+        setError('Tanlangan vaqt ish vaqtidan tashqari. Ish vaqtini tekshiring.');
+      } else if (code === 'ROOM_FULL') {
+        setError('Bu vaqt uchun bo\u2018sh kompyuter qolmadi. Boshqa vaqtni tanlang.');
       } else {
         setError(msg);
       }
@@ -524,11 +539,11 @@ async function submit() {
         {/* Submit */}
         <button
           onClick={submit}
-          disabled={submitting || availability.length === 0 || !timeOk || (isToday && startInPast) || freeInWindow === 0 || (!autoPc && Boolean(computerId) && !selectedComputerFree)}
+          disabled={submitting || availabilityLoading || availability.length === 0 || !timeOk || (isToday && startInPast) || freeInWindow === 0 || (!autoPc && Boolean(computerId) && !selectedComputerFree)}
           className="w-full py-3.5 rounded-xl neon-btn flex items-center justify-center gap-2 font-bold text-base disabled:opacity-50"
         >
-          {submitting ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
-          {t('create')} · {formatPrice(finalTotal)} {t('sum')}
+          {submitting || availabilityLoading ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
+          {availabilityLoading ? 'Mavjudlik yangilanmoqda...' : `${t('create')} · ${formatPrice(finalTotal)} ${t('sum')}`}
         </button>
 
         {!user && (

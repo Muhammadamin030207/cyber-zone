@@ -38,6 +38,12 @@ export function refreshSocketToken() {
   }
 }
 
+// Access-token refresh'tan so'ng socket auth-ni yangilaymiz (eskirgan token bilan
+// realtime bo'lishiga yo'l qo'ymaymiz).
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth:refreshed', () => refreshSocketToken());
+}
+
 export function closeSocket() {
   if (socket) {
     socket.disconnect();

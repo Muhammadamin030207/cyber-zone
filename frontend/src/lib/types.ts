@@ -112,6 +112,7 @@ export interface Booking {
   finalPrice: number | string;
   advanceAmount: number | string;
   remainingAmount: number | string;
+  depositPercent?: number | string;
   status: BookingStatus;
   notes?: string | null;
   createdAt: string;

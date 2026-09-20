@@ -5,6 +5,7 @@ import {
   MessageSquare, Send, Loader2, ArrowLeft, Trash2, ShieldCheck, Monitor, CheckCheck,
 } from 'lucide-react';
 import api from '@/lib/api';
+import { confirmDialog } from '@/lib/confirm';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
 import { cn, mergeChatMessages } from '@/lib/utils';
@@ -128,7 +129,8 @@ export default function ChatAdmin() {
   }
 
   async function clearChat() {
-    if (!active || !confirm('Bu suhbatni tozalash?')) return;
+    if (!active) return;
+    if (!await confirmDialog({ title: 'Suhbatni tozalash', message: 'Bu suhbatni tozalashni tasdiqlaysizmi?', danger: true })) return;
     try {
       await api.delete(`/api/chat/rooms/${active.id}/clear`);
       setMessages([]);

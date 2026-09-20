@@ -30,6 +30,7 @@ export function useChatUnread(): number {
     }
     let alive = true;
     const load = async () => {
+      if (document.visibilityState === 'hidden') return;
       try {
         const { data } = await api.get<{ success: boolean; data: { total: number } }>('/api/chat/unread');
         if (alive) set(data.data?.total || 0);
@@ -38,10 +39,20 @@ export function useChatUnread(): number {
       }
     };
     load();
-    const timer = window.setInterval(load, 20000);
+    let timer = window.setInterval(load, 20000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        load();
+        timer = window.setInterval(load, 20000);
+      } else {
+        window.clearInterval(timer);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       alive = false;
-      window.clearInterval(timer);
+      if (timer) window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [user, token, set]);
 

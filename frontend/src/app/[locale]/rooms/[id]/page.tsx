@@ -31,6 +31,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
   const [error, setError] = useState<string | null>(null);
   const [date, setDate] = useState(todayISO());
   const [availability, setAvailability] = useState<AvailabilityZone[]>([]);
+  const [availLoading, setAvailLoading] = useState(false);
 
   const fetchRoom = useCallback(async () => {
     if (!roomId) return;
@@ -48,11 +49,14 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
 
   const fetchAvailability = useCallback(async () => {
     if (!roomId) return;
+    setAvailLoading(true);
     try {
       const { data } = await api.get(`/api/bookings/rooms/${roomId}/availability?date=${date}`);
       setAvailability(data.data.zones || []);
     } catch {
       setAvailability([]);
+    } finally {
+      setAvailLoading(false);
     }
   }, [roomId, date]);
 
@@ -272,7 +276,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
 
         {/* Right: booking widget */}
         <div className="lg:sticky lg:top-20 h-fit">
-          <BookingWidget room={room} date={date} onDateChange={setDate} availability={availability} />
+          <BookingWidget room={room} date={date} onDateChange={setDate} availability={availability} availabilityLoading={availLoading} />
         </div>
       </div>
 

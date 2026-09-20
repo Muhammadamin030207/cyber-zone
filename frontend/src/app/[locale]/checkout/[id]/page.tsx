@@ -23,7 +23,7 @@ const PROVIDER_UI: Record<string, { label: string; sub: string; icon: LucideIcon
   UZUM: { label: 'Uzum', sub: 'Raqamli bank', icon: Wallet, color: 'bg-[#7000FF]/15 text-[#a86bff] border-[#7000FF]/40' },
   PAYNET: { label: 'Paynet', sub: 'To\'lov terminali', icon: CreditCard, color: 'bg-[#0E9F6E]/10 text-[#34d399] border-[#0E9F6E]/30' },
   TEST: { label: 'Test to\'lov', sub: 'Test rejimi', icon: CheckCircle2, color: 'bg-neon-green/10 text-neon-green border-neon-green/30' },
-  CASH: { label: 'Kassada', sub: '30% joyida to\'lash', icon: Banknote, color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  CASH: { label: 'Kassada', sub: 'Naqd pulda to\'lash', icon: Banknote, color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
 };
 
 const SETTLED_BOOKING_STATUSES = ['PARTIALLY_PAID', 'PAID', 'CONFIRMED', 'ACTIVE', 'COMPLETED'];
@@ -108,6 +108,11 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
     setPolling(true);
     const poll = async () => {
       if (cancelled) return;
+      // Background tab — pollingni pauza qilamiz (tries isrof bo'lmasin), qaytganimizda davom etadi.
+      if (document.visibilityState === 'hidden') {
+        setTimeout(poll, 5000);
+        return;
+      }
       try {
         const { data } = await api.get(`/api/payments/${verifyPayment.id}/status`);
         const st = data.data?.payment?.status as string | undefined;
@@ -204,6 +209,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   const isPending = booking.status === 'PENDING' || booking.status === 'PENDING_PAYMENT';
   const advance = Number(booking.advanceAmount);
   const remaining = Number(booking.remainingAmount);
+  const depositPercent = Number(booking.depositPercent) || 30;
+  const remainderPercent = Math.max(0, 100 - depositPercent);
 
   const methodUi = PROVIDER_UI[method];
 
@@ -220,7 +227,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
       </button>
 
       <h1 className="text-2xl font-extrabold tracking-tight mb-1">To'lov</h1>
-      <p className="text-gray-400 text-sm mb-6">Broningizni tasdiqlash uchun 30% oldindan to'lov</p>
+      <p className="text-gray-400 text-sm mb-6">Broningizni tasdiqlash uchun {depositPercent}% oldindan to'lov</p>
 
       {error && (
         <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-sm text-red-300">
@@ -231,7 +238,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
       {cashNotified && (
         <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
           <Wallet size={16} />
-          Ruxsat berildi: 30% ini kassada to'laysiz. Admin xabarnoma oldi va bronni tasdiqlaydi. Bronni kuzatish: <Link href="/dashboard" className="underline">Kabinet</Link>
+          Ruxsat berildi: {depositPercent}% ini kassada to'laysiz. Admin xabarnoma oldi va bronni tasdiqlaydi. Bronni kuzatish: <Link href="/dashboard" className="underline">Kabinet</Link>
         </div>
       )}
 
@@ -283,11 +290,11 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
             </div>
           )}
           <div className="flex justify-between font-bold text-lg">
-            <span>30% oldindan</span>
+            <span>{depositPercent}% oldindan</span>
             <span className="neon-text">{formatPrice(advance)} so'm</span>
           </div>
           <div className="flex justify-between text-gray-400 text-xs">
-            <span>Qolgan 70% (joyda)</span>
+            <span>Qolgan {remainderPercent}% (joyda)</span>
             <span>{formatPrice(remaining)} so'm</span>
           </div>
         </div>
@@ -340,10 +347,10 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
           ) : (
             <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-200 mb-5">
               <p className="flex items-center gap-2 font-semibold">
-                <Banknote size={16} /> 30% ini kassada to'laysiz
+                <Banknote size={16} /> {depositPercent}% ini kassada to'laysiz
               </p>
               <p className="text-xs text-gray-400 mt-1.5">
-                Bron davomida qolgan 70% ni ham kassada to'lashingiz mumkin. Admin sizning broningizni kassada to'lov qabul qilgandan so'ng tasdiqlaydi.
+                Bron davomida qolgan {remainderPercent}% ni ham kassada to'lashingiz mumkin. Admin sizning broningizni kassada to'lov qabul qilgandan so'ng tasdiqlaydi.
               </p>
             </div>
           )}
@@ -393,7 +400,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
             href="/dashboard"
             className="mt-4 w-full block text-center py-3.5 rounded-xl neon-btn font-bold"
           >
-            Qolgan 70% joyda — Kabinetga o'tish
+            Qolgan {remainderPercent}% joyda — Kabinetga o'tish
           </Link>
         </>
       )}

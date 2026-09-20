@@ -147,7 +147,7 @@ export default function ChatWidget() {
         </div>
       )}
 
-      <div className="fixed bottom-20 md:bottom-5 right-4 md:right-6 z-[70] flex flex-col items-end gap-3">
+      <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-5 right-4 md:right-6 z-[70] flex flex-col items-end gap-3">
         {/* Desktop: floating panel */}
         {open && !isMobile && (
           <div

@@ -233,9 +233,9 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
                   </div>
                 </div>
 
-                {['PENDING', 'CONFIRMED'].includes(b.status) && (
+                {['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'].includes(b.status) && (
                   <div className="mt-4 grid grid-cols-2 gap-2">
-                    {b.status === 'PENDING' && (
+                    {['PENDING', 'PENDING_PAYMENT'].includes(b.status) && (
                       <Link
                         href={`/checkout/${b.id}`}
                         className="py-2.5 rounded-xl neon-btn flex items-center justify-center gap-2 text-sm font-bold"
@@ -249,14 +249,16 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
                         <Wallet size={14} /> 30% to'landi
                       </div>
                     )}
-                    <button
-                      onClick={() => cancelBooking(b.id)}
-                      disabled={cancelling === b.id}
-                      className="py-2.5 rounded-xl border border-red-500/30 text-red-400 text-sm font-medium hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {cancelling === b.id ? <Loader2 size={15} className="animate-spin" /> : <XCircle size={15} />}
-                      Bekor qilish
-                    </button>
+                    {['PENDING', 'PENDING_PAYMENT'].includes(b.status) && (
+                      <button
+                        onClick={() => cancelBooking(b.id)}
+                        disabled={cancelling === b.id}
+                        className="py-2.5 rounded-xl border border-red-500/30 text-red-400 text-sm font-medium hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {cancelling === b.id ? <Loader2 size={15} className="animate-spin" /> : <XCircle size={15} />}
+                        Bekor qilish
+                      </button>
+                    )}
                   </div>
                 )}
 

@@ -5,6 +5,8 @@ import {
   Coffee, Plus, Trash2, Loader2, Save, Check, Pencil, X, ShoppingCart, ChefHat, Timer, PackageCheck, Truck,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
+import { toastError } from '@/lib/toast';
+import { confirmDialog } from '@/lib/confirm';
 import { formatPrice, formatDateTime, cn } from '@/lib/utils';
 
 interface BarItem {
@@ -88,19 +90,19 @@ export default function BarAdmin() {
     try {
       await api.patch(`/api/bar/items/${item.id}`, { isAvailable: !item.isAvailable });
       load();
-    } catch (err) { alert(getApiErrorMessage(err)); }
+    } catch (err) { toastError(getApiErrorMessage(err)); }
   }
 
   async function removeItem(id: string) {
-    if (!confirm('Menyuni o\'chirish?')) return;
-    try { await api.delete(`/api/bar/items/${id}`); load(); } catch (err) { alert(getApiErrorMessage(err)); }
+    if (!await confirmDialog({ title: 'Menyuni o\'chirish', message: 'Menyuni o\'chirishni tasdiqlaysizmi?', danger: true })) return;
+    try { await api.delete(`/api/bar/items/${id}`); load(); } catch (err) { toastError(getApiErrorMessage(err)); }
   }
 
   async function setOrderStatus(id: string, status: string) {
     try {
       await api.patch(`/api/admin/bar/orders/${id}/status`, { status });
       load();
-    } catch (err) { alert(getApiErrorMessage(err)); }
+    } catch (err) { toastError(getApiErrorMessage(err)); }
   }
 
   const pending = orders.filter((o) => o.status === 'PENDING' || o.status === 'PREPARING');

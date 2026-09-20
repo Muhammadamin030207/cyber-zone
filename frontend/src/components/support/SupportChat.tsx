@@ -5,6 +5,7 @@ import {
   Send, Loader2, ShieldCheck, Phone, Mail, Trash2, UserRound, Building2, MessageSquareText, ChevronDown, Pencil,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
+import { confirmDialog } from '@/lib/confirm';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
 import { cn } from '@/lib/utils';
@@ -288,7 +289,8 @@ socket.on('support:new', onNew);
   }
 
   async function clearThread() {
-    if (!active?.userId || !window.confirm('Bu murojaatni tozalash?')) return;
+    if (!active?.userId) return;
+    if (!await confirmDialog({ title: 'Murojaatni tozalash', message: 'Bu murojaatni tozalashni tasdiqlaysizmi?', danger: true })) return;
     try {
       const p = new URLSearchParams({ channel: chUpper });
       if (chUpper === 'ADMIN' && active.roomId) p.set('roomId', active.roomId);
@@ -329,7 +331,7 @@ socket.on('support:new', onNew);
 
   const deleteMsg = async (m: SupportMsg) => {
     if (changingId) return;
-    if (!window.confirm('Bu xabarni o\'chirishni tasdiqlaysizmi?')) return;
+    if (!await confirmDialog({ title: 'Xabarni o\'chirish', message: 'Bu xabarni o\'chirishni tasdiqlaysizmi?', danger: true })) return;
     setChangingId(m.id);
     setErr(null);
     try {

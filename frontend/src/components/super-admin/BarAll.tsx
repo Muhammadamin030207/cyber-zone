@@ -5,6 +5,7 @@ import {
   Coffee, Plus, Trash2, Loader2, Save, Check, Pencil, X, Timer, ChefHat, PackageCheck, Truck, Monitor, ShoppingCart,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
+import { confirmDialog } from '@/lib/confirm';
 import { formatPrice, formatDateTime, cn } from '@/lib/utils';
 
 interface BarItem {
@@ -105,7 +106,7 @@ export default function BarAll() {
   }
 
   async function removeItem(id: string) {
-    if (!confirm('Menyuni o\'chirish?')) return;
+    if (!await confirmDialog({ title: 'Menyuni o\'chirish', message: 'Menyuni o\'chirishni tasdiqlaysizmi?', danger: true })) return;
     try { await api.delete(`/api/bar/items/${id}`); loadItems(roomSel); } catch { /* skip */ }
   }
 

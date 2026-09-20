@@ -35,7 +35,7 @@ export default function ConfirmDialog() {
   return (
     <div
       role="presentation"
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-3 sm:p-4"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
@@ -46,7 +46,7 @@ export default function ConfirmDialog() {
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-desc"
-        className="relative w-full max-w-sm neo-card rounded-2xl p-6 animate-pop"
+        className="relative w-full sm:max-w-sm neo-card rounded-2xl rounded-b-none sm:rounded-2xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:pb-6 animate-pop"
       >
         <div className="flex items-start gap-4">
           <span
