@@ -516,6 +516,73 @@ a:hover { opacity: 0.92; }
 .btn-amber:hover::before { transform: translateX(130%); }
 .btn-amber:active { transform: translateY(0) scale(0.97); }
 
+/* ---- Google custom premium sign-in tugmasi ----
+   Google Identity Services popup flow'ini ishga tushiradigan,
+   Cyber-ZONE dizayniga mos dark/glass tugma */
+.google-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  width: 100%;
+  min-height: 52px;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--line-strong);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #ffffff 3%, transparent), transparent 62%),
+    color-mix(in srgb, var(--bg-2) 76%, transparent);
+  color: var(--fg);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  -webkit-appearance: none;
+  appearance: none;
+  user-select: none;
+  overflow: hidden;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease,
+    box-shadow 0.16s ease, filter 0.16s ease, opacity 0.16s ease;
+}
+
+@media (min-width: 640px) {
+  .google-btn { min-height: 56px; }
+}
+
+.google-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  border-color: color-mix(in srgb, var(--acc-a) 45%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--acc-a) 16%, transparent),
+    0 8px 24px -12px color-mix(in srgb, var(--acc-a) 35%, transparent);
+}
+
+.google-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.985);
+  filter: brightness(0.98);
+}
+
+.google-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* Yorug'lik o'tishi (shine sweep) — neon-btn bilan mos */
+.google-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 40%, color-mix(in srgb, var(--acc-a) 6%, transparent) 50%, transparent 60%);
+  transform: translateX(-130%);
+  transition: transform 0.55s ease;
+  pointer-events: none;
+}
+
+.google-btn:hover:not(:disabled)::before {
+  transform: translateX(130%);
+}
+
 .text-muted { color: var(--fg-mut); }
 .text-dim { color: var(--fg-dim); }
 

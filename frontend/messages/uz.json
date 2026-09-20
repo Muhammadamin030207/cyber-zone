@@ -132,7 +132,8 @@
     "or": "yoki",
     "googleSetup": "Google OAuth Client ID o’rnatilmagan. NEXT_PUBLIC_GOOGLE_CLIENT_ID belgilang.",
     "googleLoading": "Google orqali kirilmoqda...",
-    "googleError": "Google bilan kirishda xatolik"
+    "googleError": "Google bilan kirishda xatolik",
+    "googleNoSession": "Google hisobingizda ochiq seans topilmadi. Google hisobiga kiring va qayta urinib ko'ring."
   },
   "dashboard": {
     "title": "Shaxsiy kabinet",

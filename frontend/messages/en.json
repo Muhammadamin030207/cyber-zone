@@ -132,7 +132,8 @@
     "or": "or",
     "googleSetup": "Google OAuth Client ID not configured. Set NEXT_PUBLIC_GOOGLE_CLIENT_ID.",
     "googleLoading": "Signing in with Google...",
-    "googleError": "Error signing in with Google"
+    "googleError": "Error signing in with Google",
+    "googleNoSession": "No active Google session found. Sign in to your Google account and try again."
   },
   "dashboard": {
     "title": "Dashboard",

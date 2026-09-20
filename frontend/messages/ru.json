@@ -132,7 +132,8 @@
     "or": "или",
     "googleSetup": "Google OAuth Client ID не настроен. Укажите NEXT_PUBLIC_GOOGLE_CLIENT_ID.",
     "googleLoading": "Входим через Google...",
-    "googleError": "Ошибка входа через Google"
+    "googleError": "Ошибка входа через Google",
+    "googleNoSession": "Не найден активный сеанс в Google. Войдите в аккаунт Google и попробуйте снова."
   },
   "dashboard": {
     "title": "Личный кабинет",
