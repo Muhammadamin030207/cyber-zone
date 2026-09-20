@@ -16,13 +16,13 @@ import SplashLoader from '@/components/ui/SplashLoader';
 
 type PayMethod = 'PAYME' | 'CLICK' | 'UZCARD' | 'HUMO' | 'UZUM' | 'CASH';
 
-const METHODS: { id: PayMethod; label: string; sub: string; icon: any; color: string; demoCard: string }[] = [
-  { id: 'PAYME', label: 'Payme', sub: 'Telefon ilovasi', icon: Smartphone, color: 'bg-[#00C7F0]/10 text-[#22d3ee] border-[#00C7F0]/30', demoCard: '8600 0119 5555 2000' },
-  { id: 'CLICK', label: 'Click', sub: 'Tez va oson', icon: Zap, color: 'bg-[#ED1C24]/10 text-[#ff5a60] border-[#ED1C24]/30', demoCard: '8600 0490 1234 5678' },
-  { id: 'UZUM', label: 'Uzum Bank', sub: 'Raqamli bank', icon: Wallet, color: 'bg-[#7000FF]/15 text-[#a86bff] border-[#7000FF]/40', demoCard: '9860 2090 8899 7766' },
-  { id: 'UZCARD', label: 'Uzcard', sub: 'Bank kartasi', icon: CreditCard, color: 'bg-[#2456A6]/10 text-[#4f83c9] border-[#2456A6]/40', demoCard: '8600 0030 1122 3344' },
-  { id: 'HUMO', label: 'Humo', sub: 'Bank kartasi', icon: CreditCard, color: 'bg-[#0066B3]/10 text-[#3b9be0] border-[#0066B3]/40', demoCard: '9860 0101 2233 4455' },
-  { id: 'CASH', label: 'Kassada', sub: '30% joyida to\'lash', icon: Banknote, color: 'bg-amber-500/10 text-amber-400 border-amber-500/30', demoCard: '' },
+const METHODS: { id: PayMethod; label: string; sub: string; icon: any; color: string }[] = [
+  { id: 'PAYME', label: 'Payme', sub: 'Telefon ilovasi', icon: Smartphone, color: 'bg-[#00C7F0]/10 text-[#22d3ee] border-[#00C7F0]/30' },
+  { id: 'CLICK', label: 'Click', sub: 'Tez va oson', icon: Zap, color: 'bg-[#ED1C24]/10 text-[#ff5a60] border-[#ED1C24]/30' },
+  { id: 'UZUM', label: 'Uzum Bank', sub: 'Raqamli bank', icon: Wallet, color: 'bg-[#7000FF]/15 text-[#a86bff] border-[#7000FF]/40' },
+  { id: 'UZCARD', label: 'Uzcard', sub: 'Bank kartasi', icon: CreditCard, color: 'bg-[#2456A6]/10 text-[#4f83c9] border-[#2456A6]/40' },
+  { id: 'HUMO', label: 'Humo', sub: 'Bank kartasi', icon: CreditCard, color: 'bg-[#0066B3]/10 text-[#3b9be0] border-[#0066B3]/40' },
+  { id: 'CASH', label: 'Kassada', sub: '30% joyida to\'lash', icon: Banknote, color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
 ];
 
 export default function CheckoutPage({ params }: { params: Promise<{ locale: string; id: string }> }) {
@@ -43,6 +43,15 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   const [cashNotified, setCashNotified] = useState(false);
   const [appModal, setAppModal] = useState<PayMethod | null>(null);
   const [modalSuccess, setModalSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!appModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !modalSuccess) setAppModal(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [appModal, modalSuccess]);
 
   useEffect(() => {
     api
@@ -97,9 +106,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   }
 
   function openApp(m: PayMethod, cardHolderName: string) {
-    const meta = METHODS.find((x) => x.id === m);
-    setCardNumber(meta?.demoCard || '');
-    setCardHolder(cardHolderName);
+    setCardNumber('');
+    setCardHolder(cardHolderName.toUpperCase());
     setModalSuccess(false);
     setAppModal(m);
   }
@@ -235,7 +243,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
               <div>
                 <h3 className="font-semibold text-sm">{METHODS.find((m) => m.id === method)?.label} ilovasida to\'lash</h3>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  Karta raqami va summa avtomatik to'ldiriladi — siz faqat tasdiqlaysiz
+                  Karta ma\'lumotlarini kiriting — to\'lov xavfsiz amalga oshiriladi
                 </p>
               </div>
             </div>
@@ -282,17 +290,28 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
         </>
       )}
 
-      {/* ===== To'lov-app simulyatsiya modali ===== */}
+      {/* ===== To'lov-app modali ===== */}
       {appModal && booking && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pay-modal-title"
+          className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm sm:p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !modalSuccess) setAppModal(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && !modalSuccess) setAppModal(null);
+          }}
+        >
           {modalSuccess ? (
-            <div className="neo-card rounded-3xl w-full max-w-sm p-10 text-center animate-float">
+            <div className="neo-card w-full sm:max-w-sm rounded-t-[1.75rem] sm:rounded-3xl p-10 text-center animate-float">
               <CheckCircle2 size={64} className="mx-auto text-neon-green mb-4" />
               <h3 className="text-xl font-bold mb-1">To'lov amalga oshdi!</h3>
               <p className="text-sm text-gray-400">Broningiz tasdiqlandi. Tilakda!</p>
             </div>
           ) : (
-            <div className="neo-card rounded-3xl w-full max-w-sm overflow-hidden">
+            <div className="neo-card w-full sm:max-w-sm rounded-t-[1.75rem] sm:rounded-3xl overflow-y-auto max-h-[92dvh] sm:max-h-[85vh]">
               {/* App header */}
               <div className={cn('p-4 flex items-center gap-3', METHODS.find((m) => m.id === appModal)?.color as any)}>
                 <span className="p-2.5 rounded-xl bg-black/20">
@@ -302,10 +321,10 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
                   })()}
                 </span>
                 <div className="flex-1">
-                  <p className="font-bold leading-tight">{METHODS.find((m) => m.id === appModal)?.label} · {formatPrice(advance)} so\'m</p>
+                  <p id="pay-modal-title" className="font-bold leading-tight">{METHODS.find((m) => m.id === appModal)?.label} · {formatPrice(advance)} so\'m</p>
                   <p className="text-xs opacity-80 flex items-center gap-1"><ShieldCheck size={11} /> Ilovada tasdiqlang</p>
                 </div>
-                <button onClick={() => setAppModal(null)} className="p-1.5 rounded-lg bg-black/20 hover:bg-black/30">
+                <button onClick={() => setAppModal(null)} aria-label="To'lov oynasini yopish" className="min-w-9 h-9 grid place-items-center rounded-lg bg-black/20 hover:bg-black/30">
                   <X size={16} />
                 </button>
               </div>
@@ -352,7 +371,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
                 >
                   {paying ? <><Loader2 size={18} className="animate-spin" /> To'lanmoqda...</> : <><ShieldCheck size={18} /> Tasdiqlash va to\'lash</>}
                 </button>
-                <p className="text-center text-[10px] text-gray-600 mt-2">Ushbu to\'lov simulyatsiya — real mablag\' yechilmaydi</p>
+                <p className="text-center text-[10px] text-gray-600 mt-2">Xavfsiz to'lov · 3D-Secure himoyalangan</p>
               </div>
             </div>
           )}

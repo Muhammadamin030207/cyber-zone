@@ -301,13 +301,13 @@ function UsersTab() {
         </div>
       )}
 
-      <div className="neo-card rounded-2xl overflow-x-auto">
+      <div className="neo-card rounded-2xl overflow-x-auto table-scroll-mobile">
         {loading ? (
           <div className="space-y-2 p-5">{[1, 2, 3].map((i) => <div key={i} className="h-14 rounded-xl bg-cyber-800 animate-pulse" />)}</div>
         ) : users.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-14">{t('noUsers')}</p>
         ) : (
-          <table className="w-full text-sm table-hover">
+          <table className="w-full min-w-[760px] text-sm table-hover">
             <thead>
               <tr className="text-gray-500 text-xs uppercase">
                 <th className="text-left px-5 py-3">#</th>
@@ -610,8 +610,8 @@ function PaymentsTab() {
       ) : !payments?.length ? (
         <p className="text-gray-500 text-center py-16">To'lovlar hali yo'q</p>
       ) : (
-        <div className="neo-card rounded-2xl overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="neo-card rounded-2xl overflow-x-auto table-scroll-mobile">
+          <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="text-left text-xs text-gray-500 border-b border-neon-cyan/10">
                 <th className="px-4 py-3">Foydalanuvchi</th>

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
+import { useRouter } from '@/i18n/navigation';
 import {
   Settings, Monitor, Cpu, CalendarDays, BadgePercent, Newspaper, BarChart3, MessageSquare,
   Plus, Pencil, Trash2, Loader2, AlertCircle, Check, ShieldCheck, Users, Zap,
@@ -39,6 +40,7 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
   void params;
   const t = useTranslations('admin');
   const tG = useTranslations('superAdmin');
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
 
   const [tab, setTab] = useState<Tab>('room');
@@ -49,10 +51,10 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
   useEffect(() => {
     if (!user) return;
     if (user.role !== 'ADMIN') {
-      window.location.href = user.role === 'SUPER_ADMIN' ? '/super-admin' : '/dashboard';
+      router.replace(user.role === 'SUPER_ADMIN' ? '/super-admin' : '/dashboard');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, router]);
 
   useEffect(() => {
     async function load() {
@@ -505,8 +507,8 @@ function BookingsTab({ room }: { room: Room }) {
       <h3 className="font-bold mb-4">Bronlar ({bookings.length})</h3>
       {loading ? <div className="space-y-2">{[1, 2].map((i) => <div key={i} className="h-16 rounded-xl bg-cyber-800 animate-pulse" />)}</div>
         : bookings.length === 0 ? <p className="text-sm text-gray-500 text-center py-10">Bronlar yo'q</p> : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm table-hover">
+        <div className="overflow-x-auto table-scroll-mobile">
+          <table className="w-full min-w-[720px] text-sm table-hover">
             <thead>
               <tr className="text-gray-500 text-xs uppercase">
                 <th className="text-left pb-2 pr-4">Foydalanuvchi</th>

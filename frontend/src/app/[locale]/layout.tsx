@@ -10,6 +10,7 @@ import PageTransition from '@/components/layout/PageTransition';
 import AuthInit from '@/components/providers/AuthInit';
 import HalloweenDecor from '@/components/layout/HalloweenDecor';
 import ChatWidget from '@/components/layout/ChatWidget';
+import ToastContainer from '@/components/ui/ToastContainer';
 
 const inter = Inter({ subsets: ['latin', 'latin-ext'] });
 const orbitron = Orbitron({ subsets: ['latin'], weight: ['400', '700', '900'] });
@@ -88,6 +89,7 @@ export default async function RootLayout({ children, params }: Props) {
           <Footer />
           <BottomTabBar />
           <ChatWidget />
+          <ToastContainer />
         </NextIntlClientProvider>
       </body>
     </html>

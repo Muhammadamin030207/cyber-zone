@@ -17,6 +17,7 @@ export default function ChatWidget() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
@@ -25,7 +26,10 @@ export default function ChatWidget() {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        setOpen(false);
+        toggleRef.current?.focus();
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -65,6 +69,7 @@ export default function ChatWidget() {
         {open && (
           <div
             role="dialog"
+            aria-modal="true"
             aria-label="Cyber-ZONE AI yordamchi"
             className="w-[min(94vw,380px)] rounded-2xl glass border border-neon-cyan/25 shadow-2xl overflow-hidden flex flex-col panel-pop"
           >
@@ -79,8 +84,12 @@ export default function ChatWidget() {
                   <div className="text-[10px] text-neon-green flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-neon-green animate-pulse" /> onlayn</div>
                 </div>
               </div>
-              <button onClick={() => setOpen(false)} className="p-1.5 rounded-lg text-gray-400 hover:bg-white/5">
-                <X size={16} />
+              <button
+                onClick={() => setOpen(false)}
+                aria-label="AI yordamchini yopish"
+                className="min-w-9 h-9 grid place-items-center rounded-lg text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
+              >
+                <X size={17} />
               </button>
             </div>
 
@@ -122,12 +131,14 @@ export default function ChatWidget() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && send()}
                 placeholder="Savol yozing..."
+                aria-label="AI yordamchiga savol yozish"
                 className="glass-input flex-1 rounded-xl px-3 py-2.5 text-sm outline-none"
               />
               <button
                 onClick={send}
                 disabled={sending || !input.trim()}
-                className="p-2.5 rounded-xl neon-btn disabled:opacity-40"
+                aria-label="Xabar yuborish"
+                className="min-w-11 h-11 rounded-xl neon-btn disabled:opacity-40 grid place-items-center"
               >
                 <Send size={16} />
               </button>
@@ -137,6 +148,7 @@ export default function ChatWidget() {
 
         {/* Toggle */}
         <button
+          ref={toggleRef}
           onClick={() => setOpen((o) => !o)}
           className="w-14 h-14 rounded-full neon-btn ai-fab flex items-center justify-center text-white"
           aria-label={open ? 'AI yordamchini yopish' : 'AI yordamchini ochish'}

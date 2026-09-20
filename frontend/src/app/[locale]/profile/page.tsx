@@ -1,14 +1,23 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   Mail, Phone, UserRound, Save, Loader2, KeyRound, ShieldCheck, CalendarDays, LogOut, Coins,
+  Lock, Camera, X, Undo2,
 } from 'lucide-react';
 import { useRouter, Link } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
 import api, { getApiErrorMessage } from '@/lib/api';
+import { toastSuccess, toastError } from '@/lib/toast';
 import SupportChat from '@/components/support/SupportChat';
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'U';
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 export default function ProfilePage({ params }: { params: Promise<{ locale: string }> }) {
   void params;
@@ -23,14 +32,16 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<string | null>(null);
-  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const [oldPass, setOldPass] = useState('');
   const [newPass, setNewPass] = useState('');
   const [passSaving, setPassSaving] = useState(false);
-  const [passMsg, setPassMsg] = useState<string | null>(null);
-  const [passErr, setPassErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialized && !user) router.replace('/login');
@@ -38,8 +49,14 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
 
   useEffect(() => {
     if (user) {
-      setFullName(user.fullName || '');
-      setPhone(user.phone || '');
+      const u = user;
+      queueMicrotask(() => {
+        setFullName(u.fullName || '');
+        setPhone(u.phone || '');
+        setAvatarUrl(u.avatarUrl || null);
+        setDirty(false);
+        setPreview(null);
+      });
     }
   }, [user]);
 
@@ -55,31 +72,74 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
     );
   }
 
+  const currentUser = user;
+
   async function saveProfile() {
+    const name = fullName.trim();
+    if (name.length < 3) {
+      toastError("Ism kamida 3 ta belgidan iborat bo'lishi kerak");
+      return;
+    }
     setSaving(true);
-    setSaveErr(null);
-    setSaveMsg(null);
-try {
-      const { data } = await api.put('/api/auth/profile', { fullName, phone });
-      setAuth({ user: { ...user!, ...(data.data || {}) }, accessToken: token!, refreshToken: '' });
-      setSaveMsg('Ma\'lumotlar saqlandi');
+    try {
+      const { data } = await api.put('/api/auth/profile', { fullName: name, phone: phone.trim() });
+      setAuth({ user: { ...currentUser, ...(data.data || {}) }, accessToken: token!, refreshToken: '' });
+      setDirty(false);
+      toastSuccess("Ma'lumotlar saqlandi");
     } catch (e) {
-      setSaveErr(getApiErrorMessage(e, "Saqlashda xatolik"));
+      toastError(getApiErrorMessage(e, 'Saqlashda xatolik'));
     }
     setSaving(false);
   }
 
+  function resetProfile() {
+    setFullName(currentUser.fullName || '');
+    setPhone(currentUser.phone || '');
+    setPreview(null);
+    setAvatarUrl(currentUser.avatarUrl || null);
+    if (fileRef.current) fileRef.current.value = '';
+    setDirty(false);
+  }
+
+  async function uploadAvatar(file: File) {
+    if (!file) return;
+    if (!/^image\/(png|jpe?g|webp|gif)$/.test(file.type)) {
+      toastError("Faqat rasm fayl yuklash mumkin (PNG, JPG, WEBP, GIF)");
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    setPreview(objectUrl);
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const { data } = await api.post('/api/auth/avatar', fd);
+      const newAvatar = data.data?.avatarUrl || avatarUrl;
+      setAuth({ user: { ...currentUser, avatarUrl: newAvatar }, accessToken: token!, refreshToken: '' });
+      setAvatarUrl(newAvatar);
+      toastSuccess('Avatar yangilandi');
+    } catch (e) {
+      setPreview(null);
+      toastError(getApiErrorMessage(e, "Avatarni yuklashda xatolik"));
+    } finally {
+      setUploading(false);
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
   async function changePass() {
+    if (newPass.length < 6) {
+      toastError("Yangi parol kamida 6 ta belgidan iborat bo'lishi kerak");
+      return;
+    }
     setPassSaving(true);
-    setPassErr(null);
-    setPassMsg(null);
     try {
       await api.put('/api/auth/change-password', { oldPassword: oldPass, newPassword: newPass });
-      setPassMsg("Parol o'zgartirildi");
+      toastSuccess("Parol o'zgartirildi");
       setOldPass('');
       setNewPass('');
     } catch (e) {
-      setPassErr(getApiErrorMessage(e, "Parol almashishda xatolik"));
+      toastError(getApiErrorMessage(e, 'Parol almashishda xatolik'));
     }
     setPassSaving(false);
   }
@@ -98,21 +158,51 @@ try {
           {/* Info card */}
           <div className="neo-card rounded-2xl p-6">
             <div className="flex items-start justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-neon-cyan via-neon-purple to-neon-magenta grid place-items-center font-extrabold text-2xl text-white shadow-glow">
-                  {(user.fullName || '?').slice(0, 1).toUpperCase()}
-                </div>
-                <div>
-                  <p className="font-bold text-lg">{user.fullName}</p>
-                  <p className="text-sm text-gray-400 flex items-center gap-1.5">
-                    <Mail size={13} /> {user.email}
+              <div className="flex items-center gap-4 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploading}
+                  aria-label="Avatarni o'zgartirish"
+                  data-tip="Avatarni o'zgartirish"
+                  className="group relative w-20 h-20 rounded-2xl overflow-hidden shrink-0 border border-neon-cyan/25 bg-gradient-to-br from-neon-cyan via-neon-purple to-neon-magenta grid place-items-center font-extrabold text-3xl text-white shadow-glow disabled:opacity-70"
+                >
+                  {preview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={preview} alt="Yangi avatar" className="absolute inset-0 w-full h-full object-cover" />
+                  ) : avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={avatarUrl} alt={user.fullName} className="absolute inset-0 w-full h-full object-cover" />
+                  ) : (
+                    initials(user.fullName)
+                  )}
+                  <span className="absolute inset-0 grid place-items-center bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {uploading ? <Loader2 size={18} className="animate-spin text-neon-cyan" /> : <Camera size={18} className="text-white" />}
+                  </span>
+                </button>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadAvatar(f);
+                  }}
+                />
+                <div className="min-w-0">
+                  <p className="font-bold text-lg truncate">{user.fullName}</p>
+                  <p className="text-sm text-gray-400 flex items-center gap-1.5 truncate">
+                    <Mail size={13} className="shrink-0" /> {user.email}
                   </p>
                   <span className="inline-flex items-center gap-1 mt-2 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-yellow-400/10 text-yellow-300 border border-yellow-400/20">
                     <ShieldCheck size={11} /> {roleLabel}
                   </span>
                 </div>
               </div>
-              <div className="text-right text-xs text-gray-500">
+              <div className="text-right text-xs text-gray-500 shrink-0">
                 <p className="flex items-center justify-end gap-1.5">
                   <CalendarDays size={13} />
                   {user.createdAt ? new Date(user.createdAt).toLocaleDateString('uz-UZ') : '—'}
@@ -124,42 +214,82 @@ try {
 
           {/* Edit */}
           <div className="neo-card rounded-2xl p-6">
-            <h3 className="font-bold mb-4 flex items-center gap-2">
-              <Save size={16} className="text-neon-cyan" /> Ma&apos;lumotlarni tahrirlash
-            </h3>
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-5">
+              <h3 className="font-bold flex items-center gap-2">
+                <Save size={16} className="text-neon-cyan" /> Ma&apos;lumotlarni tahrirlash
+              </h3>
+              {dirty && (
+                <span className="text-[10px] px-2 py-1 rounded-full bg-yellow-400/10 text-yellow-300 border border-yellow-400/20 font-bold">
+                  O&apos;zgarishlar saqlanmagan
+                </span>
+              )}
+            </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5 flex items-center gap-1">
+                <label htmlFor="profile-fullName" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5 flex items-center gap-1">
                   <UserRound size={12} /> To&apos;liq ism
                 </label>
                 <input
+                  id="profile-fullName"
                   value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  onChange={(e) => { setFullName(e.target.value); setDirty(true); }}
                   className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
                   placeholder="Ism Familiya"
                 />
               </div>
               <div>
-                <label className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5 flex items-center gap-1">
+                <label htmlFor="profile-phone" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5 flex items-center gap-1">
                   <Phone size={12} /> Telefon
                 </label>
                 <input
+                  id="profile-phone"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => { setPhone(e.target.value); setDirty(true); }}
                   className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
                   placeholder="+998 90 123 45 67"
+                  autoComplete="tel"
                 />
               </div>
-              {saveMsg && <p className="text-sm text-neon-green">{saveMsg}</p>}
-              {saveErr && <p className="text-sm text-red-400">{saveErr}</p>}
-              <button
-                onClick={saveProfile}
-                disabled={saving}
-                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl neon-btn font-bold text-sm disabled:opacity-60"
-              >
-                {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                Saqlash
-              </button>
+              <div>
+                <label htmlFor="profile-email" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5 flex items-center gap-1">
+                  <Mail size={12} /> Email
+                </label>
+                <div className="relative">
+                  <input
+                    id="profile-email"
+                    value={user.email}
+                    readOnly
+                    disabled
+                    aria-readonly="true"
+                    className="glass-input w-full rounded-xl pl-3 pr-12 py-2.5 text-sm outline-none opacity-70 cursor-not-allowed"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                    <Lock size={14} />
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1.5 flex items-center gap-1">
+                  <Lock size={11} className="text-neon-cyan shrink-0" />
+                  Email manzilini o&apos;zgartirib bo&apos;lmaydi — u hisobingizning identifikatori hisoblanadi.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  onClick={saveProfile}
+                  disabled={saving || !dirty}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl neon-btn font-bold text-sm disabled:opacity-50"
+                >
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  Saqlash
+                </button>
+                <button
+                  onClick={resetProfile}
+                  disabled={saving || !dirty}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl btn-ghost text-sm font-medium disabled:opacity-50"
+                >
+                  <Undo2 size={15} /> Bekor qilish
+                </button>
+              </div>
             </div>
           </div>
 
@@ -169,22 +299,30 @@ try {
               <KeyRound size={16} className="text-neon-magenta" /> Parolni o&apos;zgartirish
             </h3>
             <div className="space-y-4">
-              <input
-                type="password"
-                value={oldPass}
-                onChange={(e) => setOldPass(e.target.value)}
-                placeholder="Joriy parol"
-                className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-              />
-              <input
-                type="password"
-                value={newPass}
-                onChange={(e) => setNewPass(e.target.value)}
-                placeholder="Yangi parol (kamida 6 belgi)"
-                className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-              />
-              {passMsg && <p className="text-sm text-neon-green">{passMsg}</p>}
-              {passErr && <p className="text-sm text-red-400">{passErr}</p>}
+              <div>
+                <label htmlFor="profile-oldPass" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5">Joriy parol</label>
+                <input
+                  id="profile-oldPass"
+                  type="password"
+                  value={oldPass}
+                  onChange={(e) => setOldPass(e.target.value)}
+                  placeholder="Joriy parol"
+                  autoComplete="current-password"
+                  className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="profile-newPass" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5">Yangi parol</label>
+                <input
+                  id="profile-newPass"
+                  type="password"
+                  value={newPass}
+                  onChange={(e) => setNewPass(e.target.value)}
+                  placeholder="Yangi parol (kamida 6 belgi)"
+                  autoComplete="new-password"
+                  className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
+                />
+              </div>
               <button
                 onClick={changePass}
                 disabled={passSaving || !oldPass || !newPass}
@@ -220,6 +358,22 @@ try {
             <p className="text-xs text-gray-500 mt-2 leading-relaxed">
               Har bir to&apos;lov uchun 1% ball beriladi. Ballarni bron qilishda chegirma sifatida
               ishlatishingiz mumkin (narxning 50% gacha).
+            </p>
+          </div>
+          <div className="neo-card rounded-2xl p-6">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/25 grid place-items-center">
+                <X size={20} className="text-red-400" />
+              </span>
+              <div>
+                <p className="font-bold leading-tight">Hisob xavfsizligi</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Email immutable</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Sizning emailingiz (<span className="text-gray-300">{user.email}</span>) hisobingizga bog&apos;langan
+              va uni faqat texnik yordam orqali almashtirish mumkin. Backend tomonida ham email o&apos;zgartirish
+              taqiqlangan.
             </p>
           </div>
           {user.role === 'SUPER_ADMIN' ? (

@@ -261,7 +261,6 @@ button:not(:disabled) {
   transition: transform 0.16s ease, filter 0.16s ease, box-shadow 0.16s ease,
     border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease,
     opacity 0.16s ease;
-  will-change: transform;
 }
 button:not(:disabled):hover {
   transform: translateY(-1px);
@@ -478,16 +477,6 @@ a:hover { opacity: 0.92; }
   transform: translateY(-2px);
   border-color: color-mix(in srgb, var(--acc-a) 20%, var(--line-strong));
   box-shadow: 0 10px 26px -16px color-mix(in srgb, var(--acc-a) 20%, transparent);
-}
-
-.btn-ghost {
-  border: 1px solid var(--line-strong);
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.btn-ghost:hover {
-  border-color: color-mix(in srgb, var(--acc-a) 45%, transparent);
-  background: color-mix(in srgb, var(--acc-a) 7%, transparent);
 }
 
 .btn-amber {

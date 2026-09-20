@@ -1,29 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link, usePathname } from '@/i18n/navigation';
-import { Menu, X, LogIn, LayoutDashboard, Crown, MessageSquare } from 'lucide-react';
+import { LogIn, LayoutDashboard, Crown, MessageSquare } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
+import { useChatUnread } from '@/hooks/useChatUnread';
 import LanguageSwitcher from './LanguageSwitcher';
 import ThemeSwitcher from './ThemeSwitcher';
 import Logo from '@/components/brand/Logo';
 
 export default function Header() {
   const t = useTranslations('nav');
-  const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-
-  useEffect(() => {
-    if (!mobileOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMobileOpen(false);
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [mobileOpen]);
+  const unread = useChatUnread();
 
   const links = [
     { href: '/', label: t('home') },
@@ -39,7 +30,6 @@ export default function Header() {
       <Link
         key={l.href}
         href={l.href}
-        onClick={() => setMobileOpen(false)}
         aria-current={isActive(l.href) ? 'page' : undefined}
         className={`px-3.5 py-2 text-sm font-medium rounded-lg transition-colors ${
           isActive(l.href)
@@ -60,11 +50,11 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 glass border-b border-neon-cyan/15">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center justify-between h-14 md:h-16">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 group">
-          <Logo size={34} />
-          <span className="font-[--font-orbitron] font-bold tracking-widest text-lg">
+        <Link href="/" className="flex items-center gap-2 group shrink-0">
+          <Logo size={30} />
+          <span className="font-[--font-orbitron] font-bold tracking-widest text-base md:text-lg">
             CYBER<span className="text-neon-cyan">-ZONE</span>
           </span>
         </Link>
@@ -72,7 +62,7 @@ export default function Header() {
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-1">{navItems}</nav>
 
-        {/* Actions */}
+        {/* Desktop actions */}
         <div className="hidden md:flex items-center gap-2">
           <ThemeSwitcher />
           <LanguageSwitcher />
@@ -98,16 +88,21 @@ export default function Header() {
               )}
               <Link
                 href="/chat"
-                data-tip="Xabarlar"
+                data-tip={unread > 0 ? `Xabarlar (${unread})` : 'Xabarlar'}
                 data-tip-top
-                aria-label="Xabarlar"
-                className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                aria-label={unread > 0 ? `Xabarlar — ${unread} ta o'qilmagan` : 'Xabarlar'}
+                className={`relative w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
                   isActive('/chat')
                     ? 'text-neon-cyan bg-neon-cyan/15 border border-neon-cyan/30'
                     : 'text-gray-200 bg-cyber-800 border border-white/10 hover:border-neon-cyan/40'
                 }`}
               >
                 <MessageSquare size={16} />
+                {unread > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-neon-magenta text-white text-[10px] font-extrabold grid place-items-center border border-white/20">
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                )}
               </Link>
               <Link
                 href="/dashboard"
@@ -130,60 +125,40 @@ export default function Header() {
               </button>
             </>
           ) : (
-            <>
-              <Link
-                href="/login"
-                className="px-4 py-2 text-sm font-bold rounded-xl neon-btn flex items-center gap-1"
-              >
-                <LogIn size={16} />
-                {t('login')}
-              </Link>
-            </>
+            <Link
+              href="/login"
+              className="px-4 py-2 text-sm font-bold rounded-xl neon-btn flex items-center gap-1"
+            >
+              <LogIn size={16} />
+              {t('login')}
+            </Link>
           )}
         </div>
 
-        {/* Mobile toggle */}
-        <div className="md:hidden flex items-center gap-2">
+        {/* Mobile actions — theme + language + chat (BottomTabBar orqali asosiy nav) */}
+        <div className="md:hidden flex items-center gap-0.5">
+          {user && (
+            <Link
+              href="/chat"
+              aria-label={unread > 0 ? `Xabarlar — ${unread} ta o'qilmagan` : 'Xabarlar'}
+              className={`relative w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                isActive('/chat')
+                  ? 'text-neon-cyan bg-neon-cyan/15 border border-neon-cyan/30'
+                  : 'text-gray-200 bg-cyber-800 border border-white/10'
+              }`}
+            >
+              <MessageSquare size={17} />
+              {unread > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-neon-magenta text-white text-[10px] font-extrabold grid place-items-center border border-white/20">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
+            </Link>
+          )}
           <ThemeSwitcher />
           <LanguageSwitcher />
-          <button
-            onClick={() => setMobileOpen((o) => !o)}
-            aria-expanded={mobileOpen}
-            aria-controls="mobile-menu"
-            aria-label={mobileOpen ? 'Menyuni yopish' : 'Menyuni ochish'}
-            className="p-2 rounded-lg text-gray-300 hover:bg-white/5"
-          >
-            {mobileOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
         </div>
       </div>
-
-      {/* Mobile menu */}
-      {mobileOpen && (
-        <div id="mobile-menu" className="md:hidden glass border-t border-neon-cyan/15 px-4 py-3 flex flex-col gap-1 panel-pop">
-          {navItems}
-          <div className="h-px bg-neon-cyan/15 my-2" />
-          {user ? (
-            <>
-              {user.role === 'SUPER_ADMIN' && (
-                <Link href="/super-admin" onClick={() => setMobileOpen(false)} className="px-3 py-2 text-sm font-medium text-yellow-300">{t('superAdmin')}</Link>
-              )}
-              {user.role === 'ADMIN' && (
-                <Link href="/admin" onClick={() => setMobileOpen(false)} className="px-3 py-2 text-sm font-medium text-neon-green">{t('admin')}</Link>
-              )}
-              <Link href="/chat" onClick={() => setMobileOpen(false)} className="px-3 py-2 text-sm font-medium text-gray-300 flex items-center gap-2"><MessageSquare size={16} /> Xabarlar</Link>
-              <Link href="/dashboard" onClick={() => setMobileOpen(false)} className="px-3 py-2 text-sm font-medium text-gray-300">{t('dashboard')}</Link>
-              <button onClick={() => { logout(); setMobileOpen(false); }} className="px-3 py-2 text-sm font-medium text-red-400 text-left">
-                {t('logout')}
-              </button>
-            </>
-          ) : (
-            <>
-              <Link href="/login" onClick={() => setMobileOpen(false)} className="px-4 py-2 text-sm font-bold rounded-lg neon-btn text-center">{t('login')}</Link>
-            </>
-          )}
-        </div>
-      )}
     </header>
   );
 }
