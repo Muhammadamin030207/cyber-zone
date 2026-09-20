@@ -20,10 +20,12 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+const authEndpointRe = /\/api\/auth\/(login|login\/google|register|refresh|forgot-password|reset-password)$/;
+
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    if (err.response?.status === 401 && !authEndpointRe.test(err.config?.url || '')) {
       const event = new CustomEvent('auth:unauthorized');
       window.dispatchEvent(event);
     }

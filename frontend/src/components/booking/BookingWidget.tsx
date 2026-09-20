@@ -10,7 +10,7 @@ import api, { getApiErrorMessage } from '@/lib/api';
 import type { Room, AvailabilityZone } from '@/lib/types';
 import { formatPrice, formatDate, toNumber, cn, todayISO, businessNowHHMM } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
-import SeatMap from './SeatMap';
+import SeatMap, { type SeatInfo } from './SeatMap';
 
 interface Props {
   room: Room;
@@ -338,7 +338,15 @@ async function submit() {
             </div>
             {!autoPc && (
               <SeatMap
-                computers={selectedZone.allComputers || selectedZone.computers.map((c) => ({ ...c, status: 'AVAILABLE', canBook: true }))}
+                computers={(selectedZone.allComputers || []).map((c) => ({
+                  id: c.id,
+                  name: c.name,
+                  specs: c.specs,
+                  status: c.status as SeatInfo['status'],
+                  canBook:
+                    c.status === 'AVAILABLE' &&
+                    !c.bookedSlots?.some((s) => slotsOverlap(startTime, endTime, s.start, s.end)),
+                }))}
                 selectedId={computerId}
                 onSelect={(id) => setComputerId(id)}
               />

@@ -149,6 +149,7 @@ export interface AvailabilityZone {
     Pick<Computer, 'id' | 'name' | 'specs' | 'status'> & {
       canBook: boolean;
       bookedSlots: Array<{ start: string; end: string }>;
+      freeWindows?: Array<{ start: string; end: string }>;
     }
   >;
 }
