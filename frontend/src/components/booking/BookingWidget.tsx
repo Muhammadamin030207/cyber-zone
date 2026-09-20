@@ -8,7 +8,7 @@ import {
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { Room, AvailabilityZone } from '@/lib/types';
-import { formatPrice, formatDate, toNumber, cn } from '@/lib/utils';
+import { formatPrice, formatDate, toNumber, cn, todayISO, businessNowHHMM } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
 import SeatMap from './SeatMap';
 
@@ -22,6 +22,25 @@ interface Props {
 interface PromoCheck {
   discountType: 'PERCENTAGE' | 'FIXED';
   discountValue: number;
+}
+
+function minutesOf(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function slotsOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
+  let a0 = minutesOf(aStart);
+  let a1 = minutesOf(aEnd);
+  let b0 = minutesOf(bStart);
+  let b1 = minutesOf(bEnd);
+  if (a0 >= 1440) a0 %= 1440;
+  if (b0 >= 1440) b0 %= 1440;
+  if (a1 === 0) a1 = 1440;
+  if (b1 === 0) b1 = 1440;
+  if (a1 <= a0) a1 += 1440;
+  if (b1 <= b0) b1 += 1440;
+  return a0 < b1 && a1 > b0;
 }
 
 export default function BookingWidget({ room, date, onDateChange, availability }: Props) {
@@ -62,6 +81,27 @@ export default function BookingWidget({ room, date, onDateChange, availability }
   }, [startTime, endTime]);
 
   const timeOk = durationHours > 0;
+
+  // Tanlangan oynada bo'sh kompyuterlar soni (bookedSlots — server haqiqiy band vaqtlar)
+  const freeInWindow = useMemo(() => {
+    if (!selectedZone) return 0;
+    const comps = selectedZone.allComputers || [];
+    return comps.filter(
+      (c) => c.status === 'AVAILABLE' && !c.bookedSlots?.some((s) => slotsOverlap(startTime, endTime, s.start, s.end))
+    ).length;
+  }, [selectedZone, startTime, endTime]);
+
+  // Tanlangan kompyuter ushbu oynada bo'shmi (manual tanlov uchun)
+  const selectedComputerFree = useMemo(() => {
+    if (autoPc || !computerId || !selectedZone) return true;
+    const comp = (selectedZone.allComputers || []).find((c) => c.id === computerId);
+    if (!comp || comp.status !== 'AVAILABLE') return false;
+    return !comp.bookedSlots?.some((s) => slotsOverlap(startTime, endTime, s.start, s.end));
+  }, [autoPc, computerId, selectedZone, startTime, endTime]);
+
+  // Bugun (Toshkent) uchun o'tgan vaqtni bloklash
+  const isToday = date === todayISO();
+  const startInPast = isToday && minutesOf(startTime) < minutesOf(businessNowHHMM());
 
   function applyDuration(hours: number) {
     const [sh, sm] = startTime.split(':').map(Number);
@@ -121,14 +161,27 @@ export default function BookingWidget({ room, date, onDateChange, availability }
     setPromoCode('');
   }
 
-  async function submit() {
+async function submit() {
     if (!user) {
       router.push(`/login?redirect=${encodeURIComponent(`/rooms/${room.id}`)}`);
       return;
     }
+    if (isToday && startInPast) {
+      setError('Boshlanish vaqti allaqachon o\u2018tib ketgan. Boshqa vaqtni tanlang.');
+      setTimeError('Hozirgi vaqtdan oldingi vaqtni tanlab bo\u2018lmaydi.');
+      return;
+    }
     if (!zoneId || !timeOk) {
       setError(t('notAvailable'));
-      if (!timeOk) setTimeError('Tugash vaqti boshlanish vaqtidan keyin bo‘lishi kerak.');
+      if (!timeOk) setTimeError('Tugash vaqti boshlanish vaqtidan keyin bo\u2018lishi kerak.');
+      return;
+    }
+    if (freeInWindow === 0) {
+      setError('Bu vaqt oralig\u2018ida bo\u2018sh kompyuter yo\u2018q. Boshqa vaqtni tanlang.');
+      return;
+    }
+    if (!autoPc && computerId && !selectedComputerFree) {
+      setError('Tanlangan kompyuter bu vaqtda band. Boshqa kompyuter yoki vaqtni tanlang.');
       return;
     }
     setSubmitting(true);
@@ -214,7 +267,7 @@ export default function BookingWidget({ room, date, onDateChange, availability }
           <input
             type="date"
             value={date}
-            min={new Date().toISOString().slice(0, 10)}
+            min={todayISO()}
             onChange={(e) => {
               onDateChange(e.target.value);
               setError(null);
@@ -345,6 +398,16 @@ export default function BookingWidget({ room, date, onDateChange, availability }
               Tugash vaqti boshlanish vaqtidan keyin bo‘lishi kerak.
             </p>
           )}
+          {timeOk && freeInWindow === 0 && (
+            <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
+              Bu vaqt oralig‘ida bo‘sh kompyuter yo‘q — boshqa vaqtni tanlang.
+            </p>
+          )}
+          {timeOk && freeInWindow > 0 && autoPc && (
+            <p className="text-xs text-gray-500 mt-1.5">
+              Bu vaqtda {freeInWindow} ta bo‘sh kompyuter bor.
+            </p>
+          )}
         </div>
 
         {/* Promo */}
@@ -453,7 +516,7 @@ export default function BookingWidget({ room, date, onDateChange, availability }
         {/* Submit */}
         <button
           onClick={submit}
-          disabled={submitting || availability.length === 0 || !timeOk}
+          disabled={submitting || availability.length === 0 || !timeOk || (isToday && startInPast) || freeInWindow === 0 || (!autoPc && Boolean(computerId) && !selectedComputerFree)}
           className="w-full py-3.5 rounded-xl neon-btn flex items-center justify-center gap-2 font-bold text-base disabled:opacity-50"
         >
           {submitting ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}

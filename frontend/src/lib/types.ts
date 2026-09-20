@@ -86,7 +86,15 @@ export interface PromoCode {
   isActive: boolean;
 }
 
-export type BookingStatus = 'PENDING' | 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+export type BookingStatus =
+  | 'PENDING'
+  | 'PENDING_PAYMENT'
+  | 'PARTIALLY_PAID'
+  | 'PAID'
+  | 'CONFIRMED'
+  | 'ACTIVE'
+  | 'COMPLETED'
+  | 'CANCELLED';
 
 export interface Booking {
   id: string;
@@ -121,9 +129,11 @@ export interface Payment {
   userId: string;
   amount: number | string;
   type: 'ADVANCE' | 'REMAINING';
-  method?: 'PAYME' | 'CLICK' | 'UZCARD' | 'HUMO' | 'UZUM' | 'CASH' | null;
-  status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
+  method?: 'PAYME' | 'CLICK' | 'UZCARD' | 'HUMO' | 'UZUM' | 'PAYNET' | 'CASH' | null;
+  provider?: 'PAYME' | 'CLICK' | 'UZUM' | 'PAYNET' | null;
+  status: 'CREATED' | 'PENDING' | 'REDIRECT_REQUIRED' | 'PROCESSING' | 'PAID' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'EXPIRED' | 'REFUNDED';
   paidAt?: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface AvailabilityZone {
@@ -135,7 +145,12 @@ export interface AvailabilityZone {
   bookedComputers: number;
   availableComputers: number;
   computers: Array<Pick<Computer, 'id' | 'name' | 'specs'>>;
-  allComputers?: Array<Pick<Computer, 'id' | 'name' | 'specs' | 'status'> & { canBook: boolean }>;
+  allComputers?: Array<
+    Pick<Computer, 'id' | 'name' | 'specs' | 'status'> & {
+      canBook: boolean;
+      bookedSlots: Array<{ start: string; end: string }>;
+    }
+  >;
 }
 
 export interface NewsItem {

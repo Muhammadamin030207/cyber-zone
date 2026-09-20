@@ -39,10 +39,14 @@ export default function ChatWidget() {
     const text = input.trim();
     if (!text || sending) return;
     setInput('');
+    const history = [...messages, { role: 'user', text } as Msg]
+      .filter((m) => !(m.role === 'bot' && m.text === WELCOME))
+      .slice(-8)
+      .map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
     setMessages((m) => [...m, { role: 'user', text }]);
     setSending(true);
     try {
-      const { data } = await api.post<{ success: boolean; data: { reply: string } }>('/api/ai/chat', { message: text });
+      const { data } = await api.post<{ success: boolean; data: { reply: string } }>('/api/ai/chat', { message: text, history });
       setMessages((m) => [...m, { role: 'bot', text: data.data.reply }]);
     } catch (err) {
       setMessages((m) => [...m, { role: 'bot', text: getApiErrorMessage(err, 'Kechirasiz, xatolik yuz berdi.') }]);

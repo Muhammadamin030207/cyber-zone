@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Loader2, CheckCircle2, CreditCard, Wallet, Banknote, Smartphone, AlertCircle,
-  ArrowRight, Landmark, BadgePercent, Clock, MapPin, Monitor, ChevronLeft, X, ShieldCheck, Zap,
+  ArrowRight, BadgePercent, Clock, MapPin, Monitor, ChevronLeft, RefreshCw, Zap,
+  type LucideIcon,
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -14,16 +15,25 @@ import { useAuthStore } from '@/store/auth';
 import TicketQR from '@/components/booking/TicketQR';
 import SplashLoader from '@/components/ui/SplashLoader';
 
-type PayMethod = 'PAYME' | 'CLICK' | 'UZCARD' | 'HUMO' | 'UZUM' | 'CASH';
+type PayMethod = 'PAYME' | 'CLICK' | 'UZUM' | 'PAYNET' | 'TEST' | 'CASH';
 
-const METHODS: { id: PayMethod; label: string; sub: string; icon: any; color: string }[] = [
-  { id: 'PAYME', label: 'Payme', sub: 'Telefon ilovasi', icon: Smartphone, color: 'bg-[#00C7F0]/10 text-[#22d3ee] border-[#00C7F0]/30' },
-  { id: 'CLICK', label: 'Click', sub: 'Tez va oson', icon: Zap, color: 'bg-[#ED1C24]/10 text-[#ff5a60] border-[#ED1C24]/30' },
-  { id: 'UZUM', label: 'Uzum Bank', sub: 'Raqamli bank', icon: Wallet, color: 'bg-[#7000FF]/15 text-[#a86bff] border-[#7000FF]/40' },
-  { id: 'UZCARD', label: 'Uzcard', sub: 'Bank kartasi', icon: CreditCard, color: 'bg-[#2456A6]/10 text-[#4f83c9] border-[#2456A6]/40' },
-  { id: 'HUMO', label: 'Humo', sub: 'Bank kartasi', icon: CreditCard, color: 'bg-[#0066B3]/10 text-[#3b9be0] border-[#0066B3]/40' },
-  { id: 'CASH', label: 'Kassada', sub: '30% joyida to\'lash', icon: Banknote, color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
-];
+const PROVIDER_UI: Record<string, { label: string; sub: string; icon: LucideIcon; color: string }> = {
+  PAYME: { label: 'Payme', sub: 'Telefon ilovasi', icon: Smartphone, color: 'bg-[#00C7F0]/10 text-[#22d3ee] border-[#00C7F0]/30' },
+  CLICK: { label: 'Click', sub: 'Tez va oson', icon: Zap, color: 'bg-[#ED1C24]/10 text-[#ff5a60] border-[#ED1C24]/30' },
+  UZUM: { label: 'Uzum', sub: 'Raqamli bank', icon: Wallet, color: 'bg-[#7000FF]/15 text-[#a86bff] border-[#7000FF]/40' },
+  PAYNET: { label: 'Paynet', sub: 'To\'lov terminali', icon: CreditCard, color: 'bg-[#0E9F6E]/10 text-[#34d399] border-[#0E9F6E]/30' },
+  TEST: { label: 'Test to\'lov', sub: 'Test rejimi', icon: CheckCircle2, color: 'bg-neon-green/10 text-neon-green border-neon-green/30' },
+  CASH: { label: 'Kassada', sub: '30% joyida to\'lash', icon: Banknote, color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+};
+
+const SETTLED_BOOKING_STATUSES = ['PARTIALLY_PAID', 'PAID', 'CONFIRMED', 'ACTIVE', 'COMPLETED'];
+const TERMINAL_FAILED_PAYMENT = ['FAILED', 'CANCELLED', 'EXPIRED'];
+
+interface ProviderInfo {
+  method: string;
+  label: string;
+  available: boolean;
+}
 
 export default function CheckoutPage({ params }: { params: Promise<{ locale: string; id: string }> }) {
   void params;
@@ -35,68 +45,118 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [method, setMethod] = useState<PayMethod>('PAYME');
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardHolder, setCardHolder] = useState('');
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [isTestMode, setIsTestMode] = useState(false);
+  const [method, setMethod] = useState<PayMethod>('CASH');
+
   const [paying, setPaying] = useState(false);
-  const [paid, setPaid] = useState(false);
   const [cashNotified, setCashNotified] = useState(false);
-  const [appModal, setAppModal] = useState<PayMethod | null>(null);
-  const [modalSuccess, setModalSuccess] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [verifyPayment, setVerifyPayment] = useState<{ id: string; test: boolean } | null>(null);
+  const [polling, setPolling] = useState(false);
 
+  // Provayderlar holati (qaysilari ulangan — backend javobi)
   useEffect(() => {
-    if (!appModal) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !modalSuccess) setAppModal(null);
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [appModal, modalSuccess]);
+    api
+      .get('/api/payments/providers')
+      .then(({ data }) => {
+        const d = data.data;
+        setProviders((d?.providers as ProviderInfo[]) || []);
+        setIsTestMode(d?.mode === 'test');
+      })
+      .catch(() => setProviders([]));
+  }, []);
 
+  // Bronni yuklash + oynada pid/test bo'lsa tasdiqlash jarayonini boshlash
   useEffect(() => {
+    let cancelled = false;
     api
       .get(`/api/bookings/${id}`)
       .then(({ data }) => {
         const b = data.data as Booking;
+        if (cancelled) return;
         setBooking(b);
-        if (b.status === 'CONFIRMED' || b.status === 'ACTIVE') setPaid(true);
+        if (SETTLED_BOOKING_STATUSES.includes(b.status)) setVerified(true);
       })
-      .catch((err) => setError(getApiErrorMessage(err)))
-      .finally(() => setLoading(false));
+      .catch((err) => { if (!cancelled) setError(getApiErrorMessage(err)); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    // Provayderdan qaytish URL: /checkout/:id/pay?pid=...&test=1
+    const search = new URLSearchParams(window.location.search);
+    const pid = search.get('pid');
+    if (pid && !cancelled) {
+      setVerifyPayment({ id: pid, test: search.get('test') === '1' });
+    } else if (!cancelled) {
+      // Davom etmagan sessiyani qayta boshlash (aktiv to'lov bor bo'lsa)
+      api
+        .get(`/api/payments/${id}`)
+        .then(({ data }) => {
+          const active = (data.data?.payments as any[] | undefined)
+            ?.find((p) => ['CREATED', 'REDIRECT_REQUIRED', 'PROCESSING'].includes(p.status));
+          if (active && !cancelled) setVerifyPayment({ id: active.id, test: (active.metadata as any)?.providerMethod === 'test' });
+        })
+        .catch(() => undefined);
+    }
+    return () => { cancelled = true; };
   }, [id]);
 
-  async function payNow() {
+  // To'lov holatini backend'dan kuzatish (server bu yerda provayder bilan verify qiladi)
+  useEffect(() => {
+    if (!verifyPayment) return;
+    let cancelled = false;
+    let tries = 0;
+    setPolling(true);
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const { data } = await api.get(`/api/payments/${verifyPayment.id}/status`);
+        const st = data.data?.payment?.status as string | undefined;
+        const bst = data.data?.bookingStatus as string | undefined;
+        if ((st && ['PAID', 'COMPLETED'].includes(st)) || (bst && SETTLED_BOOKING_STATUSES.includes(bst))) {
+          setVerified(true);
+          setPolling(false);
+          api.get(`/api/bookings/${id}`).then((r) => { if (!cancelled) setBooking(r.data.data); }).catch(() => undefined);
+          return;
+        }
+        if (st && TERMINAL_FAILED_PAYMENT.includes(st)) {
+          setError('To\'lov amalga oshmadi. Boshqa usul bilan qayta urinib ko\'ring.');
+          setPolling(false);
+          return;
+        }
+      } catch {
+        // tarmoq xatosi — qayta urinamiz
+      }
+      tries += 1;
+      if (tries < 16 && !cancelled) setTimeout(poll, 2500);
+      else if (!cancelled) {
+        setPolling(false);
+        if (!verified) setError('To\'lov holati hali tasdiqlanmadi. Bir ozdan so\'ng qayta tekshiring yoki kabinetdan kuzating.');
+      }
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, [verifyPayment, id]);
+
+  // To'lov sessiyasini yaratish (backend summani o'zi hisoblaydi)
+  async function startPay(m: PayMethod) {
     if (!booking) return;
     setPaying(true);
     setError(null);
     try {
-      const amount = Number(booking.advanceAmount);
-
-      if (method === 'CASH') {
-        await api.post('/api/payments/create', {
-          bookingId: booking.id,
-          amount,
-          method: 'CASH',
-        });
+      const { data } = await api.post('/api/payments/create', {
+        bookingId: booking.id,
+        method: m,
+      });
+      const d = data.data;
+      if (m === 'CASH' || (data.data?.method === 'CASH')) {
         setCashNotified(true);
-      } else {
-        const { data } = await api.post('/api/payments/create', {
-          bookingId: booking.id,
-          amount,
-          method,
-        });
-        const paymentId = data.data?.id;
-        await api.post(`/api/payments/${paymentId}/pay`, {
-          cardNumber,
-          cardHolder,
-        });
-        setBooking({ ...booking, status: 'CONFIRMED' });
-        setPaid(true);
-        setModalSuccess(true);
-        setTimeout(() => {
-          setAppModal(null);
-          setModalSuccess(false);
-        }, 1400);
+      } else if (d?.checkoutUrl) {
+        if (d.isTest) setVerifyPayment({ id: d.payment.id, test: true });
+        setPolling(d.isTest);
+        window.location.href = d.checkoutUrl;
+      } else if (d?.isTest) {
+        setVerifyPayment({ id: d.payment.id, test: true });
+        setPolling(true);
       }
     } catch (err) {
       setError(getApiErrorMessage(err, 'To\'lovda xatolik yuz berdi'));
@@ -105,11 +165,20 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
     }
   }
 
-  function openApp(m: PayMethod, cardHolderName: string) {
-    setCardNumber('');
-    setCardHolder(cardHolderName.toUpperCase());
-    setModalSuccess(false);
-    setAppModal(m);
+  // TEST rejim: server-side tasdiqlash (backend PAID qiladi)
+  async function confirmTest() {
+    if (!verifyPayment) return;
+    setPaying(true);
+    setError(null);
+    try {
+      await api.post(`/api/payments/test/${verifyPayment.id}/confirm`);
+      setPolling(true);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Test to\'lovda xatolik yuz berdi'));
+      setPolling(false);
+    } finally {
+      setPaying(false);
+    }
   }
 
   if (loading) {
@@ -120,7 +189,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
     );
   }
 
-  if (error && !booking) {
+  if (error && !booking && !verifyPayment) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
         <AlertCircle size={40} className="mx-auto text-red-400 mb-3" />
@@ -131,9 +200,15 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   }
   if (!booking) return null;
 
-  const isPending = booking.status === 'PENDING';
+  const settled = SETTLED_BOOKING_STATUSES.includes(booking.status);
+  const isPending = booking.status === 'PENDING' || booking.status === 'PENDING_PAYMENT';
   const advance = Number(booking.advanceAmount);
   const remaining = Number(booking.remainingAmount);
+
+  const methodUi = PROVIDER_UI[method];
+
+  const onlineMethods = [...providers, { method: 'TEST', label: 'Test', available: isTestMode }]
+    .filter((p) => p.method !== 'TEST' || p.available);
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10 pb-24">
@@ -160,6 +235,13 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
         </div>
       )}
 
+      {polling && (
+        <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-neon-cyan/10 border border-neon-cyan/30 text-sm text-neon-cyan">
+          <Loader2 size={16} className="animate-spin" />
+          {verifyPayment?.test ? 'Test to\'lovni tasdiqlash kutilmoqda...' : 'To\'lov holati tekshirilmoqda...'}
+        </div>
+      )}
+
       {/* Booking xulosasi */}
       <div className="neo-card rounded-2xl p-5 mb-5">
         <div className="flex items-start justify-between mb-3">
@@ -170,9 +252,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
             </p>
           </div>
           <span className={cn('px-2.5 py-1 text-xs font-bold rounded-lg border',
-            booking.status === 'CONFIRMED' ? 'bg-neon-green/15 text-neon-green border-neon-green/30'
+            settled ? 'bg-neon-green/15 text-neon-green border-neon-green/30'
               : 'bg-amber-500/15 text-amber-400 border-amber-500/30')}>
-            {booking.status === 'CONFIRMED' ? 'Tasdiqlandi' : 'To\'lov kutilmoqda'}
+            {settled ? 'Tasdiqlandi' : 'To\'lov kutilmoqda'}
           </span>
         </div>
 
@@ -211,41 +293,49 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
         </div>
       </div>
 
-      {isPending ? (
+      {isPending && !settled ? (
         <>
           {/* To'lov usulini tanlash */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-5">
-            {METHODS.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setMethod(m.id)}
-                className={cn(
-                  'flex flex-col items-center gap-1 px-3 py-3.5 rounded-xl border text-center transition-colors',
-                  method === m.id
-                    ? 'border-neon-cyan/50 bg-neon-cyan/10'
-                    : 'border-white/10 bg-cyber-900 hover:border-white/20'
-                )}
-              >
-                <span className={cn('p-2 rounded-lg border', m.color)}>
-                  <m.icon size={18} />
-                </span>
-                <span className="text-sm font-semibold">{m.label}</span>
-                <span className="text-[10px] text-gray-500">{m.sub}</span>
-              </button>
-            ))}
+            {[...onlineMethods, { method: 'CASH', label: 'Kassada', available: true }].map((p) => {
+              const ui = PROVIDER_UI[p.method];
+              const Icon = ui?.icon;
+              const disabled = !p.available;
+              return (
+                <button
+                  key={p.method}
+                  onClick={() => setMethod(p.method as PayMethod)}
+                  disabled={disabled}
+                  className={cn(
+                    'flex flex-col items-center gap-1 px-3 py-3.5 rounded-xl border text-center transition-colors',
+                    method === p.method
+                      ? 'border-neon-cyan/50 bg-neon-cyan/10'
+                      : 'border-white/10 bg-cyber-900 hover:border-white/20',
+                    disabled && 'opacity-40 pointer-events-none'
+                  )}
+                >
+                  {Icon && <span className={cn('p-2 rounded-lg border', ui?.color)}><Icon size={18} /></span>}
+                  <span className="text-sm font-semibold">{ui?.label || p.label}</span>
+                  <span className="text-[10px] text-gray-500">
+                    {p.available ? ui?.sub : 'Hali ulangan emas'}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {method !== 'CASH' ? (
             <div className="neo-card rounded-2xl p-5 mb-5 flex items-center gap-4">
-              <span className={cn('p-3 rounded-xl border shrink-0', METHODS.find((m) => m.id === method)?.color)}>
-                <Wallet size={22} />
+              <span className={cn('p-3 rounded-xl border shrink-0', methodUi?.color)}>
+                {methodUi?.icon && <methodUi.icon size={22} />}
               </span>
-              <div>
-                <h3 className="font-semibold text-sm">{METHODS.find((m) => m.id === method)?.label} ilovasida to\'lash</h3>
+              <div className="flex-1">
+                <h3 className="font-semibold text-sm">{methodUi?.label} orqali to'lash</h3>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  Karta ma\'lumotlarini kiriting — to\'lov xavfsiz amalga oshiriladi
+                  To'lov ilovasi yoki provider sahifasi ochiladi — to'lov server tomonidan tasdiqlanadi.
                 </p>
               </div>
+              <Link href="/dashboard" className="text-xs text-neon-cyan hover:underline shrink-0">Bekor qilish</Link>
             </div>
           ) : (
             <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-200 mb-5">
@@ -258,13 +348,31 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
             </div>
           )}
 
+          {verifyPayment?.test && !verified && (
+            <button
+              onClick={confirmTest}
+              disabled={paying || polling}
+              className="w-full py-3.5 rounded-xl bg-neon-green/15 border border-neon-green/40 text-neon-green flex items-center justify-center gap-2 font-bold disabled:opacity-50 mb-3"
+            >
+              {paying ? (
+                <><Loader2 size={18} className="animate-spin" /> Tasdiqlanmoqda...</>
+              ) : (
+                <>
+                  <CheckCircle2 size={18} /> TEST: To'lovni tasdiqlash
+                </>
+              )}
+            </button>
+          )}
+
           <button
-            onClick={() => (method === 'CASH' ? payNow() : openApp(method, user?.fullName?.toUpperCase() || ''))}
-            disabled={paying}
+            onClick={() => startPay(method)}
+            disabled={paying || polling || (method !== 'CASH' && !(providers.find((p) => p.method === method)?.available))}
             className="w-full py-3.5 rounded-xl neon-btn flex items-center justify-center gap-2 font-bold disabled:opacity-40"
           >
             {paying ? (
               <><Loader2 size={18} className="animate-spin" /> To'lanmoqda...</>
+            ) : polling ? (
+              <><RefreshCw size={18} className="animate-spin" /> Tekshirilmoqda...</>
             ) : (
               <>
                 {method === 'CASH' ? 'Kassada to\'layman' : <>To'lash: {formatPrice(advance)} so'm</>}
@@ -275,7 +383,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
         </>
       ) : (
         <>
-          {paid && (
+          {(settled || verified) && (
             <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-neon-green/10 border border-neon-green/30 text-sm text-neon-green">
               <CheckCircle2 size={16} /> To'lov muvaffaqiyatli. Broningiz tasdiqlandi!
             </div>
@@ -288,94 +396,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
             Qolgan 70% joyda — Kabinetga o'tish
           </Link>
         </>
-      )}
-
-      {/* ===== To'lov-app modali ===== */}
-      {appModal && booking && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="pay-modal-title"
-          className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm sm:p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !modalSuccess) setAppModal(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape' && !modalSuccess) setAppModal(null);
-          }}
-        >
-          {modalSuccess ? (
-            <div className="neo-card w-full sm:max-w-sm rounded-t-[1.75rem] sm:rounded-3xl p-10 text-center animate-float">
-              <CheckCircle2 size={64} className="mx-auto text-neon-green mb-4" />
-              <h3 className="text-xl font-bold mb-1">To'lov amalga oshdi!</h3>
-              <p className="text-sm text-gray-400">Broningiz tasdiqlandi. Tilakda!</p>
-            </div>
-          ) : (
-            <div className="neo-card w-full sm:max-w-sm rounded-t-[1.75rem] sm:rounded-3xl overflow-y-auto max-h-[92dvh] sm:max-h-[85vh]">
-              {/* App header */}
-              <div className={cn('p-4 flex items-center gap-3', METHODS.find((m) => m.id === appModal)?.color as any)}>
-                <span className="p-2.5 rounded-xl bg-black/20">
-                  {METHODS.find((m) => m.id === appModal)?.icon && (() => {
-                    const Ico = METHODS.find((m) => m.id === appModal)!.icon;
-                    return <Ico size={24} />;
-                  })()}
-                </span>
-                <div className="flex-1">
-                  <p id="pay-modal-title" className="font-bold leading-tight">{METHODS.find((m) => m.id === appModal)?.label} · {formatPrice(advance)} so\'m</p>
-                  <p className="text-xs opacity-80 flex items-center gap-1"><ShieldCheck size={11} /> Ilovada tasdiqlang</p>
-                </div>
-                <button onClick={() => setAppModal(null)} aria-label="To'lov oynasini yopish" className="min-w-9 h-9 grid place-items-center rounded-lg bg-black/20 hover:bg-black/30">
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div className="p-5">
-                <p className="text-[11px] text-gray-500 uppercase tracking-wider flex items-center gap-1 mb-3">
-                  <Landmark size={11} /> QUVVATCHI · Cyber-ZONE
-                </p>
-
-                <div className="rounded-xl bg-cyber-800/60 border border-white/5 px-4 py-3 mb-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] text-gray-500">To\'lov summasi</p>
-                    <p className="text-2xl font-extrabold neon-text">{formatPrice(advance)} so\'m</p>
-                  </div>
-                  <Smartphone size={22} className="text-gray-500" />
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Karta raqami</label>
-                    <input
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, '').slice(0, 16).replace(/(\d{4})(?=\d)/g, '$1 '))}
-                      placeholder="8600 0000 0000 0000"
-                      inputMode="numeric"
-                      className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none tracking-wider"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Karta egasi</label>
-                    <input
-                      value={cardHolder}
-                      onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
-                      placeholder="ISMLA KARIMOVA"
-                      className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  onClick={payNow}
-                  disabled={paying || cardNumber.replace(/\D/g, '').length < 16}
-                  className="w-full mt-5 py-3 rounded-xl neon-btn flex items-center justify-center gap-2 font-bold disabled:opacity-40"
-                >
-                  {paying ? <><Loader2 size={18} className="animate-spin" /> To'lanmoqda...</> : <><ShieldCheck size={18} /> Tasdiqlash va to\'lash</>}
-                </button>
-                <p className="text-center text-[10px] text-gray-600 mt-2">Xavfsiz to'lov · 3D-Secure himoyalangan</p>
-              </div>
-            </div>
-          )}
-        </div>
       )}
     </div>
   );

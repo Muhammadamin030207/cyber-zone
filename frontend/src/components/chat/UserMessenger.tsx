@@ -9,6 +9,7 @@ import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
 import { cn, mergeChatMessages } from '@/lib/utils';
 import SupportChat from '@/components/support/SupportChat';
+import { Link } from '@/i18n/navigation';
 
 interface ChatRoom {
   id: string;
@@ -41,9 +42,9 @@ export default function UserMessenger() {
         <p className="text-sm text-gray-400 mb-5">
           Murojaatlar (user va adminlar xabarlari) boshqaruv panelidagi chat tablarida boshqariladi.
         </p>
-        <a href="/super-admin" className="text-sm font-bold text-yellow-300 hover:text-yellow-200 underline underline-offset-4">
+        <Link href="/super-admin" className="text-sm font-bold text-yellow-300 hover:text-yellow-200 underline underline-offset-4">
           Murojaatlar paneliga o&apos;tish →
-        </a>
+        </Link>
       </div>
     );
   }
