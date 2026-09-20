@@ -14,6 +14,30 @@ const isAdmin = (role: string) => role === 'ADMIN';
 
 type Channel = 'ADMIN' | 'SUPER_ADMIN';
 
+// Tahrirlash/o'chirish natijasini barcha qarama-qarshi tomon(lar)ga jonli yetkazish
+// (sendSupport'dagi fanout bilan bir xil yo'nalishlar)
+async function syncSupportUpdate(
+  msg: { userId: string; recipientRole: string; roomId: string | null },
+  event: string,
+  data: unknown,
+) {
+  const uid = msg.userId;
+  const channel = (msg.recipientRole || 'SUPER_ADMIN') as Channel;
+  io.to(`user:${uid}`).emit(event, data);
+  io.to(`support:${channel}:${uid}`).emit(event, data);
+  if (channel === 'ADMIN' && msg.roomId) {
+    const room = await prisma.computerRoom.findUnique({ where: { id: msg.roomId } }).catch(() => null);
+    if (room && room.ownerId !== uid) io.to(`user:${room.ownerId}`).emit(event, data);
+  } else {
+    io.to('support:sadmin').emit(event, data);
+  }
+}
+
+// Muayyan xabarni tahrirlash/o'chirish huquqi: muallif O'ZI yoki ADMIN/SUPER_ADMIN
+function canManageSupportMessage(me: { userId: string; role: string }, msg: { senderId: string | null }) {
+  return msg.senderId === me.userId || isAdmin(me.role) || isSuperAdmin(me.role);
+}
+
 /**
  * POST /api/support/messages — xabar yuborish
  * - USER → super_admin (recipient=SUPER_ADMIN, default): o'z thread'i
@@ -291,6 +315,57 @@ export const getMySupportRooms = async (req: AuthRequest, res: Response, next: N
     });
 
     return ok(res, rooms);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * PATCH /api/support/messages/:id — xabarni tahrirlash
+ * Huquq: muallif | ADMIN | SUPER_ADMIN
+ */
+export const editSupportMessage = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { message } = req.body;
+    const text = String(message || '').trim();
+    if (!text) return badRequest(res, 'Xabar yozing');
+    if (text.length > 3000) return badRequest(res, 'Xabar 3000 ta belgidan oshmasligi kerak');
+
+    const msg = await prisma.supportMessage.findUnique({
+      where: { id: req.params.id },
+      include: SUPPORT_INCLUDE,
+    });
+    if (!msg) return notFoundMsg(res, 'Xabar topilmadi');
+    if (!canManageSupportMessage(req.user!, msg)) return forbidden(res, 'Ruxsat yo\'q');
+
+    if (msg.message === text) return ok(res, msg);
+
+    const updated = await prisma.supportMessage.update({
+      where: { id: msg.id },
+      data: { message: text, editedAt: new Date() },
+      include: SUPPORT_INCLUDE,
+    });
+
+    await syncSupportUpdate(updated, 'support:updated', { userId: updated.userId, message: updated });
+    return ok(res, updated);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * DELETE /api/support/messages/:id — bitta xabarni o'chirish
+ * Huquq: muallif | ADMIN | SUPER_ADMIN
+ */
+export const deleteSupportMessage = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const msg = await prisma.supportMessage.findUnique({ where: { id: req.params.id } });
+    if (!msg) return notFoundMsg(res, 'Xabar topilmadi');
+    if (!canManageSupportMessage(req.user!, msg)) return forbidden(res, 'Ruxsat yo\'q');
+
+    await prisma.supportMessage.delete({ where: { id: msg.id } });
+    await syncSupportUpdate(msg, 'support:deleted', { userId: msg.userId, messageId: msg.id, roomId: msg.roomId });
+    return ok(res, null, 'Xabar o\'chirildi');
   } catch (err) {
     next(err);
   }

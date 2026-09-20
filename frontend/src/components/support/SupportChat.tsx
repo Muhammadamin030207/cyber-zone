@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Send, Loader2, ShieldCheck, Phone, Mail, Trash2, UserRound, Building2, MessageSquareText, ChevronDown,
+  Send, Loader2, ShieldCheck, Phone, Mail, Trash2, UserRound, Building2, MessageSquareText, ChevronDown, Pencil,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
@@ -21,6 +21,7 @@ interface SupportMsg {
   roomId: string | null;
   isRead: boolean;
   createdAt: string;
+  editedAt?: string | null;
   user?: { id: string; fullName: string; email: string; phone: string | null; role: string };
   sender?: { id: string; fullName: string; role: string; avatarUrl?: string | null } | null;
 }
@@ -74,6 +75,8 @@ export default function SupportChat({
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const [changingId, setChangingId] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const chUpper = CHANNEL_UPPER(channel);
 
@@ -194,11 +197,41 @@ export default function SupportChat({
         setMessages((m) => merge(m, payload.message));
       }
     };
-    socket.on('support:new', onNew);
+socket.on('support:new', onNew);
     socket.on('support:thread:new', onNew);
+
+    const onUpdated = (payload: { userId: string; message: SupportMsg }) => {
+      if (isListMode) {
+        if (active?.userId === payload.userId) setMessages((m) => merge(m, payload.message));
+        loadThreads();
+      } else if (mode === 'user' && channel === 'admin') {
+        if (activeRoom) {
+          if (payload.message.roomId === activeRoom.id) setMessages((m) => merge(m, payload.message));
+          loadSupportRooms();
+        }
+      } else {
+        setMessages((m) => merge(m, payload.message));
+      }
+    };
+    const onDeleted = (payload: { userId: string; messageId: string; roomId?: string | null }) => {
+      const inCurrent =
+        isListMode
+          ? active?.userId === payload.userId && payload.roomId === (active.roomId ?? null)
+          : mode === 'user' && channel === 'admin'
+            ? payload.roomId === activeRoom?.id
+            : payload.userId === (active?.userId ?? me.id);
+      if (inCurrent) setMessages((prev) => prev.filter((x) => x.id !== payload.messageId));
+      if (isListMode) loadThreads();
+      if (mode === 'user' && channel === 'admin') loadSupportRooms();
+    };
+    socket.on('support:updated', onUpdated);
+    socket.on('support:deleted', onDeleted);
+
     return () => {
       socket.off('support:new', onNew);
       socket.off('support:thread:new', onNew);
+      socket.off('support:updated', onUpdated);
+      socket.off('support:deleted', onDeleted);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me, isListMode, mode, channel, active, activeRoom, loadThreads, loadSupportRooms]);
@@ -264,6 +297,52 @@ export default function SupportChat({
       loadThreads();
     } catch { /* skip */ }
   }
+
+  // Tahrirlash/o'chirish huquqi: xabar muallifi yoki ADMIN/SUPER_ADMIN
+  const canManage = (m: SupportMsg) => !!me && (m.senderId === me.id || me.role === 'ADMIN' || me.role === 'SUPER_ADMIN');
+
+  const startEdit = (m: SupportMsg) => {
+    setErr(null);
+    setEditing({ id: m.id, text: m.message });
+  };
+  const cancelEdit = () => {
+    setEditing(null);
+    setErr(null);
+  };
+
+  const saveEdit = async () => {
+    if (!editing || !editing.text.trim() || changingId) return;
+    const id = editing.id;
+    setChangingId(id);
+    setErr(null);
+    try {
+      const { data } = await api.patch(`/api/support/messages/${id}`, { message: editing.text.trim() });
+      setMessages((m) => merge(m, data.data));
+      setEditing(null);
+      if (isListMode) loadThreads();
+      if (mode === 'user' && channel === 'admin') loadSupportRooms();
+    } catch (e) {
+      setErr(getApiErrorMessage(e));
+    }
+    setChangingId(null);
+  };
+
+  const deleteMsg = async (m: SupportMsg) => {
+    if (changingId) return;
+    if (!window.confirm('Bu xabarni o\'chirishni tasdiqlaysizmi?')) return;
+    setChangingId(m.id);
+    setErr(null);
+    try {
+      await api.delete(`/api/support/messages/${m.id}`);
+      setMessages((prev) => prev.filter((x) => x.id !== m.id));
+      if (editing?.id === m.id) setEditing(null);
+      if (isListMode) loadThreads();
+      if (mode === 'user' && channel === 'admin') loadSupportRooms();
+    } catch (e) {
+      setErr(getApiErrorMessage(e));
+    }
+    setChangingId(null);
+  };
 
   if (!me) return null;
 
@@ -339,7 +418,19 @@ export default function SupportChat({
                   roomName={threads.find((t) => t.user.id === active.userId && (t.room?.id ?? null) === (active.roomId ?? null))?.room?.name}
                   onClear={isSuperAdmin || (me.role === 'ADMIN' && channel === 'admin') ? clearThread : undefined}
                 />
-                <MessageList messages={messages} meId={me.id} boxRef={boxRef} />
+                <MessageList
+                  messages={messages}
+                  meId={me.id}
+                  boxRef={boxRef}
+                  canManage={canManage}
+                  onEdit={startEdit}
+                  onDelete={deleteMsg}
+                  editing={editing}
+                  onTextChange={(t) => setEditing((e) => (e ? { ...e, text: t } : e))}
+                  onSaveEdit={saveEdit}
+                  onCancelEdit={cancelEdit}
+                  changingId={changingId}
+                />
                 {err && <p className="px-5 pb-1 text-xs text-red-400">{err}</p>}
                 <InputBar value={text} onChange={setText} onSend={send} sending={sending} placeholder="Javob yozing..." />
               </div>
@@ -383,6 +474,14 @@ export default function SupportChat({
               meId={me.id}
               boxRef={boxRef}
               loading={loading}
+              canManage={canManage}
+              onEdit={startEdit}
+              onDelete={deleteMsg}
+              editing={editing}
+              onTextChange={(t) => setEditing((e) => (e ? { ...e, text: t } : e))}
+              onSaveEdit={saveEdit}
+              onCancelEdit={cancelEdit}
+              changingId={changingId}
               empty={
                 mode === 'user' && channel === 'admin'
                   ? activeRoom
@@ -438,12 +537,20 @@ function ThreadHeader({ name, email, phone, role, roomName, onClear }: {
   );
 }
 
-function MessageList({ messages, meId, boxRef, loading, empty }: {
+function MessageList({ messages, meId, boxRef, loading, empty, canManage, onEdit, onDelete, editing, onTextChange, onSaveEdit, onCancelEdit, changingId }: {
   messages: SupportMsg[];
   meId: string;
   boxRef: React.RefObject<HTMLDivElement | null>;
   loading?: boolean;
   empty?: string;
+  canManage?: (m: SupportMsg) => boolean;
+  onEdit?: (m: SupportMsg) => void;
+  onDelete?: (m: SupportMsg) => void;
+  editing?: { id: string; text: string } | null;
+  onTextChange?: (t: string) => void;
+  onSaveEdit?: () => void;
+  onCancelEdit?: () => void;
+  changingId?: string | null;
 }) {
   if (loading) {
     return (
@@ -460,16 +567,68 @@ function MessageList({ messages, meId, boxRef, loading, empty }: {
         const author = m.senderId === m.userId ? m.user : m.sender;
         const isSupport = author?.role === 'SUPER_ADMIN';
         const isRoomReply = Boolean(!mine && author && author.id !== m.userId && author.role === 'ADMIN');
+        const isEditing = editing?.id === m.id;
+        const manageable = canManage?.(m) ?? false;
+        const busy = changingId === m.id;
         return (
           <div key={m.id} className={cn('flex', mine ? 'justify-end' : 'justify-start')}>
-            <div className={cn('max-w-[80%] rounded-2xl px-3.5 py-2 text-sm', mine ? 'bg-yellow-400/15 border border-yellow-400/25 text-gray-100' : 'bg-cyber-800 border border-white/10 text-gray-200')}>
+            <div className={cn('group relative max-w-[80%] rounded-2xl px-3.5 py-2 text-sm', mine ? 'bg-yellow-400/15 border border-yellow-400/25 text-gray-100' : 'bg-cyber-800 border border-white/10 text-gray-200')}>
               <div className={cn('flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide mb-0.5', mine ? 'text-yellow-400' : 'text-gray-500')}>
                 <AuthorLabel mine={mine} isSupport={isSupport} isRoomReply={isRoomReply} authorName={author?.fullName} role={author?.role} />
               </div>
-              <p className="whitespace-pre-wrap break-words">{m.message}</p>
-              <p className="text-[9px] text-gray-600 mt-1 text-right">
-                {new Date(m.createdAt).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}
+              {isEditing ? (
+                <textarea
+                  autoFocus
+                  value={editing?.text || ''}
+                  onChange={(e) => onTextChange?.(e.target.value)}
+                  rows={2}
+                  className="w-full bg-cyber-900/80 border border-yellow-400/30 rounded-lg px-2.5 py-1.5 text-sm outline-none resize-none focus:border-yellow-400/60"
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSaveEdit?.(); } }}
+                />
+              ) : (
+                <p className="whitespace-pre-wrap break-words">{m.message}</p>
+              )}
+              <p className="text-[9px] text-gray-600 mt-1 text-right flex items-center justify-end gap-1">
+                {m.editedAt && <span className="text-yellow-400/70 italic">tahrirlangan</span>}
+                <span>{new Date(m.createdAt).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}</span>
               </p>
+              {isEditing ? (
+                <div className="flex justify-end items-center gap-1.5 mt-1">
+                  <button
+                    onClick={onCancelEdit}
+                    disabled={busy}
+                    className="text-[10px] px-2 py-1 rounded-md bg-white/5 text-gray-400 hover:text-gray-200 disabled:opacity-40"
+                  >
+                    Bekor qilish
+                  </button>
+                  <button
+                    onClick={onSaveEdit}
+                    disabled={busy || !editing?.text.trim()}
+                    className="text-[10px] px-2 py-1 rounded-md bg-yellow-400 text-black font-bold hover:bg-yellow-300 disabled:opacity-40 flex items-center gap-1"
+                  >
+                    {busy ? <Loader2 size={10} className="animate-spin" /> : 'Saqlash'}
+                  </button>
+                </div>
+              ) : manageable ? (
+                <div className="flex justify-end gap-1 mt-1 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => onEdit?.(m)}
+                    title="Tahrirlash"
+                    disabled={busy}
+                    className="p-1 rounded-md text-gray-500 hover:text-yellow-400 hover:bg-yellow-400/10 disabled:opacity-40"
+                  >
+                    {busy ? <Loader2 size={11} className="animate-spin" /> : <Pencil size={11} />}
+                  </button>
+                  <button
+                    onClick={() => onDelete?.(m)}
+                    title="O'chirish"
+                    disabled={busy}
+                    className="p-1 rounded-md text-gray-500 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-40"
+                  >
+                    {busy ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         );

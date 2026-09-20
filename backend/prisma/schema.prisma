@@ -329,8 +329,9 @@ model SupportMessage {
   message       String
   recipientRole String   @default("SUPER_ADMIN") @map("recipient_role") // ADMIN | SUPER_ADMIN
   roomId        String?  @map("room_id") // ADMIN kanali uchun xona (thread = userId + roomId)
-  isRead        Boolean  @default(false) @map("is_read")
-  createdAt     DateTime @default(now()) @map("created_at")
+  isRead        Boolean   @default(false) @map("is_read")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  editedAt      DateTime? @map("edited_at") // xabar tahrirlangan sanasi (agar tahrirlangan bo'lsa)
 
   user   User  @relation("SupportThread", fields: [userId], references: [id], onDelete: Cascade)
   sender User? @relation("SupportSender", fields: [senderId], references: [id])
