@@ -12,6 +12,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:push": "prisma db push",
     "seed": "tsx prisma/seed.ts",
+    "test": "vitest run",
     "test:mail": "tsx src/scripts/test-mail.ts"
   },
   "prisma": {
@@ -43,6 +44,7 @@
     "@types/nodemailer": "^6.4.15",
     "prisma": "^5.19.1",
     "tsx": "^4.18.0",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.9"
   }
 }
