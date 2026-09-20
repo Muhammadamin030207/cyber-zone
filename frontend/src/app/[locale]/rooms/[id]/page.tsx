@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
@@ -15,6 +16,8 @@ import BookingWidget from '@/components/booking/BookingWidget';
 import BarOrdering from '@/components/bar/BarOrdering';
 import Logo from '@/components/brand/Logo';
 import { useAuthStore } from '@/store/auth';
+
+const RoomMiniMap = dynamic(() => import('@/components/rooms/RoomsMap'), { ssr: false });
 
 export default function RoomDetailPage({ params }: { params: Promise<{ locale: string }> }) {
   void params;
@@ -173,6 +176,19 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
               <p className="text-gray-400 leading-relaxed whitespace-pre-line">{room.description}</p>
             </div>
           )}
+
+          {/* Location map */}
+          <div className="neo-card rounded-2xl overflow-hidden">
+            <div className="px-6 pt-5 pb-3 flex items-center justify-between gap-2">
+              <h2 className="font-bold text-lg flex items-center gap-2">
+                <MapPin size={18} className="text-neon-cyan" /> Joylashuv
+              </h2>
+              <span className="chip chip-warn">{room.address}</span>
+            </div>
+            <div className="px-6 pb-6">
+              <RoomMiniMap rooms={[room]} height={280} />
+            </div>
+          </div>
 
           {/* Zones */}
           <div className="neo-card rounded-2xl p-6">

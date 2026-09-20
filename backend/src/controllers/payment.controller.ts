@@ -19,6 +19,31 @@ function paidAmount(payments: Array<{ amount: any; status: string }>, status: st
 }
 
 /**
+ * Bonus ball berish — har bir muvaffaqiyatli to'lovdan so'ng (1% ball = so'm).
+ * Bron yaratishda sarflangan ballar avtomatik qaytarilmaydi (REFUND faqat bekor qilishda).
+ */
+async function awardPoints(tx: TxClient, args: { userId: string; bookingId: string; amount: number; description?: string }) {
+  const earn = Math.floor(toNumber(args.amount) * 0.01);
+  if (earn <= 0) return 0;
+  const user = await tx.user.update({
+    where: { id: args.userId },
+    data: { loyaltyBalance: { increment: earn } },
+    select: { loyaltyBalance: true },
+  });
+  await tx.loyaltyTransaction.create({
+    data: {
+      userId: args.userId,
+      type: 'EARN',
+      amount: earn,
+      balanceAfter: user.loyaltyBalance,
+      description: args.description || `${earn} ball to'lov uchun qo'shildi`,
+      bookingId: args.bookingId,
+    },
+  });
+  return earn;
+}
+
+/**
  * To'lovni COMPLETED qiladi va qancha to'langaniga qarab bronni CONFIRMED ga olib keladi.
  * Qoida: bron faqat 30% avans to'liq to'langandagina tasdiqlanadi.
  */
@@ -36,7 +61,7 @@ async function settlePayment(tx: TxClient, id: string) {
 
   const booking = await tx.booking.findUnique({
     where: { id: paid.bookingId },
-    select: { advanceAmount: true, finalPrice: true, status: true, roomId: true, id: true },
+    select: { advanceAmount: true, finalPrice: true, status: true, roomId: true, id: true, userId: true },
   });
   if (!booking) return { paid, booking: null, totalPaid };
 
@@ -50,6 +75,13 @@ async function settlePayment(tx: TxClient, id: string) {
         include: { room: { select: { id: true, ownerId: true } } },
       })
     : null;
+
+  // To'lov muvaffaqiyatli — bonus ballari to'lanadi
+  await awardPoints(tx, {
+    userId: booking.userId,
+    bookingId: booking.id,
+    amount: toNumber(paid.amount),
+  });
 
   return { paid, booking: updatedBooking, totalPaid };
 }

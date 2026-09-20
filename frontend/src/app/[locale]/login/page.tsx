@@ -129,7 +129,15 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1.5">{t('password')}</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-sm font-medium text-gray-300">{t('password')}</label>
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs text-neon-cyan hover:text-neon-green transition-colors font-medium"
+                  >
+                    Parol unutdingizmi?
+                  </Link>
+                </div>
                 <div className="relative">
                   <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                   <input
@@ -148,12 +156,17 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
                   </button>
                 </div>
                 {errors.password && <p className="text-xs text-red-400 mt-1">{errors.password.message}</p>}
+                {error?.includes('Google orqali yaratilgan') && (
+                  <p className="text-xs text-neon-cyan mt-1.5">
+                    Bu akkaunt Gmail orqali yaratilgan — yuqoridagi Google tugmasi bilan kiring.
+                  </p>
+                )}
               </div>
 
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 rounded-xl neon-btn flex items-center justify-center gap-2 disabled:opacity-60"
+                className="w-full py-3 rounded-xl neon-btn flex items-center justify-center gap-2 disabled:opacity-60 transition-transform hover:scale-[1.01] active:scale-[0.99]"
               >
                 {submitting ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />}
                 {t('loginBtn')}

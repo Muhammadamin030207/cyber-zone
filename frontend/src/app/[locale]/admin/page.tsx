@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import {
   Settings, Monitor, Cpu, CalendarDays, BadgePercent, Newspaper, BarChart3, MessageSquare,
   Plus, Pencil, Trash2, Loader2, AlertCircle, Check, ShieldCheck, Users, Zap,
-  Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy,
+  Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy, MessagesSquare,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { Room, Zone, Computer, Booking, PromoCode, NewsItem, BookingStatus } from '@/lib/types';
@@ -16,7 +17,9 @@ import ChatAdmin from '@/components/admin/ChatAdmin';
 import SupportChat from '@/components/support/SupportChat';
 import Logo from '@/components/brand/Logo';
 
-type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'bar' | 'chat' | 'support' | 'promos' | 'news' | 'stats';
+const MapPicker = dynamic(() => import('@/components/rooms/MapPicker'), { ssr: false });
+
+type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'bar' | 'chat' | 'requests' | 'support' | 'promos' | 'news' | 'stats';
 
 const TABS: { key: Tab; icon: any; label: string }[] = [
   { key: 'room', icon: Settings, label: 'Xona' },
@@ -25,7 +28,8 @@ const TABS: { key: Tab; icon: any; label: string }[] = [
   { key: 'bookings', icon: CalendarDays, label: 'Bronlar' },
   { key: 'bar', icon: Gamepad2, label: 'Gaming Bar' },
   { key: 'chat', icon: MessageSquare, label: 'Chat' },
-  { key: 'support', icon: LifeBuoy, label: 'Murojaatlar' },
+  { key: 'requests', icon: MessagesSquare, label: 'Murojaatlar' },
+  { key: 'support', icon: LifeBuoy, label: 'Super Admin' },
   { key: 'promos', icon: BadgePercent, label: 'Promo' },
   { key: 'news', icon: Newspaper, label: 'Yangiliklar' },
   { key: 'stats', icon: BarChart3, label: 'Statistika' },
@@ -87,26 +91,26 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
       </h1>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 mb-6 overflow-x-auto scrollbar-thin pb-2">
+      <div className="flex items-center gap-1.5 mb-6 overflow-x-auto scrollbar-thin pb-2 px-1">
         {TABS.map((tb) => (
           <button
             key={tb.key}
             onClick={() => setTab(tb.key)}
             className={cn(
-              'flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors whitespace-nowrap',
+              'flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all whitespace-nowrap hover:translate-y-[-1px]',
               tab === tb.key
-                ? 'border-neon-cyan/40 bg-neon-cyan/10 text-neon-cyan'
-                : 'border-neon-cyan/10 text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/20'
+                ? 'border-neon-cyan/40 bg-neon-cyan/10 text-neon-cyan shadow-[0_0_18px_-6px_var(--acc-a)] animate-pop'
+                : 'border-neon-cyan/10 text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/25 hover:bg-neon-cyan/5'
             )}
           >
-            <tb.icon size={15} />
+            <tb.icon size={15} className="transition-transform group-hover:scale-110" />
             {tb.label}
           </button>
         ))}
       </div>
 
       {/* Content */}
-      {!room && tab !== 'room' && tab !== 'bar' && tab !== 'chat' && tab !== 'support' ? (
+      {!room && tab !== 'room' && tab !== 'bar' && tab !== 'chat' && tab !== 'requests' && tab !== 'support' ? (
         <div className="text-center py-20">
           <div className="w-16 h-16 mx-auto mb-4 neo-card rounded-2xl flex items-center justify-center animate-floaty">
             <Logo size={38} />
@@ -128,8 +132,10 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
         <BarAdmin />
       ) : tab === 'chat' ? (
         <ChatAdmin />
+      ) : tab === 'requests' ? (
+        <SupportChat mode="admin" channel="admin" />
       ) : tab === 'support' ? (
-        <SupportChat mode="admin" />
+        <SupportChat mode="admin" channel="superadmin" />
       ) : tab === 'promos' && room ? (
         <PromosTab room={room} />
       ) : tab === 'news' ? (
@@ -152,6 +158,8 @@ function RoomTab({ room, setRoom }: { room: Room | null; setRoom: (r: Room) => v
     description: room?.description || '',
     workingHoursOpen: room?.workingHours?.open || '08:00',
     workingHoursClose: room?.workingHours?.close || '23:00',
+    latitude: room?.latitude ?? null,
+    longitude: room?.longitude ?? null,
   });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -160,12 +168,22 @@ function RoomTab({ room, setRoom }: { room: Room | null; setRoom: (r: Room) => v
     setSaving(true);
     setMsg(null);
     try {
-      const payload = {
+      const payload: {
+        name: string;
+        address: string;
+        phone: string | undefined;
+        description: string | undefined;
+        workingHours: { open: string; close: string };
+        latitude?: number | null;
+        longitude?: number | null;
+      } = {
         name: form.name,
         address: form.address,
         phone: form.phone || undefined,
         description: form.description || undefined,
         workingHours: { open: form.workingHoursOpen, close: form.workingHoursClose },
+        latitude: form.latitude ?? undefined,
+        longitude: form.longitude ?? undefined,
       };
       const { data } = await api.put(`/api/rooms/${room!.id}`, payload);
       setRoom(data.data);
@@ -220,6 +238,21 @@ function RoomTab({ room, setRoom }: { room: Room | null; setRoom: (r: Room) => v
         <div className="grid grid-cols-2 gap-3">
           <Input label="Ish boshlanish" value={form.workingHoursOpen} onChange={(v) => setForm((f) => ({ ...f, workingHoursOpen: v }))} placeholder="08:00" />
           <Input label="Ish tugash" value={form.workingHoursClose} onChange={(v) => setForm((f) => ({ ...f, workingHoursClose: v }))} placeholder="23:00" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Xonaning joylashuvi (xaritadan)</label>
+          <MapPicker
+            lat={form.latitude}
+            lng={form.longitude}
+            district={room?.district}
+            onChange={(lat, lng) => setForm((f) => ({ ...f, latitude: lat, longitude: lng }))}
+            onAddress={(addr) => setForm((f) => ({ ...f, address: addr }))}
+          />
+          {form.latitude != null && form.longitude != null && (
+            <p className="text-[10px] text-gray-500 mt-1">
+              Kenglik: {form.latitude.toFixed(5)}, Uzunlik: {form.longitude.toFixed(5)}
+            </p>
+          )}
         </div>
         <button onClick={save} disabled={saving} className="px-6 py-2.5 rounded-xl neon-btn text-sm font-bold flex items-center gap-2 disabled:opacity-50">
           {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {tC('save')}
@@ -473,10 +506,11 @@ function BookingsTab({ room }: { room: Room }) {
       {loading ? <div className="space-y-2">{[1, 2].map((i) => <div key={i} className="h-16 rounded-xl bg-cyber-800 animate-pulse" />)}</div>
         : bookings.length === 0 ? <p className="text-sm text-gray-500 text-center py-10">Bronlar yo'q</p> : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-hover">
             <thead>
               <tr className="text-gray-500 text-xs uppercase">
                 <th className="text-left pb-2 pr-4">Foydalanuvchi</th>
+                <th className="text-left pb-2 pr-4">Telefon</th>
                 <th className="text-left pb-2 pr-4">Sana</th>
                 <th className="text-left pb-2 pr-4">Vaqt</th>
                 <th className="text-left pb-2 pr-4">Narx</th>
@@ -487,7 +521,15 @@ function BookingsTab({ room }: { room: Room }) {
             <tbody>
               {bookings.map((b) => (
                 <tr key={b.id} className="border-t border-neon-cyan/10">
-                  <td className="py-3 pr-4">{b.userId?.slice(0, 8)}...</td>
+                  <td className="py-3 pr-4">
+                    <span className="font-medium text-gray-100 flex items-center gap-2">
+                      <span className="w-7 h-7 rounded-lg grid place-items-center text-[10px] font-bold bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan shrink-0">
+                        {(b.user?.fullName || '?').slice(0, 1).toUpperCase()}
+                      </span>
+                      {b.user?.fullName || b.userId?.slice(0, 8)}
+                    </span>
+                  </td>
+                  <td className="py-3 pr-4 text-gray-300">{b.user?.phone || '—'}</td>
                   <td className="py-3 pr-4 text-gray-300">{formatDate(b.date)}</td>
                   <td className="py-3 pr-4 text-gray-300">{b.startTime}—{b.endTime}</td>
                   <td className="py-3 pr-4 font-medium text-neon-cyan">{formatPrice(b.finalPrice)}</td>
@@ -731,10 +773,16 @@ function StatsTab({ room }: { room: Room }) {
 
   return (
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {cards.map((c) => (
-        <div key={c.label} className="neo-card rounded-2xl p-5 text-center">
-          <c.icon size={24} className={`mx-auto mb-2 ${c.color}`} />
-          <div className="text-2xl font-extrabold">{c.value}</div>
+      {cards.map((c, i) => (
+        <div
+          key={c.label}
+          className="neo-card rounded-2xl p-5 text-center hover-glow animate-pop"
+          style={{ animationDelay: `${i * 60}ms` }}
+        >
+          <div className="w-12 h-12 mx-auto mb-3 rounded-xl grid place-items-center border border-white/10 bg-cyber-800/60">
+            <c.icon size={22} className={c.color} />
+          </div>
+          <div className="text-2xl font-extrabold neon-text">{c.value}</div>
           <div className="text-xs text-gray-500 mt-1 uppercase tracking-wider">{c.label}</div>
         </div>
       ))}

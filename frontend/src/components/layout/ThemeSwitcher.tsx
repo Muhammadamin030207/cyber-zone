@@ -8,6 +8,7 @@ const THEMES = [
   { id: 'midnight', name: 'Midnight', swatch: 'bg-indigo-500', desc: 'Indigo + Amber' },
   { id: 'cyberpunk', name: 'Cyberpunk', swatch: 'bg-cyan-400', desc: 'Siyan + Magenta' },
   { id: 'aurora', name: 'Aurora', swatch: 'bg-sky-400', desc: 'Muz siyan + Yalpiz' },
+  { id: 'halloween', name: 'Halloween', swatch: 'bg-orange-500', desc: 'Qovoq + Zahar purple' },
 ] as const;
 
 type ThemeId = (typeof THEMES)[number]['id'];

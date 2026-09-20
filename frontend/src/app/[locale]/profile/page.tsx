@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  Mail, Phone, UserRound, Save, Loader2, KeyRound, ShieldCheck, CalendarDays, LogOut,
+  Mail, Phone, UserRound, Save, Loader2, KeyRound, ShieldCheck, CalendarDays, LogOut, Coins,
 } from 'lucide-react';
 import { useRouter } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
@@ -204,8 +204,24 @@ try {
           </button>
         </div>
 
-        {/* O'ng: super_admin bilan bog'lanish */}
-        <div>
+        {/* O'ng: ballar + super_admin bilan bog'lanish */}
+        <div className="space-y-6">
+          <div className="neo-card rounded-2xl p-6">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-10 h-10 rounded-xl bg-yellow-400/10 border border-yellow-400/25 grid place-items-center">
+                <Coins size={20} className="text-yellow-400" />
+              </span>
+              <div>
+                <p className="font-bold leading-tight">Bonus balans</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">1 bal = 1 so&apos;m</p>
+              </div>
+            </div>
+            <div className="text-3xl font-extrabold text-yellow-400">{user.loyaltyBalance ?? 0}</div>
+            <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+              Har bir to&apos;lov uchun 1% ball beriladi. Ballarni bron qilishda chegirma sifatida
+              ishlatishingiz mumkin (narxning 50% gacha).
+            </p>
+          </div>
           <SupportChat mode="user" />
         </div>
       </div>

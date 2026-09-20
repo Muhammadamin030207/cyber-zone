@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import {
   Crown, Users, Building2, CalendarDays, CircleDollarSign, Activity,
   Search, Plus, Trash2, Loader2, Check, ShieldOff, ShieldCheck,
-  KeyRound, MapPin, X, PlusCircle, Wallet, Banknote, MessageSquare,
+  KeyRound, MapPin, X, PlusCircle, Wallet, Banknote, MessageSquare, MessagesSquare, Inbox,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { User, Room } from '@/lib/types';
@@ -17,7 +18,10 @@ import BarAll from '@/components/super-admin/BarAll';
 import SupportChat from '@/components/support/SupportChat';
 import Logo from '@/components/brand/Logo';
 
-type Tab = 'overview' | 'users' | 'rooms' | 'bar' | 'payments' | 'support';
+const MapPicker = dynamic(() => import('@/components/rooms/MapPicker'), { ssr: false });
+const RoomsMap = dynamic(() => import('@/components/rooms/RoomsMap'), { ssr: false });
+
+type Tab = 'overview' | 'users' | 'rooms' | 'bar' | 'payments' | 'support' | 'adminchat' | 'adminpm';
 
 export default function SuperAdminPage({ params }: { params: Promise<{ locale: string }> }) {
   void params;
@@ -42,6 +46,8 @@ export default function SuperAdminPage({ params }: { params: Promise<{ locale: s
     { key: 'bar' as Tab, icon: Coffee, label: 'Gaming Bar' },
     { key: 'payments' as Tab, icon: Wallet, label: 'To\'lovlar' },
     { key: 'support' as Tab, icon: MessageSquare, label: 'Murojaatlar' },
+    { key: 'adminchat' as Tab, icon: MessagesSquare, label: 'Adminlar chat' },
+    { key: 'adminpm' as Tab, icon: Inbox, label: 'Xona PM' },
   ];
 
   return (
@@ -50,16 +56,16 @@ export default function SuperAdminPage({ params }: { params: Promise<{ locale: s
         <span className="w-11 h-11 neo-card rounded-xl flex items-center justify-center"><Logo size={26} /></span> {t('title')}
       </h1>
 
-      <div className="flex items-center gap-1 mb-6 overflow-x-auto scrollbar-thin pb-2">
+      <div className="flex items-center gap-1.5 mb-6 overflow-x-auto scrollbar-thin pb-2 px-1">
         {TABS.map((tb) => (
           <button
             key={tb.key}
             onClick={() => setTab(tb.key)}
             className={cn(
-              'flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors whitespace-nowrap',
+              'flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all whitespace-nowrap hover:translate-y-[-1px]',
               tab === tb.key
-                ? 'border-yellow-400/40 bg-yellow-400/10 text-yellow-300'
-                : 'border-neon-cyan/10 text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/20'
+                ? 'border-yellow-400/40 bg-yellow-400/10 text-yellow-300 shadow-[0_0_18px_-6px_var(--acc-b)] animate-pop'
+                : 'border-neon-cyan/10 text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/25 hover:bg-neon-cyan/5'
             )}
           >
             <tb.icon size={15} />
@@ -68,7 +74,7 @@ export default function SuperAdminPage({ params }: { params: Promise<{ locale: s
         ))}
       </div>
 
-      {tab === 'overview' ? <OverviewTab /> : tab === 'users' ? <UsersTab /> : tab === 'rooms' ? <RoomsTab /> : tab === 'payments' ? <PaymentsTab /> : tab === 'support' ? <SupportChat mode="admin" /> : <BarAll />}
+      {tab === 'overview' ? <OverviewTab /> : tab === 'users' ? <UsersTab /> : tab === 'rooms' ? <RoomsTab /> : tab === 'payments' ? <PaymentsTab /> : tab === 'support' ? <SupportChat mode="superadmin" channel="superadmin" scope="users" /> : tab === 'adminchat' ? <SupportChat mode="superadmin" channel="superadmin" scope="admins" /> : tab === 'adminpm' ? <SupportChat mode="superadmin" channel="admin" scope="all" /> : <BarAll />}
     </div>
   );
 }
@@ -77,6 +83,7 @@ export default function SuperAdminPage({ params }: { params: Promise<{ locale: s
 function OverviewTab() {
   const t = useTranslations('superAdmin');
   const [stats, setStats] = useState<any>(null);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -84,6 +91,12 @@ function OverviewTab() {
       .then(({ data }) => setStats(data.data))
       .catch(() => { /* skip */ })
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    api.get('/api/rooms/all')
+      .then(({ data }) => setRooms(data.data || []))
+      .catch(() => { /* skip */ });
   }, []);
 
   if (loading) return <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{[1, 2, 3, 4, 5, 6].map((i) => <div key={i} className="skeleton rounded-2xl h-32" />)}</div>;
@@ -101,14 +114,25 @@ function OverviewTab() {
   return (
     <>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        {cards.map((c) => (
-          <div key={c.label} className="neo-card rounded-2xl p-5 text-center">
-            <c.icon size={24} className={cn('mx-auto mb-2', c.color)} />
-            <div className="text-2xl font-extrabold">{c.value}</div>
+        {cards.map((c, i) => (
+          <div
+            key={c.label}
+            className="neo-card rounded-2xl p-5 text-center hover-glow animate-pop"
+            style={{ animationDelay: `${i * 60}ms` }}
+          >
+            <div className="w-12 h-12 mx-auto mb-3 rounded-xl grid place-items-center border border-white/10 bg-cyber-800/60">
+              <c.icon size={22} className={c.color} />
+            </div>
+            <div className="text-2xl font-extrabold neon-text">{c.value}</div>
             <div className="text-xs text-gray-500 mt-1 uppercase tracking-wider">{c.label}</div>
           </div>
         ))}
       </div>
+
+      <h3 className="font-bold text-lg mt-8 mb-3 flex items-center gap-2">
+        <MapPin size={18} className="text-neon-cyan" /> Xonalar xaritasi
+      </h3>
+      <RoomsMap rooms={rooms} height={420} linkBase="/super-admin" />
 
       <h3 className="font-bold text-lg mb-3">{t('recentRooms')}</h3>
       <div className="neo-card rounded-2xl divide-y divide-neon-cyan/10">
@@ -283,7 +307,7 @@ function UsersTab() {
         ) : users.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-14">{t('noUsers')}</p>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-hover">
             <thead>
               <tr className="text-gray-500 text-xs uppercase">
                 <th className="text-left px-5 py-3">#</th>
@@ -353,6 +377,8 @@ function RoomsTab() {
     district: '',
     ownerId: '',
     status: 'PENDING',
+    latitude: null as number | null,
+    longitude: null as number | null,
   });
   const [zones, setZones] = useState([{ name: 'Umumiy zal', type: 'GENERAL_HALL', pricePerHour: '', computerCount: '20' }]);
 
@@ -389,7 +415,7 @@ function RoomsTab() {
       });
       setMsg('Xona yaratildi va adminda tayinlandi!');
       setShowCreate(false);
-      setForm({ name: '', address: '', district: '', ownerId: '', status: 'PENDING' });
+      setForm({ name: '', address: '', district: '', ownerId: '', status: 'PENDING', latitude: null, longitude: null });
       setZones([{ name: 'Umumiy zal', type: 'GENERAL_HALL', pricePerHour: '', computerCount: '20' }]);
       load();
     } catch (err) { setMsg(getApiErrorMessage(err)); }
@@ -444,6 +470,23 @@ function RoomsTab() {
               <option value="PENDING">Kutish holatida (PENDING)</option>
               <option value="ACTIVE">Faol (ACTIVE)</option>
             </select>
+          </div>
+
+          {/* Xarita orqali joy tanlash */}
+          <div>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Xaritada joylashuv (ixtiyoriy)</p>
+            <MapPicker
+              lat={form.latitude}
+              lng={form.longitude}
+              district={form.district}
+              onChange={(la, ln) => setForm((f) => ({ ...f, latitude: la, longitude: ln }))}
+              onAddress={(addr) => setForm((f) => ({ ...f, address: addr }))}
+            />
+            {form.latitude != null && form.longitude != null && (
+              <p className="text-[11px] text-neon-cyan mt-1.5">
+                Koordinata: {form.latitude.toFixed(4)}, {form.longitude.toFixed(4)}
+              </p>
+            )}
           </div>
 
           {/* Zonalar */}

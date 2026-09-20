@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  MessageSquare, Send, Loader2, ArrowLeft, Monitor, ShieldCheck, Inbox, MessageCircleDashed,
+  MessageSquare, Send, Loader2, Monitor, ShieldCheck, Inbox, MessageCircleDashed, Building2,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { getSocket } from '@/lib/socket';
@@ -37,7 +37,7 @@ export default function UserMessenger() {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [supportOpen, setSupportOpen] = useState(false);
+  const [tab, setTab] = useState<'rooms' | 'admin' | 'superadmin'>('rooms');
   const boxRef = useRef<HTMLDivElement>(null);
 
   const loadRooms = useCallback(async () => {
@@ -101,7 +101,7 @@ export default function UserMessenger() {
 
   useEffect(() => {
     boxRef.current?.scrollTo({ top: boxRef.current.scrollHeight });
-  }, [messages.length, active, supportOpen]);
+  }, [messages.length, active]);
 
   async function send() {
     if (!active || !text.trim() || sending) return;
@@ -118,32 +118,24 @@ export default function UserMessenger() {
     setSending(false);
   }
 
-  if (supportOpen) {
+  if (tab !== 'rooms') {
     return (
       <div className="relative">
-        <button
-          onClick={() => setSupportOpen(false)}
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-neon-cyan"
-        >
-          <ArrowLeft size={16} /> Chatlarga qaytish
-        </button>
-        <SupportChat mode="user" />
+        <Tabs tab={tab} onChange={setTab} />
+        <SupportChat mode="user" channel={tab === 'admin' ? 'admin' : 'superadmin'} />
       </div>
     );
   }
 
   return (
     <div className="neo-card rounded-2xl overflow-hidden">
-      <div className="px-5 py-4 border-b border-neon-cyan/15 bg-gradient-to-r from-neon-cyan/10 via-transparent to-neon-magenta/10 flex items-center justify-between">
-        <h2 className="font-bold flex items-center gap-2">
-          <MessageSquare size={18} className="text-neon-cyan" /> Xabarlar
-        </h2>
-        <button
-          onClick={() => setSupportOpen(true)}
-          className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-yellow-400/30 text-yellow-300 hover:bg-yellow-400/10"
-        >
-          <ShieldCheck size={13} /> Super Admin
-        </button>
+      <div className="px-5 py-4 border-b border-neon-cyan/15 bg-gradient-to-r from-neon-cyan/10 via-transparent to-neon-magenta/10">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold flex items-center gap-2">
+            <MessageSquare size={18} className="text-neon-cyan" /> Xabarlar
+          </h2>
+        </div>
+        <Tabs tab={tab} onChange={setTab} className="mt-3" />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-0">
@@ -252,6 +244,36 @@ export default function UserMessenger() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function Tabs({ tab, onChange, className }: {
+  tab: 'rooms' | 'admin' | 'superadmin';
+  onChange: (t: 'rooms' | 'admin' | 'superadmin') => void;
+  className?: string;
+}) {
+  const opts: { key: 'rooms' | 'admin' | 'superadmin'; icon: any; label: string }[] = [
+    { key: 'rooms', icon: Monitor, label: 'Xonalar' },
+    { key: 'admin', icon: Building2, label: 'Admin PM' },
+    { key: 'superadmin', icon: ShieldCheck, label: 'Super Admin' },
+  ];
+  return (
+    <div className={cn('flex items-center gap-1 overflow-x-auto scrollbar-thin', className)}>
+      {opts.map((o) => (
+        <button
+          key={o.key}
+          onClick={() => onChange(o.key)}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-colors whitespace-nowrap border',
+            tab === o.key
+              ? o.key === 'superadmin' ? 'border-yellow-400/40 bg-yellow-400/10 text-yellow-300' : o.key === 'admin' ? 'border-neon-cyan/40 bg-neon-cyan/10 text-neon-cyan' : 'border-neon-magenta/40 bg-neon-magenta/10 text-neon-magenta'
+              : 'border-white/10 text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/20'
+          )}
+        >
+          <o.icon size={13} /> {o.label}
+        </button>
+      ))}
     </div>
   );
 }

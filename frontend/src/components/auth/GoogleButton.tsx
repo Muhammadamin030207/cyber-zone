@@ -142,9 +142,16 @@ export default function GoogleButton({ mode = 'signin', className = '' }: Google
 
   return (
     <div className={`w-full ${className}`}>
-      <div className="relative w-full min-h-[44px] rounded-xl border border-white/10 bg-cyber-900/60 overflow-hidden">
+      <div className="relative w-full min-h-[44px]">
         {/* Rasmiy GSI tugmasi — to'liq kenglikda, ko'rinib turadi */}
-        <div ref={buttonRef} className={loadState === 'ready' ? 'w-full flex justify-center pr-1' : 'flex justify-center py-3'} />
+        <div
+          ref={buttonRef}
+          className={
+            loadState === 'ready'
+              ? 'w-full flex justify-center [&>div]:!rounded-xl [&>div]:!w-full [&>div]:overflow-hidden [&>div]:shadow-[0_2px_8px_rgba(16,185,129,.12)] transition-shadow hover:[&>div]:shadow-[0_4px_16px_rgba(16,185,129,.28)]'
+              : 'flex justify-center py-3'
+          }
+        />
         {loadState !== 'ready' && (
           <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-gray-400 pointer-events-none">
             {loadState === 'error' ? (

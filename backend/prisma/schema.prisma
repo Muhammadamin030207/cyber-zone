@@ -101,23 +101,27 @@ model User {
   fullName     String       @map("full_name")
   phone        String?
   avatarUrl    String?      @map("avatar_url")
-  role         Role         @default(USER)
-  language     String       @default("uz") // uz | ru | en
-  status       UserStatus   @default(ACTIVE)
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @updatedAt @map("updated_at")
+  role                 Role                 @default(USER)
+  language             String               @default("uz") // uz | ru | en
+  status               UserStatus           @default(ACTIVE)
+  loyaltyBalance       Int                  @default(0) @map("loyalty_balance") // bonus ballar (1 ball = 1 so'm)
+  resetToken           String?              @unique @map("reset_token")
+  resetTokenExpiresAt  DateTime?            @map("reset_token_expires_at")
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
 
-  computerRoom ComputerRoom? // admin egalik qiladi
-  bookings     Booking[]
-  payments     Payment[]
-  news         News[]
-  reviews      Review[]
-  notifications Notification[]
-  promoCodes   PromoCode[]
-  barOrders    BarOrder[]
-  chatMessages ChatMessage[]
-  supportThread SupportMessage[] @relation("SupportThread")
-  supportSent   SupportMessage[] @relation("SupportSender")
+  computerRoom          ComputerRoom? // admin egalik qiladi
+  bookings              Booking[]
+  payments              Payment[]
+  news                  News[]
+  reviews               Review[]
+  notifications         Notification[]
+  promoCodes            PromoCode[]
+  barOrders             BarOrder[]
+  chatMessages          ChatMessage[]
+  supportThread         SupportMessage[] @relation("SupportThread")
+  supportSent           SupportMessage[] @relation("SupportSender")
+  loyaltyTransactions   LoyaltyTransaction[]
 
   @@map("users")
 }
@@ -149,6 +153,7 @@ model ComputerRoom {
   barItems     BarItem[]
   barOrders    BarOrder[]
   chatMessages ChatMessage[]
+  supportMessages SupportMessage[]
 
   @@map("computer_rooms")
 }
@@ -200,6 +205,7 @@ model Booking {
   totalPrice       Decimal       @map("total_price") @db.Decimal(10, 2)
   discountAmount   Decimal       @default(0) @map("discount_amount") @db.Decimal(10, 2)
   finalPrice       Decimal       @map("final_price") @db.Decimal(10, 2)
+  pointsUsed       Int           @default(0) @map("points_used") // bonus ballar bilan to'lagan summa (so'm)
   advanceAmount    Decimal       @map("advance_amount") @db.Decimal(10, 2) // 30%
   remainingAmount  Decimal       @map("remaining_amount") @db.Decimal(10, 2) // 70%
   status           BookingStatus @default(PENDING)
@@ -312,20 +318,28 @@ model ChatMessage {
   @@map("chat_messages")
 }
 
-// ===================== SUPPORT =====================
+// ===================== SUPPORT / MUROJAATLAR =====================
+// recipientRole: kanalni aniqlaydi
+//   - 'SUPER_ADMIN' -> foydalanuvchi/admin super_admin'ga yozadi (thread userId bo'yicha)
+//   - 'ADMIN'       -> foydalanuvchi xona adminiga yozadi (thread userId + roomId bo'yicha)
 model SupportMessage {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id") // murojaat qilgan foydalanuvchi
-  senderId  String?  @map("sender_id") // yuboruvchi (admin/super_admin javobi yoki nol)
-  message   String
-  isRead    Boolean  @default(false) @map("is_read")
-  createdAt DateTime @default(now()) @map("created_at")
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id") // murojaat qilgan foydalanuvchi (thread egasi)
+  senderId      String?  @map("sender_id") // yuboruvchi (admin/super_admin javobi yoki nol)
+  message       String
+  recipientRole String   @default("SUPER_ADMIN") @map("recipient_role") // ADMIN | SUPER_ADMIN
+  roomId        String?  @map("room_id") // ADMIN kanali uchun xona (thread = userId + roomId)
+  isRead        Boolean  @default(false) @map("is_read")
+  createdAt     DateTime @default(now()) @map("created_at")
 
   user   User  @relation("SupportThread", fields: [userId], references: [id], onDelete: Cascade)
   sender User? @relation("SupportSender", fields: [senderId], references: [id])
+  room   ComputerRoom? @relation(fields: [roomId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([senderId])
+  @@index([recipientRole])
+  @@index([roomId])
   @@map("support_messages")
 }
 
@@ -374,4 +388,22 @@ model Notification {
   user User @relation(fields: [userId], references: [id])
 
   @@map("notifications")
+}
+
+// ============ LOYALTY (Bonus ballar) ============
+model LoyaltyTransaction {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  type         String    // EARN | REDEEM | REFUND
+  amount       Int       // + ball qo'shildi / - ball sarflandi
+  balanceAfter Int       @map("balance_after")
+  description  String
+  bookingId    String?   @map("booking_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([bookingId])
+  @@map("loyalty_transactions")
 }

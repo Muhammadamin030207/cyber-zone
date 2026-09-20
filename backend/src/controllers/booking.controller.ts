@@ -4,6 +4,7 @@ import { AuthRequest } from '../types';
 import { io } from '../lib/socket';
 import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/response';
 import { toNumber, round2 } from '../utils/money';
+import { computeBookingPrice } from '../utils/pricing';
 import { Prisma } from '@prisma/client';
 
 const BOOKING_INCLUDE = {
@@ -21,6 +22,27 @@ function timeToMinutes(t: string): number {
   return h * 60 + m;
 }
 
+// ============ YORDAMCHI: bron bekor qilinganda ballarni qaytarish ============
+async function refundPoints(tx: Prisma.TransactionClient, booking: { id: string; userId: string; pointsUsed: number }) {
+  if (booking.pointsUsed <= 0) return 0;
+  const user = await tx.user.update({
+    where: { id: booking.userId },
+    data: { loyaltyBalance: { increment: booking.pointsUsed } },
+    select: { loyaltyBalance: true },
+  });
+  await tx.loyaltyTransaction.create({
+    data: {
+      userId: booking.userId,
+      type: 'REFUND',
+      amount: booking.pointsUsed,
+      balanceAfter: user.loyaltyBalance,
+      description: `${booking.pointsUsed.toLocaleString('ru-RU')} ball qaytarildi (bron bekor qilindi)`,
+      bookingId: booking.id,
+    },
+  });
+  return booking.pointsUsed;
+}
+
 // ============ POST /api/bookings — USER: yangi bron (himoya + transaction) ============
 export const createBooking = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -28,7 +50,7 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
       return forbidden(res, 'Bron faqat foydalanuvchilar uchun. Admin bron qila olmaydi');
     }
 
-    const { roomId, zoneId, computerId, date, startTime, durationHours, notes, promoCode } = req.body;
+    const { roomId, zoneId, computerId, date, startTime, durationHours, notes, promoCode, usePoints } = req.body;
     let endTime = req.body.endTime as string | undefined;
 
     if (!roomId || !zoneId || !date || !startTime) {
@@ -152,26 +174,39 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
 
         // Narxni hisoblash — barchasi tiyingacha yaxlitlanadi (float xatolik yo'q)
         const duration = toNumber(durationHours) || (timeToMinutes(endTime as string) - timeToMinutes(startTime)) / 60;
-        const baseTotal = round2(toNumber(zone.pricePerHour) * duration);
 
-        // Chegirma
-        let discount = 0;
-        if (promo) {
-          if (promo.discountType === 'PERCENTAGE') {
-            discount = round2((baseTotal * toNumber(promo.discountValue)) / 100);
-          } else {
-            discount = round2(toNumber(promo.discountValue));
-          }
-          if (toNumber(promo.minBookingAmount) && baseTotal < toNumber(promo.minBookingAmount)) {
-            throw new Error('MIN_AMOUNT_NOT_REACHED');
-          }
-          discount = Math.min(round2(discount), baseTotal);
+        // Bonus ballarni tekshirish (1 ball = 1 so'm), sarflash transaktsiya ichida
+        // Frontend boolean (usePoints) yuboradi — barcha mavjud bal taklif qilinadi,
+        // yakuniy summa computeBookingPrice da 50% cap bilan chiqariladi
+        let pointsToUse = 0;
+        if (usePoints) {
+          const u = await tx.user.findUnique({
+            where: { id: req.user!.userId },
+            select: { loyaltyBalance: true },
+          });
+          const balance = u?.loyaltyBalance || 0;
+          if (balance <= 0) throw new Error('INSUFFICIENT_POINTS');
+          pointsToUse = balance;
         }
 
+        const pricing = computeBookingPrice({
+          pricePerHour: zone.pricePerHour,
+          durationHours: duration,
+          promo,
+          pointsToUse,
+        });
+
+        if (promo && toNumber(promo.minBookingAmount) && pricing.baseTotal < toNumber(promo.minBookingAmount)) {
+          throw new Error('MIN_AMOUNT_NOT_REACHED');
+        }
+
+        // Ballar bilan to'langan qism aks holda olinmaydi — haqiqiy sarflanganini yozamiz
+        pointsToUse = pricing.pointsUsed;
+
         // Ma'lumotlar to'liq mos kelsin: final = avans + qoldiq (har doim teng)
-        const finalTotal = round2(baseTotal - discount);
-        const advance = round2(finalTotal * 0.3);
-        const remaining = round2(finalTotal - advance);
+        const finalTotal = pricing.finalTotal;
+        const advance = pricing.advance;
+        const remaining = pricing.remaining;
 
         const newBooking = await tx.booking.create({
           data: {
@@ -184,9 +219,10 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
             startTime,
             endTime: endTime as string,
             durationHours: duration,
-            totalPrice: baseTotal,
-            discountAmount: discount,
+            totalPrice: pricing.baseTotal,
+            discountAmount: pricing.discountPromo,
             finalPrice: finalTotal,
+            pointsUsed: pointsToUse,
             advanceAmount: advance,
             remainingAmount: remaining,
             status: 'PENDING',
@@ -194,6 +230,25 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
           },
           include: BOOKING_INCLUDE,
         });
+
+        // Ballarni hisobdan yechish + tarixga yozish
+        if (pointsToUse > 0) {
+          const updatedUser = await tx.user.update({
+            where: { id: req.user!.userId },
+            data: { loyaltyBalance: { decrement: pointsToUse } },
+            select: { loyaltyBalance: true },
+          });
+          await tx.loyaltyTransaction.create({
+            data: {
+              userId: req.user!.userId,
+              type: 'REDEEM',
+              amount: -pointsToUse,
+              balanceAfter: updatedUser.loyaltyBalance,
+              description: `Bron uchun ${pointsToUse.toLocaleString('ru-RU')} ball sarflandi`,
+              bookingId: newBooking.id,
+            },
+          });
+        }
 
         // Promo-kod count +1
         if (promo) {
@@ -278,6 +333,9 @@ export const cancelBooking = async (req: AuthRequest, res: Response, next: NextF
       where: { bookingId: booking.id, status: 'COMPLETED' },
       data: { status: 'REFUNDED' },
     });
+
+    // Bron yaratishda sarflangan bonus ballar qaytariladi
+    await prisma.$transaction(async (tx) => refundPoints(tx, booking));
 
     // Promo-kod count'ni qaytarish
     if (booking.promoCodeId) {
@@ -376,6 +434,15 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response, next:
         where: { bookingId: booking.id, status: 'COMPLETED' },
         data: { status: 'REFUNDED' },
       });
+      // Sarflangan bonus ballar ham qaytariladi
+      await prisma.$transaction(async (tx) => refundPoints(tx, booking));
+      // Promo-kod count'ni qaytarish
+      if (booking.promoCodeId) {
+        await prisma.promoCode.update({
+          where: { id: booking.promoCodeId },
+          data: { usedCount: { decrement: 1 } },
+        });
+      }
     }
 
     const updated = await prisma.booking.update({

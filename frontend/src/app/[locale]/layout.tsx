@@ -7,6 +7,7 @@ import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import BottomTabBar from '@/components/layout/BottomTabBar';
 import AuthInit from '@/components/providers/AuthInit';
+import HalloweenDecor from '@/components/layout/HalloweenDecor';
 
 const inter = Inter({ subsets: ['latin', 'latin-ext'] });
 const orbitron = Orbitron({ subsets: ['latin'], weight: ['400', '700', '900'] });
@@ -64,7 +65,7 @@ export default async function RootLayout({ children, params }: Props) {
         `}</style>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('cyber-zone-theme')||localStorage.getItem('cyber-arena-theme')||'obsidian';var all=['obsidian','midnight','cyberpunk','aurora'];if(all.indexOf(t)===-1)t='obsidian';document.documentElement.dataset.theme=t;}catch(e){}document.documentElement.style.colorScheme='dark';})();`,
+            __html: `(function(){try{var t=localStorage.getItem('cyber-zone-theme')||localStorage.getItem('cyber-arena-theme')||'obsidian';var all=['obsidian','midnight','cyberpunk','aurora','halloween'];if(all.indexOf(t)===-1)t='obsidian';document.documentElement.dataset.theme=t;}catch(e){}document.documentElement.style.colorScheme='dark';})();`,
           }}
         />
         <link rel="dns-prefetch" href="https://accounts.google.com" />
@@ -79,6 +80,7 @@ export default async function RootLayout({ children, params }: Props) {
       >
         <NextIntlClientProvider locale={locale} messages={messages}>
           <AuthInit />
+          <HalloweenDecor />
           <Header />
           <main className="flex-1 pb-20 md:pb-0">{children}</main>
           <Footer />

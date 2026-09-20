@@ -9,47 +9,98 @@ const SUPPORT_INCLUDE = {
   sender: { select: { id: true, fullName: true, avatarUrl: true, role: true } },
 };
 
-const STAFF_ROLES = ['SUPER_ADMIN', 'ADMIN'];
+const isSuperAdmin = (role: string) => role === 'SUPER_ADMIN';
+const isAdmin = (role: string) => role === 'ADMIN';
+
+type Channel = 'ADMIN' | 'SUPER_ADMIN';
 
 /**
- * POST /api/support/messages — xabar yuborish (foydalanuvchi/admin ↔ super_admin)
- * - USER/ADMIN o'z thread'iga yozadi (super_admin'ga murojaat)
- * - SUPER_ADMIN/ADMIN body.userId orqali berilgan thread'ga javob yozadi
+ * POST /api/support/messages — xabar yuborish
+ * - USER → super_admin (recipient=SUPER_ADMIN, default): o'z thread'i
+ * - USER → admin (recipient=ADMIN, roomId kerak): xona adminiga shaxsiy xabar
+ * - ADMIN → super_admin (recipient=SUPER_ADMIN, userId'siz): o'z murojaati
+ * - ADMIN → javob (recipient=ADMIN, userId=thread egasi): o'z xonasi murojaatlariga
+ * - SUPER_ADMIN → javob (userId kerak)
  */
 export const sendSupport = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { message, userId } = req.body;
+    const { message, recipient, userId, roomId } = req.body;
     const text = String(message || '').trim();
     if (!text) return badRequest(res, 'Xabar yozing');
-    if (text.length > 1000) return badRequest(res, 'Xabar 1000 ta belgidan oshmasligi kerak');
+    if (text.length > 3000) return badRequest(res, 'Xabar 3000 ta belgidan oshmasligi kerak');
 
     const me = req.user!;
-    const isStaff = STAFF_ROLES.includes(me.role);
-    let threadUserId = me.userId;
+    const channel: Channel = recipient === 'ADMIN' ? 'ADMIN' : 'SUPER_ADMIN';
 
-    if (isStaff) {
+    let threadUserId = me.userId;
+    let targetRoomId: string | null = channel === 'ADMIN' ? String(roomId || '') || null : null;
+
+    if (me.role === 'USER') {
+      threadUserId = me.userId;
+      if (channel === 'ADMIN') {
+        if (!targetRoomId) return badRequest(res, "Admin'ga yozish uchun xona (roomId) kerak");
+        const room = await prisma.computerRoom.findUnique({ where: { id: targetRoomId } });
+        if (!room) return notFoundMsg(res, 'Xona topilmadi');
+      }
+    } else if (me.role === 'ADMIN') {
+      if (userId && channel === 'ADMIN') {
+        // Javob — o'z xonasi murojaatiga
+        const target = await prisma.user.findUnique({ where: { id: String(userId) } });
+        if (!target) return notFoundMsg(res, 'Foydalanuvchi topilmadi');
+        const myRoom = await prisma.computerRoom.findUnique({ where: { ownerId: me.userId } });
+        if (!myRoom) return forbidden(res, 'Sizda xona biriktirilmagan');
+        threadUserId = target.id;
+        targetRoomId = myRoom.id;
+      } else {
+        // Admin super_admin'ga yozadi (o'z murojaati)
+        threadUserId = me.userId;
+        targetRoomId = null;
+      }
+    } else {
+      // SUPER_ADMIN javob
       if (!userId) return badRequest(res, 'Javob yozish uchun userId kerak');
       const target = await prisma.user.findUnique({ where: { id: String(userId) } });
       if (!target) return notFoundMsg(res, 'Foydalanuvchi topilmadi');
       threadUserId = target.id;
-    } else {
-      // Foydalanuvchi o'z murojaati — super_admin'ga
-      threadUserId = me.userId;
+      if (channel === 'ADMIN' && !targetRoomId) return badRequest(res, 'ADMIN kanali uchun roomId kerak');
+      if (channel === 'SUPER_ADMIN') targetRoomId = null;
     }
 
     const msg = await prisma.supportMessage.create({
       data: {
         userId: threadUserId,
         senderId: me.userId,
-        message: text.slice(0, 1000),
+        message: text.slice(0, 3000),
+        recipientRole: channel,
+        roomId: targetRoomId,
       },
       include: SUPPORT_INCLUDE,
     });
 
-    // Jonli yetkazish: thread egasiga + super adminlar zaliga
+    // Jonli yetkazish
     io.to(`user:${threadUserId}`).emit('support:new', { userId: threadUserId, message: msg });
-    io.to(`support:${threadUserId}`).emit('support:thread:new', { userId: threadUserId, message: msg });
-    io.to('support:sadmin').emit('support:new', { userId: threadUserId, message: msg });
+    io.to(`support:${channel}:${threadUserId}`).emit('support:thread:new', { userId: threadUserId, message: msg });
+
+    if (channel === 'ADMIN' && targetRoomId) {
+      const room = await prisma.computerRoom.findUnique({ where: { id: targetRoomId } });
+      if (room && room.ownerId !== me.userId) {
+        io.to(`user:${room.ownerId}`).emit('support:new', { userId: threadUserId, message: msg });
+        if (me.role === 'USER') {
+          await prisma.notification
+            .create({
+              data: {
+                userId: room.ownerId,
+                title: 'Yangi murojaat',
+                message: `${msg.user.fullName}: ${text.slice(0, 60)}`,
+                type: 'support',
+              },
+            })
+            .catch(() => { /* muhim emas */ });
+        }
+      }
+    } else {
+      io.to('support:sadmin').emit('support:new', { userId: threadUserId, message: msg });
+    }
 
     return created(res, msg);
   } catch (err) {
@@ -58,33 +109,72 @@ export const sendSupport = async (req: AuthRequest, res: Response, next: NextFun
 };
 
 /**
- * GET /api/support/messages?userId= — thread tarixi
- * - USER/ADMIN: o'z murojaati
- * - SUPER_ADMIN: userId berilsa o'sha foydalanuvchi thread'i
+ * GET /api/support/messages — thread tarixi
+ * Query: userId?, roomId?, recipient? ('ADMIN' | 'SUPER_ADMIN')
  */
 export const getSupportMessages = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const me = req.user!;
-    const isStaff = STAFF_ROLES.includes(me.role);
-    const { userId } = req.query as { userId?: string };
+    const { userId, roomId, recipient } = req.query as { userId?: string; roomId?: string; recipient?: string };
+    const channel: Channel = recipient === 'ADMIN' ? 'ADMIN' : 'SUPER_ADMIN';
 
     let threadUserId = me.userId;
-    if (isStaff && userId) {
-      threadUserId = String(userId);
-      const target = await prisma.user.findUnique({ where: { id: threadUserId } });
+    let threadRoomId: string | null = null;
+
+    if (me.role === 'USER') {
+      threadUserId = me.userId;
+      if (channel === 'ADMIN') {
+        if (!roomId) return badRequest(res, 'roomId kerak');
+        threadRoomId = String(roomId);
+        const room = await prisma.computerRoom.findUnique({ where: { id: threadRoomId } });
+        if (!room) return notFoundMsg(res, 'Xona topilmadi');
+      }
+    } else if (me.role === 'ADMIN') {
+      if (channel === 'ADMIN') {
+        const myRoom = await prisma.computerRoom.findUnique({ where: { ownerId: me.userId } });
+        if (!myRoom) return forbidden(res, 'Sizda xona biriktirilmagan');
+        if (!userId) {
+          // Admin o'z murojaatini yangilash (super_admin bilan) — channel bo'lsa
+          return ok(res, { messages: [], userId: me.userId });
+        }
+        const target = await prisma.user.findUnique({ where: { id: String(userId) } });
+        if (!target) return notFoundMsg(res, 'Foydalanuvchi topilmadi');
+        threadUserId = target.id;
+        threadRoomId = myRoom.id;
+      } else {
+        threadUserId = me.userId;
+      }
+    } else {
+      if (!userId) return badRequest(res, 'userId kerak');
+      const target = await prisma.user.findUnique({ where: { id: String(userId) } });
       if (!target) return notFoundMsg(res, 'Foydalanuvchi topilmadi');
+      threadUserId = target.id;
+      if (channel === 'ADMIN') {
+        if (!roomId) return badRequest(res, 'roomId kerak');
+        threadRoomId = String(roomId);
+      }
     }
 
     const messages = await prisma.supportMessage.findMany({
-      where: { userId: threadUserId },
+      where: {
+        userId: threadUserId,
+        recipientRole: channel,
+        ...(threadRoomId ? { roomId: threadRoomId } : {}),
+      },
       include: SUPPORT_INCLUDE,
       orderBy: { createdAt: 'asc' },
       take: 500,
     });
 
-    // O'qilgan deb belgilash — boshqa taraf (recipient) ko'rganlarini
+    // O'qilgan deb belgilash — boshqa taraf yuborganlarini
     await prisma.supportMessage.updateMany({
-      where: { userId: threadUserId, isRead: false, senderId: { not: me.userId } },
+      where: {
+        userId: threadUserId,
+        recipientRole: channel,
+        ...(threadRoomId ? { roomId: threadRoomId } : {}),
+        isRead: false,
+        senderId: { not: me.userId },
+      },
       data: { isRead: true },
     });
 
@@ -95,30 +185,66 @@ export const getSupportMessages = async (req: AuthRequest, res: Response, next: 
 };
 
 /**
- * GET /api/support/threads — SUPER_ADMIN: barcha murojaatlar (unread bilan)
+ * GET /api/support/threads?channel=&scope=
+ * - ADMIN: o'z xonasidagi USER murojaatlari (ADMIN kanali) — user ism+tel ko'rinadi
+ * - SUPER_ADMIN: SUPER_ADMIN kanali threadlari (user/admin), scope bo'yicha filtrlash
  */
 export const getSupportThreads = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    if (!STAFF_ROLES.includes(req.user!.role)) return forbidden(res, 'Faqat super_admin/admin uchun');
+    const me = req.user!;
+    const { channel, scope } = req.query as { channel?: string; scope?: string };
+    const targetChannel: Channel = channel === 'ADMIN' ? 'ADMIN' : 'SUPER_ADMIN';
 
-    const msgs = await prisma.supportMessage.findMany({
-      include: { user: { select: { id: true, fullName: true, email: true, phone: true, role: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: 1000,
-    });
+    let threads: any[] = [];
 
-    const byUser = new Map<string, any>();
-    for (const m of msgs) {
-      const cur = byUser.get(m.userId) || { user: m.user, unread: 0, lastMessage: null, total: 0 };
-      // super_admin uchun o'qilmaganlar = thread egasining o'qilmagan xabarlari
-      if (m.senderId === m.userId && !m.isRead) cur.unread += 1;
-      cur.total += 1;
-      if (!cur.lastMessage) cur.lastMessage = m;
-      byUser.set(m.userId, cur);
+    if (me.role === 'ADMIN') {
+      const myRoom = await prisma.computerRoom.findUnique({ where: { ownerId: me.userId } });
+      if (!myRoom) return ok(res, []);
+      const msgs = await prisma.supportMessage.findMany({
+        where: { recipientRole: 'ADMIN', roomId: myRoom.id },
+        include: {
+          user: { select: { id: true, fullName: true, email: true, phone: true, avatarUrl: true, role: true } },
+          room: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 1000,
+      });
+      const byKey = new Map<string, any>();
+      for (const m of msgs) {
+        const key = `${m.userId}:${m.roomId}`;
+        const cur = byKey.get(key) || { user: m.user, room: m.room, unread: 0, total: 0, lastMessage: null };
+        if (m.senderId !== me.userId && !m.isRead) cur.unread += 1;
+        cur.total += 1;
+        if (!cur.lastMessage) cur.lastMessage = m;
+        byKey.set(key, cur);
+      }
+      threads = Array.from(byKey.values()).sort((a, b) => (b.lastMessage?.createdAt || 0) - (a.lastMessage?.createdAt || 0));
+    } else if (me.role === 'SUPER_ADMIN') {
+      const msgs = await prisma.supportMessage.findMany({
+        where: { recipientRole: targetChannel },
+        include: {
+          user: { select: { id: true, fullName: true, email: true, phone: true, avatarUrl: true, role: true } },
+          room: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 2000,
+      });
+      const byKey = new Map<string, any>();
+      for (const m of msgs) {
+        const key = targetChannel === 'ADMIN' ? `${m.userId}:${m.roomId}` : m.userId;
+        const cur = byKey.get(key) || { user: m.user, room: m.room, unread: 0, total: 0, lastMessage: null };
+        if (m.senderId !== me.userId && !m.isRead) cur.unread += 1;
+        cur.total += 1;
+        if (!cur.lastMessage) cur.lastMessage = m;
+        byKey.set(key, cur);
+      }
+      let list = Array.from(byKey.values()).sort((a, b) => (b.lastMessage?.createdAt || 0) - (a.lastMessage?.createdAt || 0));
+      if (scope === 'users') list = list.filter((t) => t.user.role === 'USER');
+      else if (scope === 'admins') list = list.filter((t) => t.user.role !== 'USER');
+      threads = list;
+    } else {
+      return forbidden(res, 'Ruxsat yo\'q');
     }
-
-    const threads = Array.from(byUser.values())
-      .sort((a, b) => (b.lastMessage?.createdAt || 0) - (a.lastMessage?.createdAt || 0));
 
     return ok(res, threads);
   } catch (err) {
@@ -127,12 +253,78 @@ export const getSupportThreads = async (req: AuthRequest, res: Response, next: N
 };
 
 /**
- * DELETE /api/support/threads/:userId — SUPER_ADMIN: murojaatni tozalash
+ * GET /api/support/my-rooms — USER: admin kanali uchun xona ro'yxati
+ * (murojaat qilingan + bron qilingan xonalar)
+ */
+export const getMySupportRooms = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!isAdmin(req.user!.role) && !isSuperAdmin(req.user!.role) && req.user!.role !== 'USER') {
+      return forbidden(res, 'Ruxsat yo\'q');
+    }
+    const me = req.user!;
+
+    const [booked, threads, active] = await Promise.all([
+      prisma.booking.findMany({ where: { userId: me.userId }, select: { roomId: true } }),
+      prisma.supportMessage.findMany({
+        where: { userId: me.userId, recipientRole: 'ADMIN' },
+        distinct: ['roomId'],
+        select: { roomId: true },
+      }),
+      prisma.computerRoom.findMany({ where: { status: 'ACTIVE' }, select: { id: true }, take: 10 }),
+    ]);
+
+    const idSet = new Set<string>();
+    booked.forEach((b) => idSet.add(b.roomId));
+    threads.forEach((t) => t.roomId && idSet.add(t.roomId));
+    if (idSet.size === 0) active.forEach((r) => idSet.add(r.id));
+
+    const rooms = await prisma.computerRoom.findMany({
+      where: { id: { in: Array.from(idSet) } },
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        district: true,
+        owner: { select: { id: true, fullName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return ok(res, rooms);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * DELETE /api/support/threads/:userId?roomId=&channel= — thread tozalash
  */
 export const clearSupportThread = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    if (!STAFF_ROLES.includes(req.user!.role)) return forbidden(res, 'Faqat super_admin/admin uchun');
-    await prisma.supportMessage.deleteMany({ where: { userId: req.params.userId } });
+    const me = req.user!;
+    const { roomId, channel } = req.query as { roomId?: string; channel?: string };
+    const targetChannel: Channel = channel === 'ADMIN' ? 'ADMIN' : 'SUPER_ADMIN';
+    const threadUserId = req.params.userId;
+
+    if (me.role === 'ADMIN') {
+      if (targetChannel !== 'ADMIN') return forbidden(res, 'Administrator o\'z murojaatlarini tozalamaydi');
+      const myRoom = await prisma.computerRoom.findUnique({ where: { ownerId: me.userId } });
+      if (!myRoom) return forbidden(res, 'Sizda xona biriktirilmagan');
+      await prisma.supportMessage.deleteMany({
+        where: { userId: threadUserId, recipientRole: 'ADMIN', roomId: myRoom.id },
+      });
+    } else if (me.role === 'SUPER_ADMIN') {
+      await prisma.supportMessage.deleteMany({
+        where: {
+          userId: threadUserId,
+          recipientRole: targetChannel,
+          ...(targetChannel === 'ADMIN' && roomId ? { roomId: String(roomId) } : {}),
+        },
+      });
+    } else {
+      return forbidden(res, 'Ruxsat yo\'q');
+    }
+
     return ok(res, null, 'Murojaat tozalandi');
   } catch (err) {
     next(err);

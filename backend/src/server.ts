@@ -16,6 +16,7 @@ import barRoutes from './routes/bar.routes';
 import chatRoutes from './routes/chat.routes';
 import aiRoutes from './routes/ai.routes';
 import supportRoutes from './routes/support.routes';
+import loyaltyRoutes from './routes/loyalty.routes';
 import { errorHandler, notFound } from './middlewares/error';
 import prisma from './lib/prisma';
 import { io } from './lib/socket';
@@ -49,8 +50,11 @@ io.on('connection', (socket) => {
   });
 
   // Support: alohida thread kuzatuvi (user/admin/super_admin)
-  socket.on('joinSupportThread', (threadUserId: string) => {
-    if (threadUserId) socket.join(`support:${threadUserId}`);
+  socket.on('joinSupportThread', (threadUserId: string, channel?: string) => {
+    if (threadUserId) {
+      socket.join(`support:${threadUserId}`);
+      socket.join(`support:${channel === 'ADMIN' ? 'ADMIN' : 'SUPER_ADMIN'}:${threadUserId}`);
+    }
   });
 
   socket.on('disconnect', () => {
@@ -133,6 +137,7 @@ app.use('/api/bar', barRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/support', supportRoutes);
+app.use('/api/loyalty', loyaltyRoutes);
 
 // 404 va error handler
 app.use(notFound);

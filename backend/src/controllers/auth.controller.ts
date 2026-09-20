@@ -7,6 +7,7 @@ import { generateTokens, verifyRefreshToken } from '../lib/jwt';
 import { config } from '../config';
 import { AuthRequest } from '../types';
 import { ok, badRequest, unauthorized, notFoundMsg } from '../utils/response';
+import { sendEmail, buildResetEmail } from '../lib/mailer';
 
 const googleClient = new OAuth2Client(config.google.clientId);
 
@@ -22,13 +23,11 @@ function normalizePhone(p: string): string | null {
 // googleToken berilganda parvoz qilib, parol ixtiyoriy (avtomatik random parol qo'yiladi)
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password, fullName, phone, language, googleToken } = req.body;
+    const { email, password, phone, language, googleToken } = req.body;
+    let fullName = String(req.body.fullName || '').trim();
 
-    if (!email || !fullName) {
-      return badRequest(res, 'email va fullName majburiy');
-    }
-    if (String(fullName).trim().length < 3) {
-      return badRequest(res, "Ism kamida 3 ta belgidan iborat bo'lishi kerak");
+    if (!email) {
+      return badRequest(res, 'email majburiy');
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
       return badRequest(res, "Email noto'g'ri formatda");
@@ -41,7 +40,8 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       return badRequest(res, "Telefon +998 XX XXX XX XX formatda bo'lishi kerak");
     }
 
-    // Google orqali kelgan holatda token tekshiriladi va google_id biriktiriladi
+    // Google orqali kelgan holatda token tekshiriladi va google_id biriktiriladi.
+    // Ism (fullName) Gmail profilidan olinadi — foydalanuvchi faqat telefon qo'shadi.
     let googleId: string | null = null;
     let avatarUrl: string | null = null;
     if (googleToken) {
@@ -58,6 +58,14 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       }
       googleId = payload.sub;
       avatarUrl = payload.picture || null;
+      const payloadName =
+        [payload.given_name, payload.family_name].filter(Boolean).join(' ').trim() ||
+        payload.name || '';
+      fullName = fullName || payloadName;
+    }
+
+    if (fullName.length < 3) {
+      return badRequest(res, "Ism kamida 3 ta belgidan iborat bo'lishi kerak");
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -315,6 +323,68 @@ export const changePassword = async (req: AuthRequest, res: Response, next: Next
     });
 
     return ok(res, null, 'Parol muvaffaqiyatli o\'zgartirildi');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ FORGOT PASSWORD (email orqali havola) ============
+export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email } = req.body;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+      return badRequest(res, "Email noto'g'ri formatda");
+    }
+
+    const user = await prisma.user.findUnique({ where: { email: String(email).toLowerCase() } });
+    if (!user) {
+      // Xavfsizlik: user topilmasa ham "yuborildi" deb javob beramiz
+      return ok(res, null, 'Parolni tiklash havolasi emailingizga yuborildi');
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 soat
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetToken: token, resetTokenExpiresAt: expiresAt },
+    });
+
+    const base = config.frontendUrls[0] || 'http://localhost:3006';
+    const resetUrl = `${base}/reset-password?token=${token}`;
+    await sendEmail(user.email, 'Cyber-ZONE — Parolni tiklash', buildResetEmail(resetUrl));
+
+    return ok(
+      res,
+      { devToken: token }, // dev/test uchun (haqiqiy SMTP bo'lmasa)
+      'Parolni tiklash havolasi emailingizga yuborildi'
+    );
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ RESET PASSWORD (token orqali) ============
+export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token) return badRequest(res, 'Token talab qilinadi');
+    if (!newPassword || String(newPassword).length < 6) {
+      return badRequest(res, "Yangi parol kamida 6 ta belgidan iborat bo'lishi kerak");
+    }
+
+    const user = await prisma.user.findUnique({ where: { resetToken: String(token) } });
+    if (!user || !user.resetTokenExpiresAt || user.resetTokenExpiresAt < new Date()) {
+      return badRequest(res, 'Token yaroqsiz yoki muddati tugagan. Qayta so\'rov yuboring.');
+    }
+
+    const passwordHash = await bcrypt.hash(String(newPassword), 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash, resetToken: null, resetTokenExpiresAt: null },
+    });
+
+    return ok(res, null, 'Parol muvaffaqiyatli tiklandi. Endi kirishingiz mumkin.');
   } catch (err) {
     next(err);
   }

@@ -75,6 +75,22 @@ html[data-theme="aurora"] {
   --fg-dim: #69808f;
 }
 
+html[data-theme="halloween"] {
+  --acc-a: #ff7a00;          /* qovoq pumpkin orange */
+  --acc-a-soft: #ffa54d;
+  --acc-b: #a855f7;          /* zahar purple */
+  --acc-b-soft: #c084fc;
+  --bg-0: #0a0609;
+  --bg-1: #120a12;
+  --bg-2: #1b1219;
+  --bg-3: #251a24;
+  --line: rgba(255, 122, 0, 0.12);
+  --line-strong: rgba(168, 85, 247, 0.30);
+  --fg: #f7edf0;
+  --fg-mut: #b7a4ad;
+  --fg-dim: #7e6a72;
+}
+
 @theme inline {
   /* Eski klass nomlarini premium aksentlarga xaritalash —
      barcha mavjud komponentlar avtomatik yangi uslubni oladi */
@@ -150,7 +166,8 @@ html[data-theme="aurora"] {
 :root[data-theme='obsidian'],
 :root[data-theme='midnight'],
 :root[data-theme='cyberpunk'],
-:root[data-theme='aurora'] {
+:root[data-theme='aurora'],
+:root[data-theme='halloween'] {
   --cz-bg: var(--bg-0);
   --cz-bg-900: var(--bg-1);
   --cz-bg-800: var(--bg-2);
@@ -227,6 +244,62 @@ input[type='time']::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 a { transition: color 0.15s ease, opacity 0.15s ease; }
+button, a, [role='button'] {
+  -webkit-tap-highlight-color: transparent;
+}
+button, a {
+  transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease, color 0.15s ease;
+}
+
+/* Bosilish effekti */
+button:active:not(:disabled) { transform: scale(0.98); }
+
+/* Ko'tarilish + porlash */
+.hover-lift { transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, filter 0.18s ease; }
+.hover-lift:hover { transform: translateY(-3px); filter: brightness(1.05); }
+
+.hover-glow { transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease; }
+.hover-glow:hover {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--acc-a) 30%, transparent), 0 12px 34px -14px color-mix(in srgb, var(--acc-a) 45%, transparent);
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--acc-a) 45%, transparent);
+}
+
+/* Jadval qatorlari hover */
+.table-hover tbody tr { transition: background-color 0.15s ease, opacity 0.15s ease; }
+.table-hover tbody tr:hover { background: color-mix(in srgb, var(--acc-a) 6%, transparent); }
+
+/* Pop-in (yangi elementlar uchun) */
+@keyframes popIn {
+  0% { transform: scale(0.92); opacity: 0; }
+  60% { transform: scale(1.02); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-pop { animation: popIn 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* Pulse porlash — tab/yangi belgilar uchun */
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--acc-a) 45%, transparent); }
+  50% { box-shadow: 0 0 0 6px transparent; }
+}
+.animate-pulse-glow { animation: pulseGlow 2s ease-in-out infinite; }
+
+/* Gorizontal silliq hover chizig'i (tab'lar uchun) */
+.menu-underline { position: relative; }
+.menu-underline::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  right: 50%;
+  bottom: -3px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--acc-a), var(--acc-b));
+  transition: left 0.25s ease, right 0.25s ease, opacity 0.25s ease;
+  opacity: 0;
+}
+.menu-underline:hover::after,
+.menu-underline.is-active::after { left: 0; right: 0; opacity: 1; }
 
 :focus-visible {
   outline: 2px solid var(--acc-a);
@@ -528,4 +601,84 @@ a { transition: color 0.15s ease, opacity 0.15s ease; }
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ============================================================
+   HALLOWEEN DEKORATSIYALARI
+   Faqat [data-theme="halloween"] da ko'rinadi — tepada uchuvchi
+   ko'rshapalaklar, o'rgimchak, qovoqchalar va burchak to'rlari.
+   ============================================================ */
+
+.halloween-decor {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  display: none;
+}
+
+html[data-theme="halloween"] .halloween-decor {
+  display: block;
+}
+
+.hd-item {
+  position: absolute;
+  opacity: 0;
+  line-height: 1;
+  user-select: none;
+  animation-iteration-count: infinite;
+}
+
+.hd-bat { font-size: 26px; filter: drop-shadow(0 0 10px rgba(255, 122, 0, 0.35)); animation: hdFly 14s linear infinite; }
+.hd-bat--2 { animation-delay: -6.5s; font-size: 18px; }
+.hd-bat--3 { animation-delay: -3s; font-size: 14px; opacity: 0; animation: hdFly 18s linear infinite; }
+.hd-bat--4 { animation-delay: -11s; font-size: 22px; animation-duration: 22s; }
+
+.hd-pumpkin { font-size: 22px; opacity: 0; animation: hdBlink 7s ease-in-out infinite; filter: drop-shadow(0 0 8px rgba(255, 122, 0, 0.5)); }
+.hd-pumpkin--2 { animation-delay: -3.2s; font-size: 16px; animation: hdBlink 9s ease-in-out infinite; }
+.hd-pumpkin--3 { animation-delay: -5.8s; font-size: 28px; }
+
+.hd-cobweb {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  opacity: 0;
+  animation: hdBlink 8s ease-in-out infinite;
+  filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.35));
+}
+.hd-cobweb img { width: 100%; height: 100%; }
+.hd-cobweb--tl { top: 0; left: 0; animation-delay: -1s; }
+.hd-cobweb--tr { top: 0; right: 0; transform: scaleX(-1); animation-delay: -5s; }
+.hd-cobweb--bl { bottom: 0; left: 0; transform: scaleY(-1); animation-delay: -2s; }
+.hd-cobweb--br { bottom: 0; right: 0; transform: scale(-1, 1) scaleY(-1); animation-delay: -7s; }
+
+.hd-spider {
+  position: absolute;
+  font-size: 18px;
+  opacity: 0;
+  animation: hdSpider 11s ease-in-out infinite;
+  filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.45));
+}
+.hd-spider--2 { animation-delay: -5.5s; font-size: 14px; }
+
+@keyframes hdFly {
+  0%   { transform: translate(calc(100vw + 40px), 12vh) scale(1) rotate(8deg); opacity: 0; }
+  3%   { opacity: 0.9; }
+  45%  { transform: translate(38vw, 8vh) scale(1.05) rotate(-8deg); }
+  55%  { opacity: 0.9; }
+  100% { transform: translate(-40px, 30vh) scale(1) rotate(10deg); opacity: 0; }
+}
+@keyframes hdBlink {
+  0%, 100% { opacity: 0; transform: scale(0.9) rotate(0deg); }
+  10%, 90% { opacity: 0.85; }
+  20% { transform: scale(1.06) rotate(-3deg); }
+  50% { opacity: 1; transform: scale(1) rotate(3deg); }
+}
+@keyframes hdSpider {
+  0%, 12% { opacity: 0; transform: translate(0, 0); }
+  15% { opacity: 0.95; }
+  55% { transform: translate(30vw, 25vh); }
+  60%, 95% { opacity: 0.95; }
+  100% { transform: translate(60vw, 55vh); opacity: 0; }
 }

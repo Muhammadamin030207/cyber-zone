@@ -1,14 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
-import { Search, CalendarCheck, Crown, ShieldCheck, ArrowRight, Users, Building2, Clock3, Languages, Sparkles } from 'lucide-react';
+import { Search, CalendarCheck, Crown, ShieldCheck, ArrowRight, Users, Building2, Clock3, Languages, Sparkles, MapPin } from 'lucide-react';
 import { useRouter } from '@/i18n/navigation';
 import api from '@/lib/api';
 import type { Room } from '@/lib/types';
 import RoomCard from '@/components/rooms/RoomCard';
 import Logo from '@/components/brand/Logo';
+
+const RoomsMap = dynamic(() => import('@/components/rooms/RoomsMap'), { ssr: false });
 
 export default function HomePage() {
   const t = useTranslations('home');
@@ -135,6 +138,25 @@ export default function HomePage() {
             ))}
           </div>
         )}
+      </section>
+
+      {/* ===== MAP ===== */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-bold text-neon-cyan uppercase tracking-widest mb-1">
+              <MapPin size={14} /> Xarita
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Xaritadagi klublar</h2>
+            <p className="text-gray-400 mt-1">Toshkent bo&apos;ylab eng yaqin gaming zone&apos;ni toping</p>
+          </div>
+          <Link href="/rooms" className="hidden sm:flex items-center gap-1 text-neon-cyan text-sm hover:gap-2 transition-all group">
+            {tCommon('viewAll')} <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        </div>
+        <div className="animate-fade-up">
+          <RoomsMap rooms={rooms} />
+        </div>
       </section>
 
       {/* ===== FEATURES ===== */}

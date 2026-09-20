@@ -25,4 +25,11 @@ export const config = {
     pass: process.env.EMAIL_PASS,
   },
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6380',
+  ai: {
+    geminiApiKey: process.env.GEMINI_API_KEY || '',
+    model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
+    fallbackModel: process.env.GEMINI_FALLBACK_MODEL || 'gemini-flash-lite-latest',
+    temperature: parseFloat(process.env.AI_TEMPERATURE || '0.7'),
+    maxTokens: parseInt(process.env.AI_MAX_TOKENS || '1000', 10),
+  },
 };

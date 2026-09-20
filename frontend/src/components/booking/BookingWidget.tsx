@@ -40,6 +40,7 @@ export default function BookingWidget({ room, date, onDateChange, availability }
   const [promoApplied, setPromoApplied] = useState(false);
   const [promoLoading, setPromoLoading] = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
+  const [usePoints, setUsePoints] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +83,14 @@ export default function BookingWidget({ room, date, onDateChange, availability }
     return Math.min(raw, baseTotal);
   }, [promo, promoApplied, baseTotal]);
 
-  const finalTotal = Math.max(0, baseTotal - discount);
+  const afterPromo = Math.max(0, baseTotal - discount);
+
+  // Bonus ballar: 1 bal = 1 so'm, narxning 50% gacha
+  const pointsBalance = user?.loyaltyBalance || 0;
+  const pointsCap = Math.floor(afterPromo * 0.5);
+  const pointsUsed = usePoints ? Math.min(pointsBalance, pointsCap) : 0;
+
+  const finalTotal = Math.max(0, afterPromo - pointsUsed);
   const advance = parseInt(String(finalTotal * 0.3));
   const remaining = Math.max(0, finalTotal - advance);
 
@@ -136,6 +144,7 @@ export default function BookingWidget({ room, date, onDateChange, availability }
       };
       if (!autoPc && computerId) payload.computerId = computerId;
       if (promoApplied && promoCode) payload.promoCode = promoCode;
+      if (usePoints && pointsBalance > 0) payload.usePoints = true;
 
       const { data } = await api.post('/api/bookings', payload);
       const bookingId = data.data?.id;
@@ -371,6 +380,31 @@ export default function BookingWidget({ room, date, onDateChange, availability }
           {promoError && <p className="text-xs text-red-400 mt-1">{promoError}</p>}
         </div>
 
+        {/* Bonus ballar */}
+        {pointsBalance > 0 && (
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
+              Bonus ballar ({pointsBalance.toLocaleString('ru-RU')} bal bor)
+            </label>
+            <button
+              type="button"
+              onClick={() => setUsePoints((v) => !v)}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm transition-colors',
+                usePoints ? 'border-yellow-400/40 bg-yellow-400/10 text-yellow-300' : 'border-white/10 bg-cyber-800/60 text-gray-300 hover:border-yellow-400/25'
+              )}
+            >
+              <span className="flex items-center gap-1.5 font-medium">
+                <Zap size={14} /> Ballarni ishlatish
+              </span>
+              <span className="text-xs">
+                {usePoints ? `-${formatPrice(pointsUsed)} ${t('sum')}` : `${formatPrice(pointsUsed)} ${t('sum')}`}
+              </span>
+            </button>
+            <p className="text-[10px] text-gray-500 mt-1">1 bal = 1 so&apos;m · maks. {Math.min(pointsBalance, pointsCap).toLocaleString('ru-RU')} bal ishlatiladi (50%).</p>
+          </div>
+        )}
+
         {/* Xulosa */}
         <div className="rounded-xl border border-neon-cyan/15 bg-gradient-to-b from-cyber-800/80 to-cyber-800/40 p-4 space-y-2 text-sm">
           <div className="flex items-center justify-between text-gray-400">
@@ -392,6 +426,12 @@ export default function BookingWidget({ room, date, onDateChange, availability }
             <div className="flex items-center justify-between text-neon-green font-medium">
               <span>{t('discount')}</span>
               <span>-{formatPrice(discount)}</span>
+            </div>
+          )}
+          {pointsUsed > 0 && (
+            <div className="flex items-center justify-between text-yellow-400 font-medium">
+              <span className="flex items-center gap-1.5"><Zap size={12} /> Bonus ballar</span>
+              <span>-{formatPrice(pointsUsed)}</span>
             </div>
           )}
           <div className="flex items-center justify-between text-lg">

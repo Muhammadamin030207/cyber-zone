@@ -9,6 +9,7 @@ export interface User {
   role: Role;
   language: string;
   status: 'ACTIVE' | 'BLOCKED';
+  loyaltyBalance?: number;
   createdAt?: string;
 }
 
@@ -110,6 +111,7 @@ export interface Booking {
   zone?: Pick<Zone, 'id' | 'name' | 'type' | 'pricePerHour'>;
   computer?: Pick<Computer, 'id' | 'name' | 'specs'>;
   promoCode?: Pick<PromoCode, 'id' | 'code' | 'discountType' | 'discountValue'>;
+  user?: Pick<User, 'id' | 'fullName' | 'email' | 'phone'>;
   payments?: Payment[];
 }
 
