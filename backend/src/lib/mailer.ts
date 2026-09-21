@@ -8,22 +8,22 @@ export class MailerNotConfiguredError extends Error {
   }
 }
 
-let transporter: nodemailer.Transporter | null = null;
+const transporters = new Map<number, nodemailer.Transporter>();
 
 function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';
 }
 
-function buildTransporter(): nodemailer.Transporter {
+function buildTransporter(port: number): nodemailer.Transporter {
   const e = config.email;
   if (!e.host || !e.user || !e.pass) {
     throw new MailerNotConfiguredError();
   }
   // Gmail: EMAIL_USE_TLS=1 yoki port 465 bo'lsa TLS (secure), aks holda STARTTLS.
-  const secure = e.secure || e.port === 465;
+  const secure = e.secure || port === 465;
   return nodemailer.createTransport({
     host: e.host,
-    port: e.port,
+    port,
     secure,
     auth: { user: e.user, pass: e.pass },
     connectionTimeout: 15_000,
@@ -32,9 +32,32 @@ function buildTransporter(): nodemailer.Transporter {
   });
 }
 
-function getTransporter(): nodemailer.Transporter {
-  if (!transporter) transporter = buildTransporter();
-  return transporter;
+function getTransporter(port: number): nodemailer.Transporter {
+  let t = transporters.get(port);
+  if (!t) {
+    t = buildTransporter(port);
+    transporters.set(port, t);
+  }
+  return t;
+}
+
+/**
+ * Sinaladigan SMTP portlari: asosiy port + fallback portlar (dublikatsiz).
+ * Render free web service'lari 25/465/587 portlariga chiquvchi trafikni
+ * bloklaydi (paketlar jimgina tashlanadi -> ETIMEDOUT). Brevo esa 2525'ni
+ * qo'llab-quvvatlaydi, shu sabab asosiy port ulanmasa fallback ishlatiladi.
+ */
+function smtpPorts(): number[] {
+  const ports = [config.email.port, ...config.email.fallbackPorts];
+  return Array.from(new Set(ports.filter((p) => Number.isFinite(p) && p > 0)));
+}
+
+/** Faqat tarmoq (TCP/TLS) darajasidagi xatolar boshqa portda qayta urinishga arziydi. */
+function isConnectionError(err: any): boolean {
+  if (err?.command === 'CONN') return true;
+  return ['ETIMEDOUT', 'ETIMEOUT', 'ECONNECTION', 'ESOCKET', 'ECONNREFUSED', 'ENETUNREACH', 'EHOSTUNREACH', 'EDNS'].includes(
+    err?.code
+  );
 }
 
 function senderAddress(): string {
@@ -61,35 +84,55 @@ export async function sendEmail(to: string, subject: string, html: string, text?
     }
   }
 
-  const transporter = getTransporter();
-  try {
-    const info = await transporter.sendMail({
-      from: senderAddress(),
-      to,
-      subject,
-      html,
-      text: text || htmlToText(html),
-    });
-    if (!isProduction()) {
-      console.log(`[MAIL:DEV] yuborildi (${info.messageId}) To: ${to} Subject: ${subject}`);
+  const mail = {
+    from: senderAddress(),
+    to,
+    subject,
+    html,
+    text: text || htmlToText(html),
+  };
+
+  const ports = smtpPorts();
+  let lastErr: any;
+  for (let i = 0; i < ports.length; i++) {
+    const port = ports[i];
+    try {
+      const info = await getTransporter(port).sendMail(mail);
+      if (!isProduction()) {
+        console.log(`[MAIL:DEV] yuborildi (${info.messageId}) To: ${to} Subject: ${subject}`);
+      }
+      if (i > 0) {
+        console.log(`[MAIL] Email ${port}-port orqali yuborildi (asosiy ${ports[0]}-port ulanmadi).`);
+      }
+      return true;
+    } catch (err: any) {
+      lastErr = err;
+      if (i < ports.length - 1 && isConnectionError(err)) {
+        console.error(
+          `[MAIL] ${port}-port ulanmadi (${err?.code || err?.message}); ${ports[i + 1]}-portda qayta urinib ko'riladi.`
+        );
+        continue;
+      }
+      break;
     }
-    return true;
-  } catch (err: any) {
-    const detail = err?.response
-      ? `${err.message} | SMTP response: ${String(err.response).slice(0, 400)}`
-      : err?.message || String(err);
-    console.error(`[MAIL] yuborishda xatolik -> To: ${to} | Subject: ${subject}`);
-    console.error(`[MAIL] Sabab: ${detail}`);
-    if (err?.code) console.error(`[MAIL] SMTP kod: ${err.code}`);
-    throw new Error(`Email yuborilmadi: ${detail}`);
   }
+
+  const err = lastErr;
+  const detail = err?.response
+    ? `${err.message} | SMTP response: ${String(err.response).slice(0, 400)}`
+    : err?.message || String(err);
+  console.error(`[MAIL] yuborishda xatolik -> To: ${to} | Subject: ${subject}`);
+  console.error(`[MAIL] Sabab: ${detail}`);
+  if (err?.code) console.error(`[MAIL] SMTP kod: ${err.code}`);
+  throw new Error(`Email yuborilmadi: ${detail}`);
 }
 
 /** Dev rejimda SMTP konfiguratsiyasi bor-yo'qligini log qiladi (transporter testi). */
 export function checkMailerConfig(): { configured: boolean; reason: string } {
   try {
-    const t = getTransporter();
-    return { configured: true, reason: `${config.email.host}:${config.email.port} (${config.email.secure ? 'TLS' : 'STARTTLS'})` };
+    getTransporter(config.email.port);
+    const ports = smtpPorts().join(',');
+    return { configured: true, reason: `${config.email.host}:${ports} (${config.email.secure ? 'TLS' : 'STARTTLS'})` };
   } catch (err: any) {
     return { configured: false, reason: err?.message || String(err) };
   }
@@ -97,7 +140,7 @@ export function checkMailerConfig(): { configured: boolean; reason: string } {
 
 function buildTransporterSafe(): nodemailer.Transporter | null {
   try {
-    return buildTransporter();
+    return buildTransporter(config.email.port);
   } catch {
     return null;
   }

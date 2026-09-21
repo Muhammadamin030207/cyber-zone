@@ -52,13 +52,17 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-3.6-flash
-      # Parol tiklash email'i uchun SMTP (Gmail app-password — secret, Render dashboard'da qo'lda)
+      # Parol tiklash email'i uchun SMTP (Brevo relay — secret, Render dashboard'da qo'lda).
+      # Render free web service'lari 25/465/587 portlariga chiquvchi trafikni bloklaydi,
+      # shuning uchun Brevo'ning 2525-porti ishlatiladi (STARTTLS).
       - key: EMAIL_HOST
         sync: false
       - key: EMAIL_PORT
-        value: 587
+        value: 2525
       - key: EMAIL_USE_TLS
-        value: "true"
+        value: "false"
+      - key: EMAIL_FALLBACK_PORTS
+        value: "2525"
       - key: EMAIL_USER
         sync: false
       - key: EMAIL_PASS

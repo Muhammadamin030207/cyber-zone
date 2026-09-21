@@ -25,6 +25,12 @@ export const config = {
     pass: process.env.EMAIL_PASS,
     secure: process.env.EMAIL_USE_TLS === 'true' || process.env.EMAIL_SECURE === 'true',
     from: process.env.DEFAULT_FROM_EMAIL || '',
+    // Asosiy SMTP portga ulanib bo'lmasa (masalan Render free SMTP portlarini
+    // bloklaydi), shu portlar ketma-ket sinaladi. Brevo 2525'ni qo'llab-quvvatlaydi.
+    fallbackPorts: (process.env.EMAIL_FALLBACK_PORTS || '2525')
+      .split(',')
+      .map((v) => parseInt(v.trim(), 10))
+      .filter((v) => Number.isFinite(v) && v > 0),
   },
   bookings: {
     // To'lanmagan bronni avtomatik bekor qilish muddati (daqiqa). Abandoned
