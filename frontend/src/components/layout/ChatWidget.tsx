@@ -135,10 +135,16 @@ export default function ChatWidget() {
 
   const streamAbortRef = useRef<AbortController | null>(null);
 
-  // Mobile klaviatura viewport
+  // Mobile klaviatura viewport — input fokus bo'lganda (klaviatura ochiq)
+  // height ni o'zgartirmaymiz: iOS reflow klaviaturani yopib qo'yadi.
+  // zamonaviy brauzerlar interactive-widget=resizes-content bilan o'zi moslashadi.
   useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return;
-    const onVb = () => setVbHeight(window.visualViewport!.height);
+    const onVb = () => {
+      const active = document.activeElement as HTMLElement | null;
+      if (inputRef.current && active && inputRef.current.contains(active)) return;
+      setVbHeight(window.visualViewport!.height);
+    };
     window.visualViewport.addEventListener('resize', onVb);
     window.visualViewport.addEventListener('scroll', onVb);
     onVb();

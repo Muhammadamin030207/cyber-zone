@@ -339,7 +339,7 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
   });
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 items-stretch">
+    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 items-stretch">
       {/* ===== Brand panel ===== */}
       <div className="relative hidden lg:flex flex-col justify-between p-10 overflow-hidden">
         <div className="absolute inset-0 bg-aurora" />

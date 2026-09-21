@@ -62,7 +62,7 @@ export default function SetNewPasswordPage({ params }: { params: Promise<{ local
   if (initialized && !token) return null;
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 sm:px-6">
+    <div className="relative overflow-hidden min-h-screen flex items-center justify-center px-4 sm:px-6">
       <div className="absolute inset-0 bg-aurora" />
       <div className="absolute inset-0 grid-matrix opacity-20" />
       <div className="orb w-72 h-72 bg-neon-cyan/10 top-10 -right-10 animate-floaty" />

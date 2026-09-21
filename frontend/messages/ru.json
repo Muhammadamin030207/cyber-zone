@@ -9,7 +9,8 @@
     "dashboard": "Кабинет",
     "chat": "Сообщения",
     "admin": "Админ панель",
-    "superAdmin": "Супер админ"
+    "superAdmin": "Супер админ",
+    "profile": "Профиль"
   },
   "common": {
     "loading": "Загрузка...",
@@ -115,6 +116,7 @@
     "sum": "so'm"
   },
   "auth": {
+    "loading": "Загрузка...",
     "googleBtn": "Войти через Google",
     "googleLogin": "Войти через Google",
     "googleSignup": "Регистрация через Google",

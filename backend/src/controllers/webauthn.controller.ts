@@ -24,14 +24,29 @@ import { sendSecurityAlert, clientIp, describeUserAgent, recordSecurityEvent } f
 // server tomonidan tekshiriladi. Hozircha in-memory (bitta instance uchun);
 // ko'p-instansiyali deploy'da Redis'ga ko'chirilishi kerak.
 const challengeTTLMs = 5 * 60 * 1000; // 5 daqiqa
-const challengeStore = new Map<string, { value: string; expiresAt: number }>();
+const challengeStore = new Map<string, ChallengeEntry>();
 
-function setChallenge(key: string, value: string) {
-  challengeStore.set(key, { value, expiresAt: Date.now() + challengeTTLMs });
+interface ChallengeEntry {
+  value: string;
+  expiresAt: number;
+  // Challenge qaysi origin/rpID uchun chiqarilgan — verify bosqichida aynan
+  // shu qiymatlar tekshiriladi (origin swap hujumining oldini oladi).
+  origin?: string;
+  rpID?: string;
+}
+
+function setChallenge(key: string, value: string, rp?: { origin: string; rpID: string }) {
+  challengeStore.set(key, {
+    value,
+    expiresAt: Date.now() + challengeTTLMs,
+    origin: rp?.origin,
+    rpID: rp?.rpID,
+  });
   setTimeout(() => challengeStore.delete(key), challengeTTLMs);
 }
 
-function getChallenge(key: string): string | null {
+/** Challenge + (mavjud bo'lsa) berilgan origin/rpID'ni qaytaradi. Single-use. */
+function getChallenge(key: string): Pick<ChallengeEntry, 'value' | 'origin' | 'rpID'> | null {
   const entry = challengeStore.get(key);
   if (!entry) return null;
   if (entry.expiresAt < Date.now()) {
@@ -39,7 +54,7 @@ function getChallenge(key: string): string | null {
     return null;
   }
   challengeStore.delete(key); // single-use
-  return entry.value;
+  return { value: entry.value, origin: entry.origin, rpID: entry.rpID };
 }
 
 /** Frontend origin — WebAuthn expectedOrigin (mavjud FRONTEND_URLS dan). */
@@ -50,6 +65,26 @@ function expectedOrigins(): string[] {
 
 function rpID(): string {
   return config.webauthn.rpID;
+}
+
+/**
+ * So'rovning Origin header'idan webAuthn rpID/origin qiymatini chiqaradi.
+ * Bitta backend bir nechta frontend domain'iga xizmat qiladi va har bir domain
+ * uchun passkey o'z rpID'siga bog'langan. Origin faqat ruxsat etilgan ro'yxatdan
+ * qabul qilinadi — xorijiy origin uchun passkey berilmaydi (account takeover).
+ */
+function requestRp(req: Request): { origin: string; rpID: string } | null {
+  const origin = req.get('origin');
+  if (!origin) return null;
+  if (!expectedOrigins().includes(origin)) return null;
+  let rpID: string;
+  try {
+    rpID = new URL(origin).hostname;
+  } catch {
+    return null;
+  }
+  if (!rpID) return null;
+  return { origin, rpID };
 }
 
 function rpName(): string {
@@ -71,7 +106,7 @@ export async function registerOptions(req: AuthRequest, res: Response, next: Nex
 
     const options: PublicKeyCredentialCreationOptionsJSON = await generateRegistrationOptions({
       rpName: rpName(),
-      rpID: rpID(),
+      rpID: requestRp(req)?.rpID ?? rpID(),
       userName: user.email,
       userDisplayName: user.fullName,
       userID: Buffer.from(user.id),
@@ -88,7 +123,7 @@ export async function registerOptions(req: AuthRequest, res: Response, next: Nex
     });
 
     // Challenge serverda saqlanadi (clientga berilmaydi)
-    setChallenge(`wa:reg:${user.id}`, options.challenge);
+    setChallenge(`wa:reg:${user.id}`, options.challenge, requestRp(req) || undefined);
 
     return ok(res, options);
   } catch (err) {
@@ -104,16 +139,17 @@ export async function registerVerify(req: AuthRequest, res: Response, next: Next
     if (!response) return badRequest(res, 'WebAuthn response talab qilinadi');
     const userId = req.user!.userId;
 
-    const expectedChallenge = getChallenge(`wa:reg:${userId}`);
-    if (!expectedChallenge) return badRequest(res, 'Registratsiya challenge muddati o\'tgan. Qayta urinib ko\'ring.');
+    const challenge = getChallenge(`wa:reg:${userId}`);
+    if (!challenge) return badRequest(res, 'Registratsiya challenge muddati o\'tgan. Qayta urinib ko\'ring.');
+    const expectedChallenge = challenge.value;
 
     let verification;
     try {
       verification = await verifyRegistrationResponse({
         response,
         expectedChallenge,
-        expectedOrigin: expectedOrigins(),
-        expectedRPID: rpID(),
+        expectedOrigin: challenge.origin ?? expectedOrigins(),
+        expectedRPID: challenge.rpID ?? rpID(),
         requireUserVerification: false,
       });
     } catch (verifyErr) {
@@ -190,7 +226,7 @@ export async function authOptions(req: Request, res: Response, next: NextFunctio
     }
 
     const options: PublicKeyCredentialRequestOptionsJSON = await generateAuthenticationOptions({
-      rpID: rpID(),
+      rpID: requestRp(req)?.rpID ?? rpID(),
       timeout: 60_000,
       allowCredentials: credentials.map((c) => ({
         id: c.credentialId,
@@ -200,7 +236,7 @@ export async function authOptions(req: Request, res: Response, next: NextFunctio
       userVerification: 'preferred',
     });
 
-    setChallenge(`wa:auth:${user.id}`, options.challenge);
+    setChallenge(`wa:auth:${user.id}`, options.challenge, requestRp(req) || undefined);
 
     return ok(res, { options, userId: user.id });
   } catch (err) {
@@ -235,8 +271,9 @@ export async function authVerify(req: Request, res: Response, next: NextFunction
       }
     }
 
-    const expectedChallenge = getChallenge(`wa:auth:${userId}`);
-    if (!expectedChallenge) return badRequest(res, 'Authentication challenge muddati o\'tgan. Qayta urinib ko\'ring.');
+    const challenge = getChallenge(`wa:auth:${userId}`);
+    if (!challenge) return badRequest(res, 'Authentication challenge muddati o\'tgan. Qayta urinib ko\'ring.');
+    const expectedChallenge = challenge.value;
 
     const passkey = await prisma.passkey.findUnique({
       where: { credentialId: response.id as string },
@@ -251,8 +288,8 @@ export async function authVerify(req: Request, res: Response, next: NextFunction
       verification = await verifyAuthenticationResponse({
         response,
         expectedChallenge,
-        expectedOrigin: expectedOrigins(),
-        expectedRPID: rpID(),
+        expectedOrigin: challenge.origin ?? expectedOrigins(),
+        expectedRPID: challenge.rpID ?? rpID(),
         credential: {
           id: passkey.credentialId,
           publicKey: new Uint8Array(passkey.publicKey),

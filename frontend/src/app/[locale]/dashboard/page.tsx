@@ -137,13 +137,13 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
               color: 'text-neon-magenta border-neon-magenta/30 bg-neon-magenta/10',
             },
           ].map((s) => (
-            <div key={s.label} className="neo-card rounded-2xl p-4 flex items-center gap-3">
+            <div key={s.label} className="neo-card rounded-2xl p-4 flex items-center gap-3 min-w-0">
               <span className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 ${s.color}`}>
                 <s.icon size={20} />
               </span>
               <div className="min-w-0">
                 <div className="text-xl font-bold truncate">{s.value}</div>
-                <div className="text-[11px] text-gray-500 uppercase tracking-wider">{s.label}</div>
+                <div className="text-[11px] text-gray-500 uppercase tracking-wider truncate">{s.label}</div>
               </div>
             </div>
           ))}
@@ -179,7 +179,7 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
       </div>
 
       {loading ? (
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {[1, 2].map((i) => (
             <div key={i} className="skeleton rounded-2xl h-52" />
           ))}
@@ -195,7 +195,7 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
           </Link>
         </div>
       ) : (
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {shown.map((b) => {
             const paidPayments = (b.payments || []).filter((p) => p.status === 'COMPLETED');
             const totalPaid = paidPayments.reduce((a, p) => a + Number(p.amount), 0);

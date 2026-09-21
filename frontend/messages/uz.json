@@ -9,7 +9,8 @@
     "dashboard": "Kabinet",
     "chat": "Xabarlar",
     "admin": "Admin panel",
-    "superAdmin": "Super admin"
+    "superAdmin": "Super admin",
+    "profile": "Profil"
   },
   "common": {
     "loading": "Yuklanmoqda...",
@@ -115,6 +116,7 @@
     "sum": "so'm"
   },
   "auth": {
+    "loading": "Yuklanmoqda...",
     "googleBtn": "Google bilan kirish",
     "googleLogin": "Google orqali kirish",
     "googleSignup": "Google orqali ro'yxatdan o'tish",

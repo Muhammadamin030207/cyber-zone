@@ -9,7 +9,8 @@
     "dashboard": "Dashboard",
     "chat": "Messages",
     "admin": "Admin panel",
-    "superAdmin": "Super admin"
+    "superAdmin": "Super admin",
+    "profile": "Profile"
   },
   "common": {
     "loading": "Loading...",
@@ -115,6 +116,7 @@
     "sum": "so'm"
   },
   "auth": {
+    "loading": "Loading...",
     "googleBtn": "Continue with Google",
     "googleLogin": "Continue with Google",
     "googleSignup": "Sign up with Google",
