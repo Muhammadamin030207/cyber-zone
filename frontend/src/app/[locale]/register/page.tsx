@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { UserPlus, Mail, Lock, User as UserIcon, Eye, EyeOff, Loader2, AlertCircle, Zap } from 'lucide-react';
+import { UserPlus, Mail, Lock, User as UserIcon, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
 import PhoneInput, { phoneToDigits, isValidUzbekPhone } from '@/components/auth/PhoneInput';
@@ -122,29 +122,20 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 items-stretch">
       {/* ===== Brand panel ===== */}
       <div className="relative hidden lg:flex flex-col justify-between p-10 overflow-hidden">
-        <div className="absolute inset-0 bg-aurora" />
-        <div className="absolute inset-0 grid-matrix opacity-30" />
-        <div className="orb w-80 h-80 bg-neon-purple/15 -top-10 -right-10 animate-floaty" />
-        <div className="orb w-72 h-72 bg-neon-cyan/10 bottom-20 -left-12 animate-floaty" style={{ animationDelay: '2s' }} />
-        <div className="orb w-56 h-56 bg-neon-magenta/10 top-1/3 -right-16 animate-floaty" style={{ animationDelay: '3.5s' }} />
-
         <div className="relative flex items-center gap-3">
           <Logo size={44} />
-          <span className="font-[--font-orbitron] text-xl font-bold tracking-widest neon-text">
+          <span className="font-[--font-orbitron] text-xl font-bold tracking-wide neon-text">
             CYBER<span className="text-white">-ZONE</span>
           </span>
         </div>
 
-        <div className="relative">
-          <div className="w-16 h-16 rounded-2xl border border-neon-purple/30 bg-neon-purple/10 flex items-center justify-center mb-6 shadow-glow animate-floaty">
-            <UserPlus size={28} className="text-neon-purple" />
-          </div>
+        <div className="relative max-w-md">
           <h2 className="text-3xl font-extrabold tracking-tight mb-3">{t('registerTitle')}</h2>
-          <p className="text-gray-400 max-w-md leading-relaxed">
+          <p className="text-gray-400 leading-relaxed">
             Akkaunt yarating, kompyuter xonalarini bron qiling yoki o'z xonangizni platformaga qo'shing.
           </p>
           <div className="flex flex-wrap gap-2 mt-6">
-            <span className="chip chip-success"><Zap size={12} /> Tez bron</span>
+            <span className="chip chip-success">Tez bron</span>
             <span className="chip chip-warn">Google orqali kirish</span>
             <span className="chip">3 til</span>
           </div>
@@ -154,17 +145,16 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
       </div>
 
       {/* ===== Form panel ===== */}
-      <div className="flex items-center justify-center px-4 sm:px-6 py-10">
+      <div className="flex items-center justify-center px-4 sm:px-6 py-10 pb-28 lg:pb-10">
         <div className="w-full max-w-md">
           <div className="lg:hidden flex items-center justify-center gap-2 mb-8">
             <Logo size={38} />
-            <span className="font-[--font-orbitron] text-lg font-bold tracking-widest neon-text">
+            <span className="font-[--font-orbitron] text-lg font-bold tracking-wide neon-text">
               CYBER<span className="text-white">-ZONE</span>
             </span>
           </div>
 
-          <div className="neo-card rounded-2xl p-8 animate-fade-up relative overflow-hidden">
-            <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-neon-purple to-transparent" />
+          <div className="neo-card rounded-2xl p-6 sm:p-8">
             <h1 className="text-2xl font-extrabold tracking-tight mb-1">{t('registerTitle')}</h1>
             <p className="text-sm text-gray-400 mb-6">
               {t('haveAccount')}{' '}

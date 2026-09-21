@@ -140,11 +140,13 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
         <div className="lg:col-span-2 space-y-6">
           {/* Hero */}
           <div className="neo-card rounded-2xl overflow-hidden">
-            <div className="relative h-64 sm:h-80 bg-gradient-to-br from-cyber-800 to-cyber-950">
-              <div className="absolute inset-0 grid-matrix opacity-40" />
-              <div className="absolute inset-0 bg-aurora" style={{ opacity: 0.35 }} />
-              {img && <img src={img} alt={room.name} className="absolute inset-0 w-full h-full object-cover" />}
-              <div className="absolute inset-0 bg-gradient-to-t from-cyber-950 via-cyber-950/40 to-transparent" />
+            <div className="relative h-64 sm:h-80 bg-[var(--bg-1)]">
+              {img ? (
+                <img src={img} alt={room.name} className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-[color-mix(in_srgb,var(--acc-a)_14%,var(--bg-1))] to-[color-mix(in_srgb,var(--acc-b)_10%,var(--bg-1))]" />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg-0)]/90 via-[var(--bg-0)]/25 to-transparent" />
               <div className="absolute top-4 left-5 right-5 flex items-start justify-between gap-2 flex-wrap">
                 <span className="chip chip-success">{room.status === 'ACTIVE' ? 'Ochiq' : room.status === 'INACTIVE' ? 'Yopiq' : 'Kutilmoqda'}</span>
                 {room.avgRating !== undefined && (
@@ -224,7 +226,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
             </h2>
             <div className="grid sm:grid-cols-2 gap-3">
               {room.zones?.map((zone) => (
-                <div key={zone.id} className="card-hover rounded-xl border border-neon-cyan/15 bg-cyber-800/60 p-4 group">
+                <div key={zone.id} className="card-hover rounded-xl surface border border-white/5 p-4">
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <b className="flex items-center gap-1.5 text-sm sm:text-base">
                       <span className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${
@@ -270,7 +272,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
                           { icon: Video, label: t('gpu'), value: specs.gpu },
                         ].filter((s) => s.value);
                         return (
-                          <div key={pc.id} className="card-hover rounded-lg border border-neon-cyan/10 bg-cyber-800/40 px-3 py-2.5 text-xs">
+                          <div key={pc.id} className="card-hover rounded-lg surface border border-white/5 px-3 py-2.5 text-xs">
                             <b className="text-neon-cyan">{pc.name}</b>
                             <div className="grid gap-1 mt-1.5 text-gray-400">
                               {specsList.map((s, i) => (
@@ -371,7 +373,7 @@ function RoomReviews({ room, onRefresh }: { room: Room; onRefresh: () => void })
             </p>
           )}
           {open ? (
-            <div className="rounded-xl border border-neon-green/20 bg-cyber-800/50 p-4">
+            <div className="rounded-xl border border-neon-green/20 surface p-4">
               <div className="flex items-center gap-1 mb-3">
                 {[1, 2, 3, 4, 5].map((n) => (
                   <button
@@ -426,7 +428,7 @@ function RoomReviews({ room, onRefresh }: { room: Room; onRefresh: () => void })
       {room.reviews?.length ? (
         <div className="space-y-3">
           {room.reviews.map((r) => (
-            <div key={r.id} className="rounded-xl border border-neon-cyan/10 bg-cyber-800/40 p-4">
+            <div key={r.id} className="rounded-xl surface border border-white/5 p-4">
               <div className="flex items-center justify-between gap-2 mb-1.5">
                 <div className="flex items-center gap-2.5">
                   <span className="avatar">{((r.user?.fullName || 'U')[0] || 'U').toUpperCase()}</span>

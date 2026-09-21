@@ -88,7 +88,7 @@ export default function RoomsMap({ rooms, height = 440, linkBase = '/rooms' }: {
           </div>
           <div style="font-size:12px;color:#555;margin-bottom:4px;">${room.address || ''}</div>
           <div style="font-size:13px;color:#b45309;font-weight:800;margin-bottom:4px;">${formatPrice(price)} so'm/soat dan</div>
-          ${dist != null ? `<div style="font-size:12px;color:#0b7285;font-weight:700;margin-bottom:8px;">📏 Sizdan ${dist.toFixed(1)} km</div>` : ''}
+          ${dist != null ? `<div style="font-size:12px;color:#0b7285;font-weight:700;margin-bottom:8px;">Sizdan ${dist.toFixed(1)} km</div>` : ''}
           <div style="display:flex;gap:6px;">
             <a href="${linkBase}/${room.id}" style="display:inline-flex;font-size:12px;font-weight:800;color:#fff;background:linear-gradient(135deg,#10b981,#0d9668);padding:5px 12px;border-radius:9999px;text-decoration:none;box-shadow:0 4px 10px rgba(16,185,129,.4);">Batafsil →</a>
             <a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" rel="noopener" style="display:inline-flex;font-size:12px;font-weight:800;color:#fff;background:linear-gradient(135deg,#6366f1,#4338ca);padding:5px 12px;border-radius:9999px;text-decoration:none;box-shadow:0 4px 10px rgba(99,102,241,.4);">Yo'nalish</a>

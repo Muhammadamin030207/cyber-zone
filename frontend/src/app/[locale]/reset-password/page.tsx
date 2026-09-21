@@ -45,23 +45,17 @@ function ResetForm() {
   }
 
   return (
-    <div className="relative overflow-hidden min-h-screen flex items-center justify-center px-4 sm:px-6">
-      <div className="absolute inset-0 bg-aurora" />
-      <div className="absolute inset-0 grid-matrix opacity-20" />
-      <div className="orb w-72 h-72 bg-neon-green/10 top-10 -right-10 animate-floaty" />
-      <div className="orb w-64 h-64 bg-neon-purple/10 bottom-10 -left-12 animate-floaty" style={{ animationDelay: '2s' }} />
-
-      <div className="relative w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 py-10">
+      <div className="w-full max-w-md">
         <div className="lg:hidden flex items-center justify-center gap-2 mb-6">
           <Logo size={36} />
-          <span className="font-[--font-orbitron] text-lg font-bold tracking-widest neon-text">
+          <span className="font-[--font-orbitron] text-lg font-bold tracking-wide neon-text">
             CYBER<span className="text-white">-ZONE</span>
           </span>
         </div>
 
-        <div className="neo-card rounded-2xl p-8 animate-fade-up relative overflow-hidden">
-          <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-neon-green to-transparent" />
-          <div className="w-12 h-12 rounded-xl border border-neon-green/30 bg-neon-green/10 flex items-center justify-center mb-5 shadow-glow">
+        <div className="neo-card rounded-2xl p-6 sm:p-8">
+          <div className="w-12 h-12 rounded-xl border border-neon-green/25 bg-neon-green/10 flex items-center justify-center mb-5">
             <KeyRound size={22} className="text-neon-green" />
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight mb-1">Yangi parol</h1>

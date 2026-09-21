@@ -21,7 +21,9 @@ export type SecurityEventType =
   | 'TWO_FACTOR_DISABLED'
   | 'PASSKEY_ADDED'
   | 'PASSKEY_REMOVED'
-  | 'EMAIL_CHANGED';
+  | 'EMAIL_CHANGED'
+  | 'LOCK_RELEASED'
+  | 'LOGIN_UNLOCK_FAILED';
 
 interface EventMeta {
   title: string;
@@ -90,6 +92,18 @@ const EVENTS: Record<SecurityEventType, EventMeta> = {
     message: 'Hisobingiz email manzili o\'zgartirildi.',
     severity: 'critical',
     actionHint: 'Agar bu siz bo\'lmasangiz, darhol qo\'llab-quvvatlash xizmatiga murojaat qiling.',
+  },
+  LOCK_RELEASED: {
+    title: 'Blok olib tashlandi',
+    message: 'Hisobingizdagi vaqtinchalik blok to\'g\'ri parol bilan (Alt+B maxsus tugmasi orqali) olib tashlandi.',
+    severity: 'info',
+    actionHint: 'Agar bu siz bo\'lmasangiz, darhol parolingizni tiklang va 2FA yoqing.',
+  },
+  LOGIN_UNLOCK_FAILED: {
+    title: 'Blokdan chiqarish urinishi muvaffaqiyatsiz',
+    message: 'Hisobingizdagi blokni olib tashlash uchun noto\'g\'ri parol kiritildi.',
+    severity: 'warning',
+    actionHint: 'Agar bu siz bo\'lmasangiz, parolingizni tiklang.',
   },
 };
 

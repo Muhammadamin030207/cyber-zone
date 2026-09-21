@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Send,
   Loader2,
-  Sparkles,
   MessageSquarePlus,
   Trash2,
   Pencil,
@@ -14,6 +13,10 @@ import {
   History,
   X,
   PanelLeft,
+  CalendarCheck,
+  Wallet,
+  Clock,
+  Gift,
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -34,15 +37,15 @@ import type { AIConversation, AIMessage, ConversationSummary } from '@/lib/webau
 // - XABAR BOSHQARUVI: edit/delete/regenerate/copy, markdown render
 // ============================================================================
 
-const WELCOME = `Salom! 👋 Men **Cyber-ZONE AI** yordamchisiman.
+const WELCOME = `Salom! Men **Cyber-ZONE AI** yordamchisiman.
 
 Narxlar, xonalar, ish vaqti, promo-kodlar va bron qilish bo'yicha savollaringizga javob beraman. Shuningdek, o'z bronlaringiz va to'lovlaringiz holatini ham ko'rsata olaman.`;
 
 const SUGGESTIONS = [
-  { label: '📋 Bugun bron', prompt: 'Bugun bron qilish mumkinmi?' },
-  { label: '💰 Narxlar', prompt: 'Qanday narxlar bor?' },
-  { label: '🕒 Ish vaqti', prompt: 'Qaysi vaqtlar bo\'sh?' },
-  { label: '🎁 Promo-kod', prompt: 'Faol promo-kodlar bormi?' },
+  { icon: CalendarCheck, label: 'Bugun bron', prompt: 'Bugun bron qilish mumkinmi?' },
+  { icon: Wallet, label: 'Narxlar', prompt: 'Qanday narxlar bor?' },
+  { icon: Clock, label: 'Ish vaqti', prompt: 'Qaysi vaqtlar bo\'sh?' },
+  { icon: Gift, label: 'Promo-kod', prompt: 'Faol promo-kodlar bormi?' },
 ];
 
 /** YANGI AI LOGO (SVG): neon aql / link belgisi — bot ikonkasidan farqli o'ziga xos shaxs */
@@ -657,7 +660,7 @@ export default function ChatWidget() {
           <button
             ref={toggleRef}
             onClick={() => setOpen((o) => !o)}
-            className="w-14 h-14 rounded-full neon-btn ai-fab flex items-center justify-center text-white"
+            className="w-14 h-14 rounded-full bg-[color-mix(in_srgb,var(--acc-b)_12%,var(--bg-1))] border border-[var(--acc-b)]/40 backdrop-blur-lg flex items-center justify-center text-white ai-fab"
             aria-label={open ? 'AI yordamchini yopish' : 'AI yordamchini ochish'}
             aria-expanded={open}
             data-tip={open ? 'Yopish' : 'AI yordamchi'}
@@ -695,7 +698,7 @@ function AiHeader({ chatBusy, user, drawerOpen, onToggleDrawer, onClose, onNew, 
         >
           <PanelLeft size={17} />
         </button>
-        <div className="w-8 h-8 rounded-lg neon-btn flex items-center justify-center">
+        <div className="w-9 h-9 rounded-xl bg-[var(--acc-b)]/12 border border-[var(--acc-b)]/30 grid place-items-center">
           <AILogo size={20} />
         </div>
         <div>
@@ -707,7 +710,7 @@ function AiHeader({ chatBusy, user, drawerOpen, onToggleDrawer, onClose, onNew, 
               </>
             ) : user ? (
               <>
-                <Sparkles size={10} className="text-[var(--acc-a)]" /> yordamchi · tarix saqlanadi
+                <span className="w-1 h-1 rounded-full bg-[var(--acc-a)]" /> yordamchi · tarix saqlanadi
               </>
             ) : (
               'kirish talab qilinadi'
@@ -878,6 +881,7 @@ function AiBody(props: BodyProps) {
                     onClick={() => onSuggestion(s.prompt)}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border border-[var(--acc-b)]/25 text-[var(--acc-b)] hover:bg-[var(--acc-b)]/10 transition-colors"
                   >
+                    <s.icon size={13} />
                     {s.label}
                   </button>
                 ))}
@@ -951,11 +955,11 @@ function MessageBubble({
           {msg.text}
         </div>
         {canDelete && (
-          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5">
-            <button aria-label="Tahrirlash" onClick={onEditOpen} className="p-1 rounded text-gray-500 hover:text-[var(--acc-b)]">
+          <div className="flex items-center justify-end gap-1 mt-0.5 text-gray-400">
+            <button aria-label="Tahrirlash" onClick={onEditOpen} className="p-1.5 rounded hover:text-[var(--acc-b)]">
               <Pencil size={12} />
             </button>
-            <button aria-label="O'chirish" onClick={onDelete} className="p-1 rounded text-gray-500 hover:text-red-400">
+            <button aria-label="O'chirish" onClick={onDelete} className="p-1.5 rounded hover:text-red-400">
               <Trash2 size={12} />
             </button>
           </div>
@@ -984,14 +988,14 @@ function MessageBubble({
         )}
       </div>
       {!msg.pending && !msg.streaming && canDelete && (
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5">
-          <button aria-label="Nusxalash" onClick={onCopy} className="p-1 rounded text-gray-500 hover:text-[var(--acc-b)]">
+        <div className="flex items-center gap-1 mt-0.5 text-gray-400">
+          <button aria-label="Nusxalash" onClick={onCopy} className="p-1.5 rounded hover:text-[var(--acc-b)]">
             {copied ? <Check size={12} className="text-neon-green" /> : <Copy size={12} />}
           </button>
-          <button aria-label="Qayta yaratish" onClick={onRegenerate} className="p-1 rounded text-gray-500 hover:text-[var(--acc-b)]">
+          <button aria-label="Qayta yaratish" onClick={onRegenerate} className="p-1.5 rounded hover:text-[var(--acc-b)]">
             <RefreshCw size={12} />
           </button>
-          <button aria-label="O'chirish" onClick={onDelete} className="p-1 rounded text-gray-500 hover:text-red-400">
+          <button aria-label="O'chirish" onClick={onDelete} className="p-1.5 rounded hover:text-red-400">
             <Trash2 size={12} />
           </button>
         </div>

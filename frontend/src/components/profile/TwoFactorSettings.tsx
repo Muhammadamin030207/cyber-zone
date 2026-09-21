@@ -158,7 +158,7 @@ export default function TwoFactorSettings() {
   }
 
   return (
-    <div className="neo-card rounded-2xl p-6">
+    <div className="neo-card rounded-2xl p-5 sm:p-6">
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
         <h3 className="font-bold flex items-center gap-2">
           {status?.enabled ? (

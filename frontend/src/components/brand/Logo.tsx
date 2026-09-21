@@ -22,7 +22,7 @@ export default function Logo({
 
   return (
     <span className={`inline-flex items-center gap-2 ${className || ''}`}>
-      <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-label="Cyber-ZONE" role="img" className="shrink-0 drop-shadow-[0_2px_10px_color-mix(in_srgb,var(--acc-a)_45%,transparent)]">
+      <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-label="Cyber-ZONE" role="img" className="shrink-0">
         <defs>
           <linearGradient id={grad} x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
             <stop offset="0" stopColor="var(--acc-a)" />
@@ -36,7 +36,7 @@ export default function Logo({
         {/* Hexagon */}
         <path
           d="M24 9.5 36 16.2 v15.6 L24 38.5 12 31.8 V16.2 Z"
-          fill="color-mix(in srgb, var(--acc-a) 10%, transparent)"
+          fill="color-mix(in srgb, var(--acc-a) 8%, transparent)"
           stroke={`url(#${grad})`}
           strokeWidth="2.2"
           strokeLinejoin="round"

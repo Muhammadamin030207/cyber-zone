@@ -243,11 +243,11 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-sm">
-          <div className="rounded-lg border border-neon-cyan/10 bg-cyber-800/40 px-3 py-2 text-gray-300">
+          <div className="rounded-lg border border-white/5 surface px-3 py-2 text-gray-300">
             <span className="text-xs text-gray-500 flex items-center gap-1"><Clock size={11} /> Sana</span>
             {formatDate(booking.date)} · {booking.startTime}—{booking.endTime}
           </div>
-          <div className="rounded-lg border border-neon-cyan/10 bg-cyber-800/40 px-3 py-2 text-gray-300">
+          <div className="rounded-lg border border-white/5 surface px-3 py-2 text-gray-300">
             <span className="text-xs text-gray-500 flex items-center gap-1"><Monitor size={11} /> Kompyuter</span>
             {booking.computer?.name || 'Avtomatik'}
           </div>
@@ -294,7 +294,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
                     'flex flex-col items-center gap-1 px-3 py-3.5 rounded-xl border text-center transition-colors',
                     method === p.method
                       ? 'border-neon-cyan/50 bg-neon-cyan/10'
-                      : 'border-white/10 bg-cyber-900 hover:border-white/20',
+                      : 'border-white/10 surface hover:border-white/25',
                     disabled && 'opacity-40 pointer-events-none'
                   )}
                 >

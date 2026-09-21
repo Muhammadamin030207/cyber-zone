@@ -81,7 +81,7 @@ export default function NewsPage({ params }: { params: Promise<{ locale: string 
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 neo-card rounded-2xl">
-          <div className="w-16 h-16 mx-auto mb-4 neo-card rounded-2xl flex items-center justify-center animate-floaty">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center bg-[var(--acc-b)]/10 border border-[var(--acc-b)]/25">
             <Logo size={38} />
           </div>
           <p className="text-gray-400">{t('noNews')}</p>
@@ -91,12 +91,12 @@ export default function NewsPage({ params }: { params: Promise<{ locale: string 
           {filtered.map((item) => (
             <article key={item.id} className="neo-card rounded-2xl overflow-hidden flex flex-col">
               {item.imageUrl ? (
-                <div className="relative h-44 bg-gradient-to-br from-cyber-800 to-cyber-950">
+                <div className="relative h-44 bg-[var(--bg-1)]">
                   <img src={item.imageUrl} alt={item.title} className="absolute inset-0 w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-cyber-950 via-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg-0)]/70 via-transparent" />
                 </div>
               ) : (
-                <div className="h-28 bg-gradient-to-br from-cyber-800 to-cyber-950 flex items-center justify-center">
+                <div className="h-28 bg-[var(--bg-1)] flex items-center justify-center">
                   <ImageIcon size={36} className="text-neon-cyan/30" />
                 </div>
               )}

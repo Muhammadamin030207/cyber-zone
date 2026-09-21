@@ -44,11 +44,10 @@ export default function BottomTabBar() {
 
   return (
     <nav
-      aria-label={t('home')}
-      className="fixed bottom-0 inset-x-0 z-50 md:hidden glass border-t border-white/10 pb-safe"
+      aria-label="Asosiy navigatsiya"
+      className="fixed bottom-0 inset-x-0 z-50 md:hidden border-t border-white/10 bg-[color-mix(in_srgb,var(--bg-1)_88%,transparent)] backdrop-blur-xl pb-[env(safe-area-inset-bottom,0px)]"
     >
-      <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-neon-cyan/40 to-transparent" />
-      <div className="flex items-stretch justify-around h-16 px-2">
+      <div className="flex items-stretch justify-around h-[3.75rem] px-1">
         {tabs.map((tab) => {
           const active = isTab(tab.href);
           return (
@@ -57,20 +56,20 @@ export default function BottomTabBar() {
               href={tab.href}
               aria-label={tab.aria}
               aria-current={active ? 'page' : undefined}
-              className="flex flex-col items-center justify-center gap-0.5 flex-1 min-w-0 text-[11px] font-medium transition-colors rounded-lg"
+              className="flex flex-col items-center justify-center gap-0.5 flex-1 min-w-0 text-[11px] font-medium rounded-lg transition-colors"
             >
               <span
                 className={cn(
                   'flex items-center justify-center w-11 h-7 rounded-full transition-all',
-                  active ? 'bg-neon-cyan/15 text-neon-cyan shadow-glow' : 'text-gray-400'
+                  active ? 'text-neon-cyan' : 'text-gray-400'
                 )}
               >
-                <tab.icon size={20} strokeWidth={active ? 2.4 : 2} />
+                <tab.icon size={20} strokeWidth={active ? 2.4 : 1.9} />
               </span>
               <span
                 className={cn(
                   'max-w-full truncate px-1 transition-colors',
-                  active ? 'text-neon-cyan font-semibold' : 'text-gray-400'
+                  active ? 'text-white font-semibold' : 'text-gray-400'
                 )}
               >
                 {tab.label}

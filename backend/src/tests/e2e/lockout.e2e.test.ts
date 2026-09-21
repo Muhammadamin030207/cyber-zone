@@ -120,4 +120,43 @@ describe('E2E: Login lockout — individual, escalation, persistence', () => {
     expect(u!.loginLockStage).toBe(0);
     expect(u!.loginLockedUntil).toBeNull();
   });
+
+  it('UNLOCK (Alt+B): bloklangan hisob to\'g\'ri parol bilan ochiladi, xato parol bilan ochilmaydi', async () => {
+    const email = 'lock-unlock@e2e.test';
+    await createUserDirect({ email, password: 'unlock-pass-123' });
+
+    // Hisobni bloklaymiz (to'liq maksimal urinish)
+    const lockIp = nextIp();
+    await failLoginTimes(email, lockIp, MAX);
+    const locked = await prisma.user.findUnique({ where: { email } });
+    expect(locked!.loginLockedUntil).not.toBeNull();
+
+    // 1) Xato parol bilan unlock — rad etiladi, blok qoladi
+    const badIp = nextIp();
+    const bad = await api()
+      .post('/api/auth/unlock')
+      .set('X-Forwarded-For', badIp)
+      .send({ email, password: 'wrong-pass' });
+    expect(bad.status).toBe(400);
+    const still = await prisma.user.findUnique({ where: { email } });
+    expect(still!.loginLockedUntil).not.toBeNull();
+
+    // 2) To'g'ri parol bilan unlock — blok tozalanadi
+    const goodIp = nextIp();
+    const good = await api()
+      .post('/api/auth/unlock')
+      .set('X-Forwarded-For', goodIp)
+      .send({ email, password: 'unlock-pass-123' });
+    expect(good.status).toBe(200);
+    expect(good.body.data?.unlocked).toBe(true);
+
+    const cleared = await prisma.user.findUnique({ where: { email } });
+    expect(cleared!.loginLockedUntil).toBeNull();
+    expect(cleared!.loginLockStage).toBe(0);
+    expect(cleared!.failedLoginAttempts).toBe(0);
+
+    // 3) Endi oddiy login ham muvaffaqiyatli
+    const after = await loginViaApi(email, 'unlock-pass-123');
+    expect(after.status).toBe(200);
+  });
 });

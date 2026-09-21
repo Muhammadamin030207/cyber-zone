@@ -117,7 +117,7 @@ export default function ChatPanel({ roomId, roomName }: { roomId: string; roomNa
         {loading ? (
           <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-10 rounded-lg bg-cyber-800 animate-pulse w-3/5" />)}</div>
         ) : messages.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-12">Xabar yo&apos;q. Birinchi bo&apos;lib yozing! 💬</p>
+          <p className="text-sm text-gray-500 text-center py-12">Xabar yo&apos;q. Birinchi bo&apos;lib yozing!</p>
         ) : (
           messages.map((m) => {
             const mine = m.user.id === user.id;

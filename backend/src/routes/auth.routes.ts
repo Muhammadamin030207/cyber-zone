@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { register, login, logout, googleLogin, refreshToken, getMe, updateProfile, uploadAvatarImage, changePassword, forgotPassword, resetPassword, setNewPassword, securityEvents } from '../controllers/auth.controller';
+import { register, login, logout, googleLogin, refreshToken, getMe, updateProfile, uploadAvatarImage, changePassword, forgotPassword, resetPassword, setNewPassword, securityEvents, unlockAccount } from '../controllers/auth.controller';
 import {
   twoFactorStatus,
   setupTwoFactor,
@@ -70,6 +70,12 @@ router.post('/register', register);
  * POST /api/auth/login
  */
 router.post('/login', loginAccountLimiter, loginIpLimiter, login);
+
+/**
+ * POST /api/auth/unlock — blokdan chiqarish (Alt+B). Faqat TO'G'RI PAROL bilan
+ * tasdiqlangan hisob egasi uchun ishlaydi; IP bo'yicha rate-limit mavjud.
+ */
+router.post('/unlock', loginAccountLimiter, loginIpLimiter, unlockAccount);
 
 /**
  * POST /api/auth/logout — server-side sessiyani bekor qiladi (tokenVersion++)

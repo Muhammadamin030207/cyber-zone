@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  Mail, Phone, UserRound, Save, Loader2, KeyRound, ShieldCheck, CalendarDays, LogOut, Coins,
-  Lock, Camera, X, Undo2, Languages,
+  Mail, UserRound, Save, Loader2, KeyRound, ShieldCheck, CalendarDays, LogOut, Coins,
+  Lock, Camera, Undo2,
 } from 'lucide-react';
 import { useRouter, Link } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
@@ -172,75 +172,69 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-extrabold mb-6 flex items-center gap-2">
-        <UserRound className="text-neon-cyan" /> Profil
-      </h1>
+      <h1 className="text-xl sm:text-2xl font-extrabold mb-6">Profil va sozlamalar</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Chap: shaxsiy ma'lumotlar */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Info card */}
-          <div className="neo-card rounded-2xl p-6">
-            <div className="flex items-start justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-4 min-w-0">
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={uploading}
-                  aria-label="Avatarni o'zgartirish"
-                  data-tip="Avatarni o'zgartirish"
-                  className="group relative w-20 h-20 rounded-2xl overflow-hidden shrink-0 border border-neon-cyan/25 bg-gradient-to-br from-neon-cyan via-neon-purple to-neon-magenta grid place-items-center font-extrabold text-3xl text-white shadow-glow disabled:opacity-70"
-                >
-                  {preview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={preview} alt="Yangi avatar" className="absolute inset-0 w-full h-full object-cover" />
-                  ) : avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={avatarUrl} alt={user.fullName} className="absolute inset-0 w-full h-full object-cover" />
-                  ) : (
-                    initials(user.fullName)
-                  )}
-                  <span className="absolute inset-0 grid place-items-center bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {uploading ? <Loader2 size={18} className="animate-spin text-neon-cyan" /> : <Camera size={18} className="text-white" />}
-                  </span>
-                </button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
-                  className="hidden"
-                  aria-hidden="true"
-                  tabIndex={-1}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) uploadAvatar(f);
-                  }}
-                />
-                <div className="min-w-0">
-                  <p className="font-bold text-lg truncate">{user.fullName}</p>
-                  <p className="text-sm text-gray-400 flex items-center gap-1.5 truncate">
-                    <Mail size={13} className="shrink-0" /> {user.email}
-                  </p>
-                  <span className="inline-flex items-center gap-1 mt-2 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-yellow-400/10 text-yellow-300 border border-yellow-400/20">
-                    <ShieldCheck size={11} /> {roleLabel}
-                  </span>
-                </div>
-              </div>
-              <div className="text-right text-xs text-gray-500 shrink-0">
-                <p className="flex items-center justify-end gap-1.5">
-                  <CalendarDays size={13} />
-                  {user.createdAt ? new Date(user.createdAt).toLocaleDateString('uz-UZ') : '—'}
-                </p>
-                <p>Ro&apos;yxatdan o&apos;tilgan sana</p>
-              </div>
+          {/* Header card */}
+          <div className="neo-card rounded-2xl p-5 sm:p-6 flex items-center gap-4 flex-wrap">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              aria-label="Avatarni o'zgartirish"
+              data-tip="Avatarni o'zgartirish"
+              className="group relative w-16 h-16 rounded-2xl overflow-hidden shrink-0 border border-neon-cyan/30 bg-cyber-800 grid place-items-center font-extrabold text-2xl text-white disabled:opacity-70"
+            >
+              {preview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={preview} alt="Yangi avatar" className="absolute inset-0 w-full h-full object-cover" />
+              ) : avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatarUrl} alt={user.fullName} className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                initials(user.fullName)
+              )}
+              <span className="absolute inset-0 grid place-items-center bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl">
+                {uploading ? <Loader2 size={16} className="animate-spin text-neon-cyan" /> : <Camera size={16} className="text-white" />}
+              </span>
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              aria-hidden="true"
+              tabIndex={-1}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) uploadAvatar(f);
+              }}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-lg truncate">{user.fullName}</p>
+              <p className="text-sm text-gray-400 flex items-center gap-1.5 truncate">
+                <Mail size={13} className="shrink-0" /> {user.email}
+              </p>
+              <span className="inline-flex items-center gap-1 mt-2 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-yellow-400/10 text-yellow-300 border border-yellow-400/20">
+                <ShieldCheck size={11} /> {roleLabel}
+              </span>
+            </div>
+            <div className="text-right text-xs text-gray-500 shrink-0">
+              <p className="flex items-center justify-end gap-1.5">
+                <CalendarDays size={13} />
+                {user.createdAt ? new Date(user.createdAt).toLocaleDateString('uz-UZ') : '—'}
+              </p>
+              <p>Ro&apos;yxatdan o&apos;tilgan sana</p>
             </div>
           </div>
 
           {/* Edit */}
-          <div className="neo-card rounded-2xl p-6">
+          <div className="neo-card rounded-2xl p-5 sm:p-6">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-5">
-              <h3 className="font-bold flex items-center gap-2">
-                <Save size={16} className="text-neon-cyan" /> Ma&apos;lumotlarni tahrirlash
+              <h3 className="font-bold flex items-center gap-2 text-base">
+                <UserRound size={16} className="text-neon-cyan" /> Shaxsiy ma&apos;lumotlar
               </h3>
               {dirty && (
                 <span className="text-[10px] px-2 py-1 rounded-full bg-yellow-400/10 text-yellow-300 border border-yellow-400/20 font-bold">
@@ -250,8 +244,8 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
             </div>
             <div className="space-y-4">
               <div>
-                <label htmlFor="profile-fullName" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5 flex items-center gap-1">
-                  <UserRound size={12} /> To&apos;liq ism
+                <label htmlFor="profile-fullName" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5">
+                  To&apos;liq ism
                 </label>
                 <input
                   id="profile-fullName"
@@ -262,8 +256,8 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
                 />
               </div>
               <div>
-                <label htmlFor="profile-phone" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5 flex items-center gap-1">
-                  <Phone size={12} /> Telefon
+                <label htmlFor="profile-phone" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5">
+                  Telefon
                 </label>
                 <input
                   id="profile-phone"
@@ -275,8 +269,8 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
                 />
               </div>
               <div>
-                <label htmlFor="profile-language" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5 flex items-center gap-1">
-                  <Languages size={12} /> Interfeys tili
+                <label htmlFor="profile-language" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5">
+                  Interfeys tili
                 </label>
                 <select
                   id="profile-language"
@@ -290,8 +284,8 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
                 </select>
               </div>
               <div>
-                <label htmlFor="profile-email" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5 flex items-center gap-1">
-                  <Mail size={12} /> Email
+                <label htmlFor="profile-email" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5">
+                  Email
                 </label>
                 <div className="relative">
                   <input
@@ -300,7 +294,7 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
                     readOnly
                     disabled
                     aria-readonly="true"
-                    className="glass-input w-full rounded-xl pl-3 pr-12 py-2.5 text-sm outline-none opacity-70 cursor-not-allowed"
+                    className="glass-input w-full rounded-xl px-3 pr-12 py-2.5 text-sm outline-none opacity-70 cursor-not-allowed"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
                     <Lock size={14} />
@@ -316,7 +310,7 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
                 <button
                   onClick={saveProfile}
                   disabled={saving || !dirty}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl neon-btn font-bold text-sm disabled:opacity-50"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl neon-btn font-bold text-sm disabled:opacity-50"
                 >
                   {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                   Saqlash
@@ -324,7 +318,7 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
                 <button
                   onClick={resetProfile}
                   disabled={saving || !dirty}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl btn-ghost text-sm font-medium disabled:opacity-50"
+                  className="inline-flex items-center gap-2 px-4 py-3 rounded-xl btn-ghost text-sm font-medium disabled:opacity-50"
                 >
                   <Undo2 size={15} /> Bekor qilish
                 </button>
@@ -332,9 +326,16 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
             </div>
           </div>
 
+          {/* Xavfsizlik sozlamalari */}
+          <div className="flex items-center gap-2 pt-2">
+            <ShieldCheck size={16} className="text-neon-cyan" />
+            <h2 className="text-sm font-bold uppercase tracking-wider text-gray-300">Xavfsizlik sozlamalari</h2>
+            <span className="flex-1 h-px bg-white/10" aria-hidden="true" />
+          </div>
+
           {/* Parol */}
-          <div className="neo-card rounded-2xl p-6">
-            <h3 className="font-bold mb-4 flex items-center gap-2">
+          <div className="neo-card rounded-2xl p-5 sm:p-6">
+            <h3 className="font-bold mb-4 flex items-center gap-2 text-base">
               <KeyRound size={16} className="text-neon-magenta" /> Parolni o&apos;zgartirish
             </h3>
             <div className="space-y-4">
@@ -365,7 +366,7 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
               <button
                 onClick={changePass}
                 disabled={passSaving || !oldPass || !newPass}
-                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl border border-neon-magenta/30 text-neon-magenta font-bold text-sm hover:bg-neon-magenta/10 disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-neon-magenta/30 text-neon-magenta font-bold text-sm hover:bg-neon-magenta/10 disabled:opacity-50"
               >
                 {passSaving ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} />}
                 Parolni yangilash
@@ -379,15 +380,13 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
           {/* Passkey / biometriya */}
           <PasskeySettings />
 
-          {/* Ikki faktorli himoya (TOTP) */}
-          <TwoFactorSettings />
-
           {/* So'nggi xavfsizlik voqealari */}
           <SecurityActivity />
 
+          {/* Chiqish */}
           <button
             onClick={handleLogout}
-            className="inline-flex items-center gap-2 text-sm text-red-400 hover:text-red-300"
+            className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl btn-danger text-sm font-bold"
           >
             <LogOut size={16} /> Chiqish
           </button>
@@ -395,13 +394,13 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
 
         {/* O'ng: ballar + super_admin bilan bog'lanish */}
         <div className="space-y-6">
-          <div className="neo-card rounded-2xl p-6">
+          <div className="neo-card rounded-2xl p-5 sm:p-6">
             <div className="flex items-center gap-2 mb-3">
-              <span className="w-10 h-10 rounded-xl bg-yellow-400/10 border border-yellow-400/25 grid place-items-center">
-                <Coins size={20} className="text-yellow-400" />
+              <span className="w-9 h-9 rounded-xl bg-yellow-400/10 border border-yellow-400/25 grid place-items-center">
+                <Coins size={18} className="text-yellow-400" />
               </span>
               <div>
-                <p className="font-bold leading-tight">Bonus balans</p>
+                <p className="font-bold leading-tight text-sm">Bonus balans</p>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">1 bal = 1 so&apos;m</p>
               </div>
             </div>
@@ -411,13 +410,13 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
               ishlatishingiz mumkin (narxning 50% gacha).
             </p>
           </div>
-          <div className="neo-card rounded-2xl p-6">
+          <div className="neo-card rounded-2xl p-5 sm:p-6">
             <div className="flex items-center gap-2 mb-3">
-              <span className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/25 grid place-items-center">
-                <X size={20} className="text-red-400" />
+              <span className="w-9 h-9 rounded-xl bg-red-500/10 border border-red-500/25 grid place-items-center">
+                <Lock size={18} className="text-red-400" />
               </span>
               <div>
-                <p className="font-bold leading-tight">Hisob xavfsizligi</p>
+                <p className="font-bold leading-tight text-sm">Hisob xavfsizligi</p>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">Email immutable</p>
               </div>
             </div>
@@ -428,13 +427,13 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
             </p>
           </div>
           {user.role === 'SUPER_ADMIN' ? (
-            <div className="neo-card rounded-2xl p-6">
+            <div className="neo-card rounded-2xl p-5 sm:p-6">
               <div className="flex items-center gap-2 mb-3">
-                <span className="w-10 h-10 rounded-xl bg-yellow-400/10 border border-yellow-400/25 grid place-items-center">
-                  <ShieldCheck size={20} className="text-yellow-400" />
+                <span className="w-9 h-9 rounded-xl bg-yellow-400/10 border border-yellow-400/25 grid place-items-center">
+                  <ShieldCheck size={18} className="text-yellow-400" />
                 </span>
                 <div>
-                  <p className="font-bold leading-tight">Super Admin</p>
+                  <p className="font-bold leading-tight text-sm">Super Admin</p>
                   <p className="text-[10px] text-gray-500">Murojaatlar panelda boshqariladi</p>
                 </div>
               </div>

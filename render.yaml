@@ -1,3 +1,4 @@
+
 services:
   # PostgreSQL ma'lumotlar bazasi
   - type: pgsql

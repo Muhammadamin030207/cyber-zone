@@ -20,7 +20,7 @@ interface Props {
 export default function SeatMap({ computers, selectedId, onSelect }: Props) {
   return (
     <div>
-      <div className="rounded-xl border border-white/10 bg-cyber-950/60 p-4 relative overflow-hidden">
+      <div className="rounded-xl border border-white/10 surface p-4 relative overflow-hidden">
         <div className="absolute top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full border border-white/10 bg-white/5 text-[10px] text-gray-500 tracking-widest">
           EKRAN TOMONI
         </div>
@@ -38,7 +38,7 @@ export default function SeatMap({ computers, selectedId, onSelect }: Props) {
                 className={cn(
                   'relative flex flex-col items-center gap-1 rounded-lg border px-1 py-2 transition-all',
                   selected
-                    ? 'border-amber-400 bg-amber-500/15 shadow-glow scale-105'
+                    ? 'border-amber-400 bg-amber-500/15 ring-2 ring-amber-400/40 scale-105'
                     : busy
                       ? 'border-white/5 bg-white/5 opacity-40 cursor-not-allowed'
                       : 'border-neon-green/30 bg-neon-green/5 hover:bg-neon-green/15 hover:border-neon-green/60'

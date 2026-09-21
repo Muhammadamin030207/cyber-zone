@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { Link, usePathname } from '@/i18n/navigation';
-import { LogIn, LayoutDashboard, Crown, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Crown, MessageSquare } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { useChatUnread } from '@/hooks/useChatUnread';
 import LanguageSwitcher from './LanguageSwitcher';
@@ -38,20 +38,21 @@ export default function Header() {
     href === '/' ? pathname === '/' || pathname === '' : pathname.startsWith(href);
 
   const navItems = (
-    <>{links.map((l) => (
-      <Link
-        key={l.href}
-        href={l.href}
-        aria-current={isActive(l.href) ? 'page' : undefined}
-        className={`px-3.5 py-2 text-sm font-medium rounded-lg transition-colors ${
-          isActive(l.href)
-            ? 'text-neon-cyan bg-neon-cyan/10 border border-neon-cyan/20'
-            : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent'
-        }`}
-      >
-        {l.label}
-      </Link>
-    ))}
+    <>
+      {links.map((l) => (
+        <Link
+          key={l.href}
+          href={l.href}
+          aria-current={isActive(l.href) ? 'page' : undefined}
+          className={`inline-flex items-center h-9 px-3.5 text-sm font-medium rounded-lg transition-colors ${
+            isActive(l.href)
+              ? 'text-neon-cyan bg-neon-cyan/10'
+              : 'text-gray-300 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          {l.label}
+        </Link>
+      ))}
     </>
   );
 
@@ -61,21 +62,26 @@ export default function Header() {
   })();
 
   return (
-    <header className="sticky top-0 z-50 glass border-b border-neon-cyan/15">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center justify-between h-14 md:h-16">
+    <header className="sticky top-0 z-50 glass border-b border-white/10">
+      <div className="relative max-w-7xl mx-auto px-3 sm:px-6 flex items-center justify-between h-14 md:h-16">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 group shrink-0">
+        <Link href="/" className="flex items-center gap-2 group shrink-0" aria-label="Cyber-ZONE — bosh sahifa">
           <Logo size={30} />
-          <span className="font-[--font-orbitron] font-bold tracking-widest text-base md:text-lg">
+          <span className="hidden sm:inline font-[--font-orbitron] font-bold tracking-widest text-base md:text-lg">
             CYBER<span className="text-neon-cyan">-ZONE</span>
           </span>
         </Link>
 
-        {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-1">{navItems}</nav>
+        {/* Desktop nav — markazda, haqiqiy markazlashtirilgan */}
+        <nav
+          className="hidden md:flex items-center gap-0.5 absolute left-1/2 -translate-x-1/2"
+          aria-label="Asosiy navigatsiya"
+        >
+          {navItems}
+        </nav>
 
         {/* Desktop actions */}
-        <div className="hidden md:flex items-center gap-2">
+        <div className="hidden md:flex items-center gap-1.5">
           <ThemeSwitcher />
           <LanguageSwitcher />
           {user ? (
@@ -83,7 +89,7 @@ export default function Header() {
               {user.role === 'SUPER_ADMIN' && (
                 <Link
                   href="/super-admin"
-                  className="px-3 py-2 text-sm font-medium rounded-lg text-yellow-300 hover:bg-yellow-400/10 flex items-center gap-1"
+                  className="inline-flex items-center h-9 px-3 text-sm font-medium rounded-lg text-yellow-300 hover:bg-yellow-400/10 gap-1.5"
                 >
                   <Crown size={16} />
                   {t('superAdmin')}
@@ -92,7 +98,7 @@ export default function Header() {
               {user.role === 'ADMIN' && (
                 <Link
                   href="/admin"
-                  className="px-3 py-2 text-sm font-medium rounded-lg text-neon-green hover:bg-neon-green/10 flex items-center gap-1"
+                  className="inline-flex items-center h-9 px-3 text-sm font-medium rounded-lg text-neon-green hover:bg-neon-green/10 gap-1.5"
                 >
                   <LayoutDashboard size={16} />
                   {t('admin')}
@@ -103,15 +109,15 @@ export default function Header() {
                 data-tip={unread > 0 ? `Xabarlar (${unread})` : 'Xabarlar'}
                 data-tip-top
                 aria-label={unread > 0 ? `Xabarlar — ${unread} ta o'qilmagan` : 'Xabarlar'}
-                className={`relative w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                className={`relative w-9 h-9 rounded-lg border flex items-center justify-center transition-colors ${
                   isActive('/chat')
-                    ? 'text-neon-cyan bg-neon-cyan/15 border border-neon-cyan/30'
-                    : 'text-gray-200 bg-cyber-800 border border-white/10 hover:border-neon-cyan/40'
+                    ? 'text-neon-cyan bg-neon-cyan/15 border-neon-cyan/30'
+                    : 'text-gray-200 bg-cyber-800 border-white/10 hover:border-neon-cyan/40'
                 }`}
               >
                 <MessageSquare size={16} />
                 {unread > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-neon-magenta text-white text-[10px] font-extrabold grid place-items-center border border-white/20">
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-neon-magenta text-white text-[10px] font-extrabold grid place-items-center border border-white/20">
                     {unread > 99 ? '99+' : unread}
                   </span>
                 )}
@@ -121,17 +127,17 @@ export default function Header() {
                 data-tip={t('dashboard')}
                 data-tip-top
                 aria-label={t('dashboard')}
-                className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm transition-colors ${
+                className={`w-9 h-9 rounded-lg border flex items-center justify-center font-bold text-sm transition-colors ${
                   isActive('/dashboard')
-                    ? 'text-neon-cyan bg-neon-cyan/15 border border-neon-cyan/30'
-                    : 'text-gray-200 bg-cyber-800 border border-white/10 hover:border-neon-cyan/40'
+                    ? 'text-neon-cyan bg-neon-cyan/15 border-neon-cyan/30'
+                    : 'text-gray-200 bg-cyber-800 border-white/10 hover:border-neon-cyan/40'
                 }`}
               >
                 {userInitial}
               </Link>
               <button
                 onClick={handleLogout}
-                className="px-3 py-2 text-sm font-medium rounded-lg text-red-400 hover:bg-red-500/10"
+                className="inline-flex items-center h-9 px-3 text-sm font-medium rounded-lg text-red-400 hover:bg-red-500/10"
               >
                 {t('logout')}
               </button>
@@ -139,34 +145,15 @@ export default function Header() {
           ) : (
             <Link
               href="/login"
-              className="px-4 py-2 text-sm font-bold rounded-xl neon-btn flex items-center gap-1"
+              className="inline-flex items-center h-9 px-4 text-sm font-bold rounded-lg neon-btn"
             >
-              <LogIn size={16} />
               {t('login')}
             </Link>
           )}
         </div>
 
-        {/* Mobile actions — theme + language + chat (BottomTabBar orqali asosiy nav) */}
-        <div className="md:hidden flex items-center gap-0.5">
-          {user && (
-            <Link
-              href="/chat"
-              aria-label={unread > 0 ? `Xabarlar — ${unread} ta o'qilmagan` : 'Xabarlar'}
-              className={`relative w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
-                isActive('/chat')
-                  ? 'text-neon-cyan bg-neon-cyan/15 border border-neon-cyan/30'
-                  : 'text-gray-200 bg-cyber-800 border border-white/10'
-              }`}
-            >
-              <MessageSquare size={17} />
-              {unread > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-neon-magenta text-white text-[10px] font-extrabold grid place-items-center border border-white/20">
-                  {unread > 99 ? '99+' : unread}
-                </span>
-              )}
-            </Link>
-          )}
+        {/* Mobile actions — theme + language (asal nav BottomTabBar orqali) */}
+        <div className="md:hidden flex items-center gap-1">
           <ThemeSwitcher />
           <LanguageSwitcher />
         </div>

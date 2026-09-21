@@ -7,7 +7,7 @@ import prisma from '../lib/prisma';
 import { generateTokens, verifyRefreshToken } from '../lib/jwt';
 import { config } from '../config';
 import { AuthRequest } from '../types';
-import { ok, badRequest, unauthorized, notFoundMsg, serverError } from '../utils/response';
+import { ok, badRequest, unauthorized, notFoundMsg, serverError, forbidden } from '../utils/response';
 import { sendEmail, buildResetEmail, buildResetText, buildTempPasswordEmail, buildTempPasswordText } from '../lib/mailer';
 import { sendSecurityAlert, clientIp, describeUserAgent, recordSecurityEvent } from '../lib/securityAlerts';
 import { getLockState, computeAfterFailure, resetData } from '../utils/loginThrottle';
@@ -324,6 +324,72 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     }
 
     return ok(res, { user: sanitizeUser(user), ...tokens }, 'Xush kelibsiz!');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ BLOKDAN CHIQARISH (Alt+B) ============
+// Bloklangan hisobni olib tashlash. Xavfsizlik: blok faqat hisob EGASI uchun —
+// to'g'ri joriy parol bcrypt orqali tasdiqlanmasa, hech qanday o'zgartirish
+// bo'lmaydi (brute-force qiluvchi bundan foyda ko'rmaydi). Urinishlar IP
+// bo'yicha rate-limit qilinadi va barcha holatlar xavfsizlik voqealari sifatida
+// log qilinadi.
+const unlockAttemptsCache = new Map<string, { count: number; windowStart: number }>();
+
+function unlockRateLimited(ip: string): boolean {
+  const windowMs = 10 * 60 * 1000;
+  const max = 5;
+  const now = Date.now();
+  const cur = unlockAttemptsCache.get(ip);
+  if (!cur || now - cur.windowStart > windowMs) {
+    unlockAttemptsCache.set(ip, { count: 1, windowStart: now });
+    return false;
+  }
+  cur.count += 1;
+  return cur.count > max;
+}
+
+export const unlockAccount = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+    const password = String(req.body?.password || '');
+    if (!email || !password) return badRequest(res, 'Email va parol talab qilinadi');
+
+    const ip = clientIp(req) ?? 'unknown';
+    if (unlockRateLimited(ip)) {
+      return res.status(429).json({ success: false, message: "Juda ko'p urinish. Birozdan so'ng qayta urinib ko'ring." });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    // Umumiy javob — hisob mavjudligi ochilmaydi (enumeration oldini olish)
+    if (!user) return badRequest(res, 'Email yoki parol noto\'g\'ri');
+    if (user.status !== 'ACTIVE') return forbidden(res, 'Akkauntingiz bloklangan');
+
+    const passOk = user.passwordHash ? await bcrypt.compare(password, user.passwordHash) : false;
+    if (!passOk) {
+      void recordSecurityEvent(user.id, 'LOGIN_UNLOCK_FAILED', {
+        ip,
+        userAgent: req.headers['user-agent'] as string | undefined,
+        metadata: { stage: user.loginLockStage, failedAttempts: user.failedLoginAttempts },
+      });
+      return badRequest(res, 'Parol noto\'g\'ri');
+    }
+
+    // To'g'ri parol — hisobning barcha blok holati tozalanadi
+    await prisma.user.update({ where: { id: user.id }, data: resetData() });
+    void recordSecurityEvent(user.id, 'LOCK_RELEASED', {
+      ip,
+      userAgent: req.headers['user-agent'] as string | undefined,
+      metadata: { source: 'unlock-shortcut' },
+    });
+    void sendSecurityAlert(user.email, user.fullName, 'LOCK_RELEASED', {
+      ip,
+      device: describeUserAgent(req.headers['user-agent'] as string | undefined),
+      when: new Date(),
+    });
+
+    return ok(res, { unlocked: true }, 'Blok olib tashlandi. Endi kiring');
   } catch (err) {
     next(err);
   }

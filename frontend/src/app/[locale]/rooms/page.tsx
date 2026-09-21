@@ -89,7 +89,7 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
-          <div className="w-11 h-11 rounded-xl border border-neon-cyan/30 bg-neon-cyan/10 flex items-center justify-center shadow-glow">
+          <div className="w-11 h-11 rounded-xl border border-neon-cyan/30 bg-neon-cyan/10 flex items-center justify-center">
             <Building2 size={22} className="text-neon-cyan" />
           </div>
           <div>
@@ -101,8 +101,8 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
 
       {/* Search + toolbar */}
       <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 mb-3">
-        <div className="flex-1 flex items-center gap-2 px-3 glass rounded-xl neon-border">
-          <Search size={18} className="text-neon-cyan shrink-0" />
+        <div className="flex-1 flex items-center gap-2 px-3 surface rounded-xl focus-within:ring-1 focus-within:ring-[var(--acc-b)]/50">
+          <Search size={18} className="text-gray-400 shrink-0" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -266,7 +266,7 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
         </div>
       ) : rooms.length === 0 ? (
         <div className="text-center py-20 neo-card rounded-2xl">
-          <div className="w-16 h-16 mx-auto mb-4 neo-card rounded-2xl flex items-center justify-center animate-floaty">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center bg-[var(--acc-b)]/10 border border-[var(--acc-b)]/25">
             <Logo size={38} />
           </div>
           <p className="text-gray-400 text-lg max-w-md mx-auto">{tRooms('empty')}</p>

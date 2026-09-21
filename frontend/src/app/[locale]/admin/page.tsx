@@ -116,7 +116,7 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
       {/* Content */}
       {!room && tab !== 'room' && tab !== 'bar' && tab !== 'chat' && tab !== 'requests' && tab !== 'support' ? (
         <div className="text-center py-20">
-          <div className="w-16 h-16 mx-auto mb-4 neo-card rounded-2xl flex items-center justify-center animate-floaty">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center bg-[var(--acc-b)]/10 border border-[var(--acc-b)]/25">
             <Logo size={38} />
           </div>
           <p className="text-gray-400 text-lg mb-4">{t('noRoom')}</p>

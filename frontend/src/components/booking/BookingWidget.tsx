@@ -267,7 +267,7 @@ async function submit() {
 
   return (
     <div className="neo-card rounded-2xl overflow-hidden">
-      <div className="bg-gradient-to-r from-neon-cyan/10 via-transparent to-neon-magenta/10 border-b border-neon-cyan/15 px-5 py-4">
+      <div className="px-5 py-4 border-b border-white/10">
         <h2 className="font-bold text-lg flex items-center gap-2">
           <Zap size={18} className="text-neon-cyan" /> {t('title')}
         </h2>
@@ -344,7 +344,7 @@ async function submit() {
                     'w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm transition-colors',
                     zoneId === z.id
                       ? 'border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan'
-                      : 'border-neon-cyan/15 bg-cyber-800/60 text-gray-300 hover:border-neon-cyan/40'
+                      : 'border-white/10 surface text-gray-300 hover:border-neon-cyan/40'
                   )}
                 >
                   <span className="flex-1 font-medium">{z.name}</span>
@@ -361,7 +361,7 @@ async function submit() {
               ))}
             </div>
           ) : (
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-neon-cyan/15 bg-cyber-800/60 text-sm text-gray-400">
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-white/10 surface text-sm text-gray-400">
               {t('notAvailable')}
             </div>
           )}
@@ -521,7 +521,7 @@ async function submit() {
               onClick={() => setUsePoints((v) => !v)}
               className={cn(
                 'w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm transition-colors',
-                usePoints ? 'border-yellow-400/40 bg-yellow-400/10 text-yellow-300' : 'border-white/10 bg-cyber-800/60 text-gray-300 hover:border-yellow-400/25'
+                usePoints ? 'border-yellow-400/40 bg-yellow-400/10 text-yellow-300' : 'border-white/10 surface text-gray-300 hover:border-yellow-400/25'
               )}
             >
               <span className="flex items-center gap-1.5 font-medium">
@@ -536,7 +536,7 @@ async function submit() {
         )}
 
         {/* Xulosa */}
-        <div className="rounded-xl border border-neon-cyan/15 bg-gradient-to-b from-cyber-800/80 to-cyber-800/40 p-4 space-y-2 text-sm">
+        <div className="rounded-xl surface border border-white/10 p-4 space-y-2 text-sm">
           <div className="flex items-center justify-between text-gray-400">
             <span className="flex items-center gap-1.5"><Clock size={13} className="text-neon-cyan" /> {t('duration')}</span>
             <span className="text-gray-300 font-medium">{durationHours.toFixed(1)} {t('hoursTotal')} · {startTime} — {endTime}</span>

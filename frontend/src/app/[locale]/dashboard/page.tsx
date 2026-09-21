@@ -104,7 +104,7 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl neo-card flex items-center justify-center shadow-glow">
+          <div className="w-14 h-14 rounded-2xl neo-card flex items-center justify-center">
             <span className="avatar" style={{ width: '2.75rem', height: '2.75rem', fontSize: '1.1rem' }}>
               {(user?.fullName || 'U')[0]?.toUpperCase() || 'U'}
             </span>
@@ -186,7 +186,7 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
         </div>
       ) : shown.length === 0 ? (
         <div className="text-center py-20 neo-card rounded-2xl">
-          <div className="w-16 h-16 mx-auto mb-4 neo-card rounded-2xl flex items-center justify-center animate-floaty">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center bg-[var(--acc-b)]/10 border border-[var(--acc-b)]/25">
             <Logo size={38} />
           </div>
           <p className="text-gray-400 text-lg">{t('noBookings')}</p>

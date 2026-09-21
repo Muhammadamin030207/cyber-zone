@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { LogIn, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, Zap, Fingerprint, ShieldCheck } from 'lucide-react';
+import { LogIn, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, Fingerprint, ShieldCheck } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
@@ -65,6 +65,8 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
   const [totpCode, setTotpCode] = useState('');
   const [totpBusy, setTotpBusy] = useState(false);
   const [totpError, setTotpError] = useState<string | null>(null);
+  // Alt+B — blokdan chiqarish (to'g'ri parol kiritilgan bo'lsagina server qabul qiladi)
+  const [unlocking, setUnlocking] = useState(false);
 
   const {
     register,
@@ -338,35 +340,74 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
     }
   });
 
+  // Blokdan chiqarish: Alt+B tugmasi — server to'g'ri parolni tasdiqlagan
+  // taqdirdagina blokni olib tashlaydi va login jarayoni davom etadi.
+  async function handleAltUnlock() {
+    if (unlocking || submitting) return;
+    const email = getValues('email').trim().toLowerCase();
+    const password = getValues('password');
+    if (!email || !password) {
+      setError('Email va parolni to\'ldirib, keyin Alt+B bosing.');
+      return;
+    }
+    setUnlocking(true);
+    try {
+      const { data } = await api.post<{ success: boolean; message?: string }>('/api/auth/unlock', {
+        email,
+        password,
+      });
+      if (data?.success) {
+        const key = email;
+        setLock(null);
+        setError(null);
+        setRemainingAttempts(null);
+        try {
+          localStorage.removeItem(LOCK_STORAGE_PREFIX + key);
+          localStorage.setItem(LAST_EMAIL_KEY, key);
+        } catch {
+          /* ignore */
+        }
+        await onSubmit();
+      }
+    } catch (err: unknown) {
+      const d = (err as { response?: { data?: { message?: string } } })?.response?.data;
+      setError(d?.message || 'Blokdan chiqarib bo\'lmadi');
+    } finally {
+      setUnlocking(false);
+    }
+  }
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && e.code === 'KeyB') {
+        e.preventDefault();
+        void handleAltUnlock();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 items-stretch">
       {/* ===== Brand panel ===== */}
       <div className="relative hidden lg:flex flex-col justify-between p-10 overflow-hidden">
-        <div className="absolute inset-0 bg-aurora" />
-        <div className="absolute inset-0 grid-matrix opacity-30" />
-        <div className="orb w-80 h-80 bg-neon-cyan/15 -top-10 -right-10 animate-floaty" />
-        <div className="orb w-72 h-72 bg-neon-magenta/10 bottom-20 -left-12 animate-floaty" style={{ animationDelay: '2s' }} />
-        <div className="orb w-56 h-56 bg-neon-purple/10 top-1/3 -right-16 animate-floaty" style={{ animationDelay: '3.5s' }} />
-
         <div className="relative flex items-center gap-3">
           <Logo size={44} />
-          <span className="font-[--font-orbitron] text-xl font-bold tracking-widest neon-text">
+          <span className="font-[--font-orbitron] text-xl font-bold tracking-wide neon-text">
             CYBER<span className="text-white">-ZONE</span>
           </span>
         </div>
 
-        <div className="relative">
-          <div className="w-16 h-16 rounded-2xl border border-neon-cyan/30 bg-neon-cyan/10 flex items-center justify-center mb-6 shadow-glow animate-floaty">
-            <LogIn size={28} className="text-neon-cyan" />
-          </div>
+        <div className="relative max-w-md">
           <h2 className="text-3xl font-extrabold tracking-tight mb-3">{t('welcome')}</h2>
-          <p className="text-gray-400 max-w-md leading-relaxed">
+          <p className="text-gray-400 leading-relaxed">
             {t('loginTitle')} va kompyuter xonangizni boshqaring.
           </p>
           <div className="flex flex-wrap gap-2 mt-6">
-            <span className="chip chip-success"><Zap size={12} /> 24/7 bron</span>
+            <span className="chip chip-success">24/7 bron</span>
             <span className="chip chip-warn">Online to&apos;lov</span>
-            {biometricAvailable && <span className="chip"><Fingerprint size={12} /> Passkey</span>}
+            {biometricAvailable && <span className="chip">Passkey</span>}
             <span className="chip">O&apos;zbek · Русский · English</span>
           </div>
         </div>
@@ -377,18 +418,17 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
       </div>
 
       {/* ===== Form panel ===== */}
-      <div className="flex items-center justify-center px-4 sm:px-6 py-10">
+      <div className="flex items-center justify-center px-4 sm:px-6 py-10 pb-28 lg:pb-10">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center justify-center gap-2 mb-8">
             <Logo size={38} />
-            <span className="font-[--font-orbitron] text-lg font-bold tracking-widest neon-text">
+            <span className="font-[--font-orbitron] text-lg font-bold tracking-wide neon-text">
               CYBER<span className="text-white">-ZONE</span>
             </span>
           </div>
 
-          <div className="neo-card rounded-2xl p-8 animate-fade-up relative overflow-hidden">
-            <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-neon-cyan to-transparent" />
+          <div className="neo-card rounded-2xl p-6 sm:p-8">
             <h1 className="text-2xl font-extrabold tracking-tight mb-1">{t('loginTitle')}</h1>
             <p className="text-sm text-gray-400 mb-6">Hisobingiz bilan kiring va xonalarni bron qiling.</p>
 
@@ -435,8 +475,8 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
             {twoFactorStep ? (
               // ===== 2-BOSQICH: TOTP (autentifikator) kodi =====
               <div className="py-2">
-                <div className="mx-auto w-16 h-16 rounded-2xl border border-neon-cyan/40 bg-neon-cyan/10 flex items-center justify-center mb-4 shadow-glow">
-                  <ShieldCheck size={26} className="text-neon-cyan" />
+                <div className="mx-auto w-14 h-14 rounded-2xl border border-neon-cyan/40 bg-neon-cyan/10 flex items-center justify-center mb-4">
+                  <ShieldCheck size={24} className="text-neon-cyan" />
                 </div>
                 <h2 className="text-lg font-bold mb-1 text-center">Ikki faktorli himoya</h2>
                 <p className="text-sm text-gray-400 mb-5 text-center">
@@ -485,8 +525,8 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
             ) : passkeyStep ? (
               // ===== 2-BOSQICH: PASSKEY (biometric) tasdiqlash =====
               <div className="text-center py-2">
-                <div className="mx-auto w-16 h-16 rounded-2xl border border-neon-cyan/40 bg-neon-cyan/10 flex items-center justify-center mb-4 shadow-glow animate-floaty">
-                  {passkeyBusy ? <Loader2 size={26} className="animate-spin text-neon-cyan" /> : <Fingerprint size={26} className="text-neon-cyan" />}
+                <div className="mx-auto w-14 h-14 rounded-2xl border border-neon-cyan/40 bg-neon-cyan/10 flex items-center justify-center mb-4">
+                  {passkeyBusy ? <Loader2 size={24} className="animate-spin text-neon-cyan" /> : <Fingerprint size={24} className="text-neon-cyan" />}
                 </div>
                 <h2 className="text-lg font-bold mb-1">Xavfsizlik tasdiqlashi</h2>
                 <p className="text-sm text-gray-400 mb-5">
@@ -517,8 +557,8 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
             ) : twoFactorStep ? (
               // ===== 2-BOSQICH: TOTP (autentifikator ilovasi) =====
               <div className="text-center py-2">
-                <div className="mx-auto w-16 h-16 rounded-2xl border border-neon-cyan/40 bg-neon-cyan/10 flex items-center justify-center mb-4 shadow-glow animate-floaty">
-                  {totpBusy ? <Loader2 size={26} className="animate-spin text-neon-cyan" /> : <ShieldCheck size={26} className="text-neon-cyan" />}
+                <div className="mx-auto w-14 h-14 rounded-2xl border border-neon-cyan/40 bg-neon-cyan/10 flex items-center justify-center mb-4">
+                  {totpBusy ? <Loader2 size={24} className="animate-spin text-neon-cyan" /> : <ShieldCheck size={24} className="text-neon-cyan" />}
                 </div>
                 <h2 className="text-lg font-bold mb-1">Ikki faktorli tekshiruv</h2>
                 <p className="text-sm text-gray-400 mb-5">
@@ -636,15 +676,25 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
                   {submitting ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />}
                   {locked ? `Bloklangan · ${formatCountdown(remainingMs)}` : t('loginBtn')}
                 </button>
+
+                {!locked && (
+                  <p className="text-center text-[11px] text-gray-500">
+                    Bloklanganda: to&apos;g&apos;ri parol yozib{' '}
+                    <kbd className="px-1.5 py-0.5 rounded border border-gray-700 bg-gray-800/60 text-gray-300">Alt</kbd>
+                    +
+                    <kbd className="px-1.5 py-0.5 rounded border border-gray-700 bg-gray-800/60 text-gray-300">B</kbd>{' '}
+                    bosing — blok darhol olib tashlanadi
+                  </p>
+                )}
               </form>
             )}
 
             {!passkeyStep && !twoFactorStep && (
               <>
                 <div className="flex items-center gap-3 my-6">
-                  <div className="h-px flex-1 bg-neon-cyan/15" />
+                  <div className="h-px flex-1 bg-white/10" />
                   <span className="text-xs text-gray-500">{t('or')}</span>
-                  <div className="h-px flex-1 bg-neon-cyan/15" />
+                  <div className="h-px flex-1 bg-white/10" />
                 </div>
 
                 {biometricAvailable && (

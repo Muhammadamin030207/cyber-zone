@@ -165,7 +165,16 @@ export default function BarOrdering({ roomId }: { roomId: string }) {
               return (
                 <div key={item.id} className="rounded-xl border border-white/10 bg-cyber-900 p-3 flex flex-col justify-between card-hover">
                   <div>
-                    <span className="text-xs text-gray-400">🍣 {item.name}</span>
+                    <span className="flex items-start gap-1.5 text-xs text-gray-400">
+                      <span className={`w-7 h-7 rounded-lg border grid place-items-center shrink-0 ${
+                        item.category === 'DRINK' ? 'border-neon-cyan/25 bg-neon-cyan/10 text-neon-cyan' :
+                        item.category === 'FOOD' ? 'border-amber-500/25 bg-amber-500/10 text-amber-400' :
+                        'border-neon-green/25 bg-neon-green/10 text-neon-green'
+                      }`}>
+                        {item.category === 'DRINK' ? <Coffee size={13} /> : item.category === 'FOOD' ? <UtensilsCrossed size={13} /> : <CakeSlice size={13} />}
+                      </span>
+                      {item.name}
+                    </span>
                     {item.description && <p className="text-[11px] text-gray-600 mt-0.5 line-clamp-2">{item.description}</p>}
                   </div>
                   <div className="flex items-center justify-between mt-2.5">
