@@ -1,6 +1,6 @@
 'use client';
 
-import { Home, Monitor, Newspaper, LayoutDashboard, LogIn, MessageSquare, Crown, type LucideIcon } from 'lucide-react';
+import { Home, Monitor, Newspaper, LayoutDashboard, LogIn, Crown, type LucideIcon } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Link, usePathname } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
@@ -29,7 +29,7 @@ export default function BottomTabBar() {
   } else if (user?.role === 'SUPER_ADMIN') {
     tabs.push({ href: '/super-admin', icon: Crown, label: t('superAdmin'), aria: t('superAdmin') });
   } else if (user) {
-    tabs.push({ href: '/chat', icon: MessageSquare, label: t('chat'), aria: t('chat') });
+    // Chat faqat header'dagi belgi orqali ochiladi (unread badge bilan) — pastki tabni takrorlamaymiz
     tabs.push({ href: '/dashboard', icon: LayoutDashboard, label: t('dashboard'), aria: t('dashboard') });
   } else {
     tabs.push({ href: '/login', icon: LogIn, label: t('login'), aria: t('login') });

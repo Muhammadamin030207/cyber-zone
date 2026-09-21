@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
+import { confirmDialog } from '@/lib/confirm';
 import type { Booking } from '@/lib/types';
 import { formatPrice, formatDate, formatDateTime, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
@@ -53,6 +54,7 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
   }, [user, fetchBookings]);
 
   async function cancelBooking(id: string) {
+    if (!(await confirmDialog({ title: 'Bronni bekor qilish', message: 'Bron haqiqatan ham bekor qilinsinmi? Bu amalni ortga qaytarib bo\u2018lmaydi.', danger: true }))) return;
     setCancelling(id);
     try {
       await api.put(`/api/bookings/${id}/cancel`);

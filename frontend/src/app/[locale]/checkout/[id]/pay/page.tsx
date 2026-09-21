@@ -15,9 +15,7 @@ export default function CheckoutPayRedirect({ params }: { params: Promise<{ loca
       const search = new URLSearchParams(window.location.search);
       const q: string[] = [];
       const pid = search.get('pid');
-      const test = search.get('test');
       if (pid) q.push(`pid=${encodeURIComponent(pid)}`);
-      if (test === '1') q.push('test=1');
       router.replace(q.length ? `/checkout/${id}?${q.join('&')}` : `/checkout/${id}`);
     })();
     return () => { cancelled = true; };

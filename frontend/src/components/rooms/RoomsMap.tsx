@@ -165,7 +165,7 @@ export default function RoomsMap({ rooms, height = 440, linkBase = '/rooms' }: {
 
   return (
     <div className="neo-card rounded-2xl overflow-hidden">
-      <div className="relative">
+      <div className="relative z-0">
         <div style={{ height }} ref={containerRef} />
         {!ready && (
           <div className="absolute inset-0 grid place-items-center bg-cyber-900/80">

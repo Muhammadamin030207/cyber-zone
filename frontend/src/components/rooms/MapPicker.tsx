@@ -228,7 +228,7 @@ export default function MapPicker({
   return (
     <div className="map-picker overflow-hidden rounded-2xl border border-neon-cyan/20 bg-cyber-900/60">
       {/* XARITA — katta responive maydon (CSS klass orqali: 360/420/480px) */}
-      <div className="relative">
+      <div className="relative z-0">
         <div
           ref={containerRef}
           className="map-picker-canvas"

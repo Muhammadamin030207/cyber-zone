@@ -371,8 +371,8 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
               </div>
             </div>
             <p className="text-xs text-gray-500 leading-relaxed">
-              Sizning emailingiz (<span className="text-gray-300">{user.email}</span>) hisobingizga bog&apos;langan
-              va uni faqat texnik yordam orqali almashtirish mumkin. Backend tomonida ham email o&apos;zgartirish
+              Sizning emailingiz (<span className="text-gray-300">{user.email}</span>) hisobingizga bog&apos;langan bo&apos;lib,
+              uni o&apos;zgartirib bo&apos;lmaydi. Backend tomonida ham email o&apos;zgartirish
               taqiqlangan.
             </p>
           </div>

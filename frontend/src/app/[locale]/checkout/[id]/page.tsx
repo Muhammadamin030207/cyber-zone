@@ -15,14 +15,13 @@ import { useAuthStore } from '@/store/auth';
 import TicketQR from '@/components/booking/TicketQR';
 import SplashLoader from '@/components/ui/SplashLoader';
 
-type PayMethod = 'PAYME' | 'CLICK' | 'UZUM' | 'PAYNET' | 'TEST' | 'CASH';
+type PayMethod = 'PAYME' | 'CLICK' | 'UZUM' | 'PAYNET' | 'CASH';
 
 const PROVIDER_UI: Record<string, { label: string; sub: string; icon: LucideIcon; color: string }> = {
   PAYME: { label: 'Payme', sub: 'Telefon ilovasi', icon: Smartphone, color: 'bg-[#00C7F0]/10 text-[#22d3ee] border-[#00C7F0]/30' },
   CLICK: { label: 'Click', sub: 'Tez va oson', icon: Zap, color: 'bg-[#ED1C24]/10 text-[#ff5a60] border-[#ED1C24]/30' },
   UZUM: { label: 'Uzum', sub: 'Raqamli bank', icon: Wallet, color: 'bg-[#7000FF]/15 text-[#a86bff] border-[#7000FF]/40' },
   PAYNET: { label: 'Paynet', sub: 'To\'lov terminali', icon: CreditCard, color: 'bg-[#0E9F6E]/10 text-[#34d399] border-[#0E9F6E]/30' },
-  TEST: { label: 'Test to\'lov', sub: 'Test rejimi', icon: CheckCircle2, color: 'bg-neon-green/10 text-neon-green border-neon-green/30' },
   CASH: { label: 'Kassada', sub: 'Naqd pulda to\'lash', icon: Banknote, color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
 };
 
@@ -46,13 +45,12 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   const [error, setError] = useState<string | null>(null);
 
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [isTestMode, setIsTestMode] = useState(false);
   const [method, setMethod] = useState<PayMethod>('CASH');
 
   const [paying, setPaying] = useState(false);
   const [cashNotified, setCashNotified] = useState(false);
   const [verified, setVerified] = useState(false);
-  const [verifyPayment, setVerifyPayment] = useState<{ id: string; test: boolean } | null>(null);
+  const [verifyPayment, setVerifyPayment] = useState<{ id: string } | null>(null);
   const [polling, setPolling] = useState(false);
 
   // Provayderlar holati (qaysilari ulangan — backend javobi)
@@ -62,7 +60,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
       .then(({ data }) => {
         const d = data.data;
         setProviders((d?.providers as ProviderInfo[]) || []);
-        setIsTestMode(d?.mode === 'test');
       })
       .catch(() => setProviders([]));
   }, []);
@@ -81,11 +78,11 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
       .catch((err) => { if (!cancelled) setError(getApiErrorMessage(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
 
-    // Provayderdan qaytish URL: /checkout/:id/pay?pid=...&test=1
+    // Provayderdan qaytish URL: /checkout/:id/pay?pid=...
     const search = new URLSearchParams(window.location.search);
     const pid = search.get('pid');
     if (pid && !cancelled) {
-      setVerifyPayment({ id: pid, test: search.get('test') === '1' });
+      setVerifyPayment({ id: pid });
     } else if (!cancelled) {
       // Davom etmagan sessiyani qayta boshlash (aktiv to'lov bor bo'lsa)
       api
@@ -93,7 +90,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
         .then(({ data }) => {
           const active = (data.data?.payments as any[] | undefined)
             ?.find((p) => ['CREATED', 'REDIRECT_REQUIRED', 'PROCESSING'].includes(p.status));
-          if (active && !cancelled) setVerifyPayment({ id: active.id, test: (active.metadata as any)?.providerMethod === 'test' });
+          if (active && !cancelled) setVerifyPayment({ id: active.id });
         })
         .catch(() => undefined);
     }
@@ -156,31 +153,12 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
       if (m === 'CASH' || (data.data?.method === 'CASH')) {
         setCashNotified(true);
       } else if (d?.checkoutUrl) {
-        if (d.isTest) setVerifyPayment({ id: d.payment.id, test: true });
-        setPolling(d.isTest);
         window.location.href = d.checkoutUrl;
-      } else if (d?.isTest) {
-        setVerifyPayment({ id: d.payment.id, test: true });
-        setPolling(true);
+      } else {
+        setError(getApiErrorMessage(null, 'To\'lov xizmati hozircha mavjud emas. Iltimos, kassada to\'lash usulini tanlang.'));
       }
     } catch (err) {
       setError(getApiErrorMessage(err, 'To\'lovda xatolik yuz berdi'));
-    } finally {
-      setPaying(false);
-    }
-  }
-
-  // TEST rejim: server-side tasdiqlash (backend PAID qiladi)
-  async function confirmTest() {
-    if (!verifyPayment) return;
-    setPaying(true);
-    setError(null);
-    try {
-      await api.post(`/api/payments/test/${verifyPayment.id}/confirm`);
-      setPolling(true);
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Test to\'lovda xatolik yuz berdi'));
-      setPolling(false);
     } finally {
       setPaying(false);
     }
@@ -214,8 +192,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
 
   const methodUi = PROVIDER_UI[method];
 
-  const onlineMethods = [...providers, { method: 'TEST', label: 'Test', available: isTestMode }]
-    .filter((p) => p.method !== 'TEST' || p.available);
+  const onlineMethods = providers;
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10 pb-24">
@@ -245,7 +222,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
       {polling && (
         <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-neon-cyan/10 border border-neon-cyan/30 text-sm text-neon-cyan">
           <Loader2 size={16} className="animate-spin" />
-          {verifyPayment?.test ? 'Test to\'lovni tasdiqlash kutilmoqda...' : 'To\'lov holati tekshirilmoqda...'}
+          To'lov holati tekshirilmoqda...
         </div>
       )}
 
@@ -324,7 +301,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
                   {Icon && <span className={cn('p-2 rounded-lg border', ui?.color)}><Icon size={18} /></span>}
                   <span className="text-sm font-semibold">{ui?.label || p.label}</span>
                   <span className="text-[10px] text-gray-500">
-                    {p.available ? ui?.sub : 'Hali ulangan emas'}
+                    {p.available ? ui?.sub : 'Tez orada'}
                   </span>
                 </button>
               );
@@ -355,20 +332,10 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
             </div>
           )}
 
-          {verifyPayment?.test && !verified && (
-            <button
-              onClick={confirmTest}
-              disabled={paying || polling}
-              className="w-full py-3.5 rounded-xl bg-neon-green/15 border border-neon-green/40 text-neon-green flex items-center justify-center gap-2 font-bold disabled:opacity-50 mb-3"
-            >
-              {paying ? (
-                <><Loader2 size={18} className="animate-spin" /> Tasdiqlanmoqda...</>
-              ) : (
-                <>
-                  <CheckCircle2 size={18} /> TEST: To'lovni tasdiqlash
-                </>
-              )}
-            </button>
+          {verifyPayment && !verified && polling && (
+            <p className="text-xs text-gray-500 text-center mb-3">
+              To'lovni ilovada tasdiqlaganingizdan so'ng bu yerda avtomatik yangilanadi.
+            </p>
           )}
 
           <button

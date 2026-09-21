@@ -16,6 +16,7 @@ interface AuthState {
   register: (data: { email: string; password?: string; fullName: string; phone?: string; language?: string; googleToken?: string }) => Promise<void>;
   logout: () => void;
   setAuth: (auth: AuthResponse) => void;
+  updateUser: (patch: Partial<User>) => void;
   fetchMe: () => Promise<void>;
   clearError: () => void;
   error: string | null;
@@ -35,6 +36,12 @@ export const useAuthStore = create<AuthState>()(
         setAccessToken(auth.accessToken);
         setRefreshToken(auth.refreshToken || null);
         set({ user: auth.user, token: auth.accessToken, refreshToken: auth.refreshToken || null, error: null });
+      },
+
+      updateUser: (patch) => {
+        const current = get().user;
+        if (!current) return;
+        set({ user: { ...current, ...patch } });
       },
 
       login: async (email, password) => {
