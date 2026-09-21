@@ -98,12 +98,11 @@ export async function sendEmail(to: string, subject: string, html: string, text?
     const port = ports[i];
     try {
       const info = await getTransporter(port).sendMail(mail);
-      if (!isProduction()) {
-        console.log(`[MAIL:DEV] yuborildi (${info.messageId}) To: ${to} Subject: ${subject}`);
-      }
-      if (i > 0) {
-        console.log(`[MAIL] Email ${port}-port orqali yuborildi (asosiy ${ports[0]}-port ulanmadi).`);
-      }
+      console.log(
+        `[MAIL] yuborildi -> To: ${to} | Subject: ${subject} | port=${port}` +
+          (i > 0 ? ` (asosiy ${ports[0]}-port ulanmadi)` : '') +
+          ` | id=${info.messageId}`
+      );
       return true;
     } catch (err: any) {
       lastErr = err;
