@@ -124,6 +124,10 @@ model User {
   loyaltyBalance       Int                  @default(0) @map("loyalty_balance") // bonus ballar (1 ball = 1 so'm)
   resetToken           String?              @unique @map("reset_token")
   resetTokenExpiresAt  DateTime?            @map("reset_token_expires_at")
+  // Brute-force himoyasi: ketma-ket xato urinishlar va vaqtincha bloklash
+  failedLoginAttempts  Int                  @default(0) @map("failed_login_attempts")
+  loginLockStage       Int                  @default(0) @map("login_lock_stage") // progressiv blok bosqichi (0,1,2...)
+  loginLockedUntil     DateTime?            @map("login_locked_until")
   createdAt            DateTime             @default(now()) @map("created_at")
   updatedAt            DateTime             @updatedAt @map("updated_at")
 

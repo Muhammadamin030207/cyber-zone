@@ -60,6 +60,17 @@ export const config = {
       apiEndpoint: process.env.PAYNET_API_ENDPOINT || '',
     },
   },
+  security: {
+    // Login brute-force himoyasi: nechta ketma-ket xato urinishdan keyin bloklash
+    // va blok muddatlari (daqiqa). Progressiv: 1-blok, 2-blok, 3-blok ...
+    // Oxirgi qiymat keyingi barcha bloklar uchun ishlatiladi. Env orqali
+    // sozlanadi (hardcode emas).
+    loginMaxAttempts: Math.max(1, parseInt(process.env.LOGIN_MAX_ATTEMPTS || '5', 10)),
+    loginLockMinutes: (process.env.LOGIN_LOCK_MINUTES || '5,30,1440')
+      .split(',')
+      .map((v) => parseInt(v.trim(), 10))
+      .filter((v) => Number.isFinite(v) && v > 0),
+  },
   ai: {
     geminiApiKey: process.env.GEMINI_API_KEY || '',
     model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',

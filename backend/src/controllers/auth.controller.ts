@@ -8,6 +8,7 @@ import { config } from '../config';
 import { AuthRequest } from '../types';
 import { ok, badRequest, unauthorized, notFoundMsg, serverError } from '../utils/response';
 import { sendEmail, buildResetEmail, buildResetText } from '../lib/mailer';
+import { getLockState, computeAfterFailure, resetData } from '../utils/loginThrottle';
 
 const googleClient = new OAuth2Client(config.google.clientId);
 
@@ -128,14 +129,55 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     const email = normalizeEmail(req.body.email);
 
     const user = await prisma.user.findUnique({ where: { email } });
+
+    // Brute-force: hisob vaqtincha bloklanganmi — parolni tekshirishdan OLDIN
+    // (server avtoritet; frontend faqat shu javobga tayanadi).
+    const lockState = getLockState(user);
+    if (user && lockState.locked) {
+      return res.status(429).json({
+        success: false,
+        message: 'Juda ko\'p noto\'g\'ri urinish. Hisob vaqtincha bloklandi.',
+        code: 'ACCOUNT_LOCKED',
+        lockedUntil: lockState.lockedUntil!.toISOString(),
+        retryAfterSeconds: lockState.retryAfterSeconds,
+        serverNow: new Date().toISOString(),
+      });
+    }
+
     if (!user) return badRequest(res, 'Email yoki parol noto\'g\'ri');
 
     if (!user.passwordHash) return badRequest(res, 'Ushbu akkaunt Google orqali yaratilgan');
 
     const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) return badRequest(res, 'Email yoki parol noto\'g\'ri');
+    if (!valid) {
+      const outcome = computeAfterFailure(user);
+      await prisma.user.update({ where: { id: user.id }, data: outcome.data });
+      if (outcome.locked) {
+        return res.status(429).json({
+          success: false,
+          message: 'Juda ko\'p noto\'g\'ri urinish. Hisob vaqtincha bloklandi.',
+          code: 'ACCOUNT_LOCKED',
+          lockedUntil: outcome.lockedUntil!.toISOString(),
+          retryAfterSeconds: outcome.retryAfterSeconds,
+          serverNow: new Date().toISOString(),
+        });
+      }
+      // Qolgan urinishlar soni — foydalanuvchiga nozik hint (enumeration xavfini
+      // hisobga olib faqat mavjud hisob uchun qaytariladi).
+      return res.status(400).json({
+        success: false,
+        message: 'Email yoki parol noto\'g\'ri',
+        code: 'INVALID_CREDENTIALS',
+        remainingAttempts: outcome.remainingAttempts,
+      });
+    }
 
     if (user.status !== 'ACTIVE') return unauthorized(res, 'Akkauntingiz bloklangan');
+
+    // Muvaffaqiyatli login — brute-force hisoblagichlarini tozalash
+    if (user.failedLoginAttempts || user.loginLockStage || user.loginLockedUntil) {
+      await prisma.user.update({ where: { id: user.id }, data: resetData() });
+    }
 
     const tokens = generateTokens({
       userId: user.id,
@@ -510,6 +552,14 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
 };
 
 function sanitizeUser(user: any) {
-  const { passwordHash, ...rest } = user;
+  const {
+    passwordHash,
+    resetToken,
+    resetTokenExpiresAt,
+    failedLoginAttempts,
+    loginLockStage,
+    loginLockedUntil,
+    ...rest
+  } = user;
   return rest;
 }

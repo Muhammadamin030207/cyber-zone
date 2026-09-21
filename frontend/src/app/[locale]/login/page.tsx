@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { LogIn, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, Zap } from 'lucide-react';
@@ -18,6 +18,26 @@ const loginSchema = z.object({
 
 type LoginForm = z.infer<typeof loginSchema>;
 
+interface ApiErrorData {
+  message?: string;
+  code?: string;
+  lockedUntil?: string;
+  serverNow?: string;
+  retryAfterSeconds?: number;
+  remainingAttempts?: number;
+}
+
+function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+const LOCK_STORAGE_PREFIX = 'cz-login-lock:';
+const LAST_EMAIL_KEY = 'cz-login-last-email';
+
 export default function LoginPage({ params }: { params: Promise<{ locale: string }> }) {
   void params;
   const t = useTranslations('auth');
@@ -26,28 +46,107 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
   const [showPass, setShowPass] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null);
+  // Blok holati serverdan keladi (lockedUntil + serverNow). offset orqali frontend
+  // soatiga tayanmasdan qolgan vaqtni hisoblaymiz; refresh'da localStorage'dan tiklanadi.
+  const [lock, setLock] = useState<{ email: string; until: number; offset: number } | null>(null);
+  const [tick, setTick] = useState(() => Date.now());
 
   const {
     register,
     handleSubmit,
+    control,
+    setValue,
     formState: { errors },
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '' },
   });
 
+  const emailValue = useWatch({ control, name: 'email' }) ?? '';
+
+  // Sahifa qayta ochilganda (refresh) blok holatini tiklash
+  useEffect(() => {
+    try {
+      const savedEmail = localStorage.getItem(LAST_EMAIL_KEY) || '';
+      if (!savedEmail) return;
+      setValue('email', savedEmail);
+      const raw = localStorage.getItem(LOCK_STORAGE_PREFIX + savedEmail);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { lockedUntil?: number; serverOffset?: number };
+        if (parsed.lockedUntil) {
+          setLock({ email: savedEmail, until: parsed.lockedUntil, offset: parsed.serverOffset || 0 });
+        }
+      }
+    } catch {
+      /* localStorage mavjud emas — e'tiborsiz */
+    }
+  }, [setValue]);
+
+  // Real-time countdown (serverdan olingan mutlaq vaqt asosida)
+  useEffect(() => {
+    if (!lock) return;
+    const id = setInterval(() => {
+      setTick(Date.now());
+      if (lock.until - (Date.now() - lock.offset) <= 0) {
+        clearInterval(id);
+        setLock(null);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [lock]);
+
+  const emailKey = emailValue.trim().toLowerCase();
+  const activeLock = lock && lock.email === emailKey ? lock : null;
+  const remainingMs = activeLock ? Math.max(0, activeLock.until - (tick - activeLock.offset)) : 0;
+  const locked = remainingMs > 0;
+
   const onSubmit = handleSubmit(async (values) => {
+    if (locked) return;
     setSubmitting(true);
     setError(null);
+    setRemainingAttempts(null);
+    const key = values.email.trim().toLowerCase();
     try {
       await login(values.email, values.password);
+      try {
+        localStorage.setItem(LAST_EMAIL_KEY, key);
+        localStorage.removeItem(LOCK_STORAGE_PREFIX + key);
+      } catch {
+        /* ignore */
+      }
       const user = useAuthStore.getState().user;
       if (user && user.role === 'SUPER_ADMIN') router.push('/super-admin');
       else router.push(user && user.role !== 'USER' ? '/admin' : '/dashboard');
       router.refresh();
     } catch (err: unknown) {
-      const apiError = err as { response?: { data?: { message?: string } } };
-      setError(apiError?.response?.data?.message || t('invalid'));
+      const data = (err as { response?: { data?: ApiErrorData } })?.response?.data;
+      try {
+        localStorage.setItem(LAST_EMAIL_KEY, key);
+      } catch {
+        /* ignore */
+      }
+
+      if (data?.code === 'ACCOUNT_LOCKED' && data.lockedUntil) {
+        const until = Date.parse(data.lockedUntil);
+        const serverNow = data.serverNow ? Date.parse(data.serverNow) : Date.now();
+        const offset = Date.now() - serverNow;
+        setLock({ email: key, until, offset });
+        setTick(Date.now());
+        setError(null);
+        setRemainingAttempts(null);
+        try {
+          localStorage.setItem(
+            LOCK_STORAGE_PREFIX + key,
+            JSON.stringify({ lockedUntil: until, serverOffset: offset })
+          );
+        } catch {
+          /* ignore */
+        }
+      } else {
+        setError(data?.message || t('invalid'));
+        if (typeof data?.remainingAttempts === 'number') setRemainingAttempts(data.remainingAttempts);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -109,7 +208,33 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
             {error && (
               <div className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
                 <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                {error}
+                <div>
+                  <span>{error}</span>
+                  {remainingAttempts !== null && remainingAttempts > 0 && (
+                    <p className="text-xs text-red-300/80 mt-1">
+                      Yana {remainingAttempts} ta urinish qoldi.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {locked && (
+              <div
+                role="alert"
+                aria-live="polite"
+                className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-200"
+              >
+                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Juda ko&apos;p urinish. Hisob vaqtincha bloklandi.</p>
+                  <p className="text-xs mt-1">
+                    Qayta urinish uchun:{' '}
+                    <span className="font-mono font-semibold text-amber-100 tabular-nums">
+                      {formatCountdown(remainingMs)}
+                    </span>
+                  </p>
+                </div>
               </div>
             )}
 
@@ -166,11 +291,12 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
 
               <button
                 type="submit"
-                disabled={submitting}
-                className="w-full py-3 rounded-xl neon-btn flex items-center justify-center gap-2 disabled:opacity-60"
+                disabled={submitting || locked}
+                aria-disabled={submitting || locked}
+                className="w-full py-3 rounded-xl neon-btn flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {submitting ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />}
-                {t('loginBtn')}
+                {locked ? `Bloklangan · ${formatCountdown(remainingMs)}` : t('loginBtn')}
               </button>
             </form>
 
