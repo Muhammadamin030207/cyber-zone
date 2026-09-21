@@ -30,18 +30,12 @@ function minutesOf(t: string): number {
   return h * 60 + m;
 }
 
-function slotsOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
-  let a0 = minutesOf(aStart);
-  let a1 = minutesOf(aEnd);
-  let b0 = minutesOf(bStart);
-  let b1 = minutesOf(bEnd);
-  if (a0 >= 1440) a0 %= 1440;
-  if (b0 >= 1440) b0 %= 1440;
-  if (a1 === 0) a1 = 1440;
-  if (b1 === 0) b1 = 1440;
-  if (a1 <= a0) a1 += 1440;
-  if (b1 <= b0) b1 += 1440;
-  return a0 < b1 && a1 > b0;
+/** Oraliqni daqiqalar ko'rinishiga o'tkazadi; tugash boshlanishdan oldin bo'lsa yarim tundan oshgan deb hisoblanadi (23:00 -> 00:00 = 1380..1440). */
+function spanOf(start: string, end: string): { start: number; end: number } {
+  const s = minutesOf(start);
+  let e = minutesOf(end);
+  if (e <= s) e += 1440;
+  return { start: s, end: e };
 }
 
 export default function BookingWidget({ room, date, onDateChange, availability, availabilityLoading = false }: Props) {
@@ -84,34 +78,57 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
 
   const pricePerHour = selectedZone ? toNumber(selectedZone.pricePerHour) : 0;
 
-  const durationHours = useMemo(() => {
-    const [sh, sm] = startTime.split(':').map(Number);
-    const [eh, em] = endTime.split(':').map(Number);
-    return Math.max(0, eh + em / 60 - (sh + sm / 60));
-  }, [startTime, endTime]);
+  // Yarim tundan oshuvchi oraliqlarni to'g'ri hisoblash (23:00 -> 00:00 = 1380..1440)
+  const { start: startMin, end: endMin } = spanOf(startTime, endTime);
 
+  const durationHours = Math.max(0, (endMin - startMin) / 60);
   const timeOk = durationHours > 0;
 
-  // Tanlangan oynada bo'sh kompyuterlar soni (bookedSlots — server haqiqiy band vaqtlar)
+  // Serverdan kelgan bo'sh vaqt oynalari (freeWindows) — daqiqalarga, yarim tundan oshsa wraplanadi
+  const byComputerWindows = useMemo(() => {
+    if (!selectedZone) return [];
+    return (selectedZone.allComputers || []).map((c) => ({
+      id: c.id,
+      status: c.status,
+      windows: (c.freeWindows || []).map((w) => spanOf(w.start, w.end)),
+    }));
+  }, [selectedZone]);
+
+  // Tanlangan oynada bo'sh kompyuterlar soni: ish vaqti + band vaqtlar hisobga olinadi
   const freeInWindow = useMemo(() => {
-    if (!selectedZone) return 0;
-    const comps = selectedZone.allComputers || [];
-    return comps.filter(
-      (c) => c.status === 'AVAILABLE' && !c.bookedSlots?.some((s) => slotsOverlap(startTime, endTime, s.start, s.end))
+    if (!selectedZone || !timeOk) return 0;
+    return byComputerWindows.filter(
+      (c) => c.status === 'AVAILABLE' && c.windows.some((w) => w.start <= startMin && w.end >= endMin)
     ).length;
-  }, [selectedZone, startTime, endTime]);
+  }, [byComputerWindows, startMin, endMin, timeOk, selectedZone]);
 
   // Tanlangan kompyuter ushbu oynada bo'shmi (manual tanlov uchun)
   const selectedComputerFree = useMemo(() => {
-    if (autoPc || !computerId || !selectedZone) return true;
-    const comp = (selectedZone.allComputers || []).find((c) => c.id === computerId);
+    if (autoPc || !computerId) return true;
+    const comp = byComputerWindows.find((c) => c.id === computerId);
     if (!comp || comp.status !== 'AVAILABLE') return false;
-    return !comp.bookedSlots?.some((s) => slotsOverlap(startTime, endTime, s.start, s.end));
-  }, [autoPc, computerId, selectedZone, startTime, endTime]);
+    return comp.windows.some((w) => w.start <= startMin && w.end >= endMin);
+  }, [autoPc, computerId, byComputerWindows, startMin, endMin]);
+
+  // Tanlangan boshlanish vaqtidan maksimal mumkin bo'lgan davomiylik
+  const maxDurationHours = useMemo(() => {
+    if (!timeOk) return 0;
+    let maxEnd = startMin;
+    for (const c of byComputerWindows) {
+      if (c.status !== 'AVAILABLE') continue;
+      for (const w of c.windows) {
+        if (w.start <= startMin && w.end > maxEnd) maxEnd = w.end;
+      }
+    }
+    return Math.max(0, (maxEnd - startMin) / 60);
+  }, [byComputerWindows, startMin, timeOk]);
 
   // Bugun (Toshkent) uchun o'tgan vaqtni bloklash
   const isToday = date === todayISO();
   const startInPast = isToday && minutesOf(startTime) < minutesOf(businessNowHHMM());
+
+  // Tanlangan davomiylik mavjud oynalardan oshib ketgan bo'lsa — foydalanuvchiga tushunarli ogohlantirish
+  const durationExceeds = timeOk && durationHours > maxDurationHours + 1e-9;
 
   function applyDuration(hours: number) {
     const [sh, sm] = startTime.split(':').map(Number);
@@ -141,7 +158,8 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
   const pointsUsed = usePoints ? Math.min(pointsBalance, pointsCap) : 0;
 
   const finalTotal = Math.max(0, afterPromo - pointsUsed);
-  const advance = parseInt(String(finalTotal * 0.3));
+  // Backend disclamer: round2 ✓ — frontend ham xuddi shunday yaxlitlaydi (parseInt truncate qilmasdan)
+  const advance = Math.round(finalTotal * 0.3);
   const remaining = Math.max(0, finalTotal - advance);
 
   function checkPromo() {
@@ -186,6 +204,13 @@ async function submit() {
       if (!timeOk) setTimeError('Tugash vaqti boshlanish vaqtidan keyin bo\u2018lishi kerak.');
       return;
     }
+    if (durationExceeds) {
+      setError(
+        `Bu davomiylik uchun vaqt yetarli emas — maksimal ${maxDurationHours.toFixed(maxDurationHours % 1 === 0 ? 0 : 1)} soat. Boshlanish vaqtini yoki davomiylikni kamaytiring.`
+      );
+      setTimeError('Tanlangan vaqt ish vaqtidan tashqari yoki band.');
+      return;
+    }
     if (freeInWindow === 0) {
       setError('Bu vaqt oralig\u2018ida bo\u2018sh kompyuter yo\u2018q. Boshqa vaqtni tanlang.');
       return;
@@ -204,6 +229,8 @@ async function submit() {
         startTime,
         endTime,
         durationHours,
+        // Ikkinchi marta bosish / refresh takroriy bron yaratmasligi uchun idempotentlik kaliti
+        idempotencyKey: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
       };
       if (!autoPc && computerId) payload.computerId = computerId;
       if (promoApplied && promoCode) payload.promoCode = promoCode;
@@ -222,6 +249,12 @@ async function submit() {
         setError('Tanlangan vaqt ish vaqtidan tashqari. Ish vaqtini tekshiring.');
       } else if (code === 'ROOM_FULL') {
         setError('Bu vaqt uchun bo\u2018sh kompyuter qolmadi. Boshqa vaqtni tanlang.');
+      } else if (code === 'BOOKING_IN_PAST') {
+        setError('Boshlanish vaqti o\u2019tib ketgan. Kelajakdagi vaqtni tanlang.');
+        setTimeError('Hozirgi vaqtdan oldingi vaqtni tanlab bo\u2018lmaydi.');
+      } else if (code === 'INVALID_DURATION') {
+        setError('Tanlangan davomiylik noto\u2019g\u2019ri. Tugash vaqti boshlanish vaqtidan keyin bo\u2018lishi kerak.');
+        setTimeError('Tugash vaqti boshlanish vaqtidan keyin bo\u2018lishi kerak.');
       } else {
         setError(msg);
       }
@@ -353,15 +386,20 @@ async function submit() {
             </div>
             {!autoPc && (
               <SeatMap
-                computers={(selectedZone.allComputers || []).map((c) => ({
-                  id: c.id,
-                  name: c.name,
-                  specs: c.specs,
-                  status: c.status as SeatInfo['status'],
-                  canBook:
-                    c.status === 'AVAILABLE' &&
-                    !c.bookedSlots?.some((s) => slotsOverlap(startTime, endTime, s.start, s.end)),
-                }))}
+                computers={(selectedZone.allComputers || []).map((c) => {
+                  const wc = byComputerWindows.find((w) => w.id === c.id);
+                  // canBook: kompyuter ish vaqtida bo'sh oynasi bu vaqt oralig'ini to'liq qoplashi kerak
+                  const freeHere =
+                    wc?.status === 'AVAILABLE' &&
+                    (wc.windows.some((w) => w.start <= startMin && w.end >= endMin) ?? false);
+                  return {
+                    id: c.id,
+                    name: c.name,
+                    specs: c.specs,
+                    status: c.status as SeatInfo['status'],
+                    canBook: !!freeHere,
+                  };
+                })}
                 selectedId={computerId}
                 onSelect={(id) => setComputerId(id)}
               />
@@ -421,12 +459,18 @@ async function submit() {
               Tugash vaqti boshlanish vaqtidan keyin bo‘lishi kerak.
             </p>
           )}
-          {timeOk && freeInWindow === 0 && (
+          {timeOk && durationExceeds && (
+            <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
+              Bu davomiylik uchun vaqt yetarli emas — maksimal{' '}
+              {maxDurationHours.toFixed(maxDurationHours % 1 === 0 ? 0 : 1)} soat.
+            </p>
+          )}
+          {timeOk && !durationExceeds && freeInWindow === 0 && (
             <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
               Bu vaqt oralig‘ida bo‘sh kompyuter yo‘q — boshqa vaqtni tanlang.
             </p>
           )}
-          {timeOk && freeInWindow > 0 && autoPc && (
+          {timeOk && freeInWindow > 0 && autoPc && !durationExceeds && (
             <p className="text-xs text-gray-500 mt-1.5">
               Bu vaqtda {freeInWindow} ta bo‘sh kompyuter bor.
             </p>
@@ -539,7 +583,7 @@ async function submit() {
         {/* Submit */}
         <button
           onClick={submit}
-          disabled={submitting || availabilityLoading || availability.length === 0 || !timeOk || (isToday && startInPast) || freeInWindow === 0 || (!autoPc && Boolean(computerId) && !selectedComputerFree)}
+          disabled={submitting || availabilityLoading || availability.length === 0 || !timeOk || (isToday && startInPast) || durationExceeds || freeInWindow === 0 || (!autoPc && Boolean(computerId) && !selectedComputerFree)}
           className="w-full py-3.5 rounded-xl neon-btn flex items-center justify-center gap-2 font-bold text-base disabled:opacity-50"
         >
           {submitting || availabilityLoading ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
