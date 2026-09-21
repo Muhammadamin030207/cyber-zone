@@ -33,7 +33,6 @@ export const config = {
   },
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6380',
   payments: {
-    mode: (process.env.PAYMENTS_MODE || 'test').toLowerCase() === 'production' ? 'production' : 'test',
     minDepositPercent: Math.min(100, Math.max(1, parseInt(process.env.MIN_DEPOSIT_PERCENT || '10', 10))),
     callbackBaseUrl: process.env.PROVIDER_CALLBACK_URL || '',
     click: {

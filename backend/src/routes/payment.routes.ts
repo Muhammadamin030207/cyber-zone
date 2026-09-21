@@ -6,7 +6,6 @@ import {
   getAllPayments,
   getProviders,
   getPaymentByIdStatus,
-  confirmTestPayment,
   webhookPayment,
   getPaymentHistory,
 } from '../controllers/payment.controller';
@@ -20,7 +19,6 @@ router.post('/webhook/:provider', webhookPayment);
 router.post('/create', authenticate, authorize('USER', 'ADMIN', 'SUPER_ADMIN'), createPayment);
 router.get('/providers', getProviders);
 router.get('/history', authenticate, getPaymentHistory);
-router.post('/test/:id/confirm', authenticate, authorize('USER', 'ADMIN', 'SUPER_ADMIN'), confirmTestPayment);
 router.get('/:id/status', authenticate, getPaymentByIdStatus);
 router.post('/:id/confirm', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), confirmPayment);
 router.get('/:bookingId', authenticate, getPaymentStatus);

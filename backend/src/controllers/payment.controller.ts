@@ -5,7 +5,7 @@ import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/respon
 import { toNumber, round2, isValidAmount } from '../utils/money';
 import { io } from '../lib/socket';
 import { Prisma } from '@prisma/client';
-import { getProvider, getProviderAvailability, ProviderNotConfiguredError, ProviderUnavailableError } from '../services/payments';
+import { getProvider, getProviderAvailability, isProviderAvailable, ProviderNotConfiguredError, ProviderUnavailableError } from '../services/payments';
 import { config } from '../config';
 
 type TxClient = Prisma.TransactionClient;
@@ -172,7 +172,6 @@ function providerCallbackUrl(method: string): string {
 function normalizeMethod(method: string): { method: string; providerId: string; cash: boolean } {
   const m = String(method || '').toUpperCase();
   if (m === 'CASH') return { method: 'CASH', providerId: '', cash: true };
-  if (m === 'TEST') return { method: '', providerId: 'TEST', cash: false };
   if (['PAYME', 'CLICK', 'UZUM', 'PAYNET'].includes(m)) {
     return { method: m, providerId: m, cash: false };
   }
@@ -206,8 +205,8 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       } catch {
         return badRequest(res, `Noma'lum to'lov metodi: ${method}`);
       }
-      if (!provider.isConfigured()) {
-        return badRequest(res, provider.label + ' to\'lov xizmati hali ulangan emas. Boshqa usulni tanlang.');
+      if (!isProviderAvailable(providerId)) {
+        return badRequest(res, provider.label + ' to\'lov xizmati hozircha mavjud emas. Iltimos, boshqa usulni tanlang (naqd pul).');
       }
     }
 
@@ -283,15 +282,13 @@ amount: Number(active.amount),
             status: active.status,
             amount: active.amount,
             method: normMethod || null,
-            provider: providerId === 'TEST' ? null : providerId,
+            provider: providerId || null,
             depositPercent: active.depositPercent,
           },
           checkoutUrl,
           resumed: true,
           depositPercent: active.depositPercent,
           amount: active.amount,
-          mode: config.payments.mode,
-          isTest: providerId === 'TEST',
         }, 'Oldingi to\'lov sessiyasi tiklandi');
       }
     }
@@ -333,11 +330,11 @@ amount: Number(active.amount),
           amount,
           type: isAdvance ? 'ADVANCE' : 'REMAINING',
           method: cash ? 'CASH' : (normMethod || null) as any,
-          provider: (!cash && providerId !== 'TEST' ? providerId : null) as any,
+          provider: (!cash ? providerId : null) as any,
           status: cash ? 'PENDING' : 'CREATED',
           currency: 'UZS',
           depositPercent: percent,
-          metadata: (!cash && providerId === 'TEST' ? { providerMethod: 'test' } : (cash ? null : { providerMethod: providerId.toLowerCase() })) as any,
+          metadata: (!cash ? { providerMethod: providerId.toLowerCase() } : null) as any,
         },
       });
       await auditLog(tx, { paymentId: p.id, action: 'payment_created', actorId: req.user!.userId, actorRole: req.user!.role as string, metadata: { method, percent, amount } });
@@ -426,8 +423,6 @@ amount: Number(active.amount),
       depositPercent: percent,
       requiredDeposit: round2(Math.max(0, requiredDeposit - totalPaid)),
       amount,
-      mode: config.payments.mode,
-      isTest: providerId === 'TEST',
     }, 'To\'lov sessiyasi yaratildi');
   } catch (err) {
     next(err);
@@ -438,9 +433,7 @@ amount: Number(active.amount),
 export const getProviders = async (_req: Request, res: Response) => {
   return ok(res, {
     providers: getProviderAvailability(),
-    mode: config.payments.mode,
     minDepositPercent: config.payments.minDepositPercent,
-    isTestMode: config.payments.mode === 'test',
   });
 };
 
@@ -485,7 +478,7 @@ export const getPaymentByIdStatus = async (req: AuthRequest, res: Response, next
         if (now - last > 10_000) {
           lastVerifyAt.set(payment.id, now);
           try {
-            const provider = getProvider(method === 'TEST' ? 'test' : method.toLowerCase());
+            const provider = getProvider(method.toLowerCase());
             const result = await provider.verifyPayment({
               paymentId: payment.id,
               providerTransactionId: payment.providerTransactionId,
@@ -494,7 +487,7 @@ export const getPaymentByIdStatus = async (req: AuthRequest, res: Response, next
               currency: payment.currency,
               storedMetadata: payment.metadata as any,
             });
-            if (result.status === 'PAID' && (payment.providerPaymentId || method === 'TEST')) {
+            if (result.status === 'PAID' && payment.providerPaymentId) {
               const txResult = await prisma.$transaction(async (tx) => {
                 const r = await settleVerifiedPayment(tx, { id: payment.id, audit: { source: 'status_poll', provider: method } });
                 return r;
@@ -528,56 +521,17 @@ export const getPaymentByIdStatus = async (req: AuthRequest, res: Response, next
   }
 };
 
-// ============ POST /api/payments/test/:id/confirm — USER: TEST rejimda tasdiqlash ============
-export const confirmTestPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    if (config.payments.mode !== 'test') return notFoundMsg(res, 'Topilmadi');
-    const provider = getProvider('test');
-    if (!provider.isConfigured()) return badRequest(res, 'TEST provayder faqat test rejimda ishlaydi');
-
-    const payment = await prisma.payment.findUnique({
-      where: { id: req.params.id },
-      include: { booking: { include: { room: true } } },
-    });
-    if (!payment) return notFoundMsg(res, 'To\'lov topilmadi');
-    if (payment.userId !== req.user!.userId) return forbidden(res, 'Bu to\'lov sizniki emas');
-    if (!['CREATED', 'REDIRECT_REQUIRED', 'PROCESSING'].includes(payment.status)) {
-      return badRequest(res, 'Bu to\'lov yakunlangan yoki bekor qilingan');
-    }
-    if ((payment.metadata as any)?.providerMethod !== 'test' && payment.provider !== null) {
-      return badRequest(res, 'Bu TEST provayder to\'lovi emas');
-    }
-
-    const txResult = await prisma.$transaction(async (tx) => {
-      await tx.payment.update({
-        where: { id: payment.id },
-        data: { metadata: { ...((payment.metadata as any) || {}), test_confirmed_at: new Date().toISOString() } as any },
-      });
-      const r = await settleVerifiedPayment(tx, {
-        id: payment.id,
-        actorId: req.user!.userId,
-        actorRole: req.user!.role as string,
-        audit: { source: 'test_confirm' },
-      });
-      if (r.booking) {
-        const info = bookingInfoOf(payment);
-        io.emit('booking_status_changed', { roomId: info.roomId ?? payment.booking.roomId, bookingId: payment.bookingId, type: r.booking.status });
-      }
-      return r;
-    });
-
-    return ok(res, { paid: txResult.paid, booking: txResult.booking, totalPaid: txResult.totalPaid }, 'TEST to\'lov tasdiqlandi');
-  } catch (err) {
-    next(err);
-  }
-};
-
 // ============ POST /api/payments/webhook/:provider — PROVIDER: webhook (haqiqiy manba) ============
 export const webhookPayment = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const method = String(req.params.provider || '').toLowerCase();
-    const provider = getProvider(method === 'test' ? 'test' : method);
-    if (provider.id === 'TEST') return res.status(404).json({ error: 'not found' });
+    const provider = getProvider(method);
+
+    // Provayder kredensiallari ulangan bo'lmasa — webhook'ni QAT'IY rad etamiz.
+    // To'lovlar faqat ishonchli (imzo bilan tasdiqlangan) manbadan qabul qilinadi.
+    if (!provider.isConfigured() || !isProviderAvailable(provider.id)) {
+      return res.status(404).json({ error: 'not found' });
+    }
 
     const ctx = {
       provider: provider.id,

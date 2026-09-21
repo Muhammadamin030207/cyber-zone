@@ -3,8 +3,6 @@ import { ClickProvider } from './providers/click';
 import { PaymeProvider } from './providers/payme';
 import { UzumProvider } from './providers/uzum';
 import { PaynetProvider } from './providers/paynet';
-import { TestProvider } from './providers/test';
-import { config } from '../../config';
 
 export type * from './types';
 export { ProviderNotConfiguredError, type ProviderId, type PaymentProvider } from './types';
@@ -15,7 +13,6 @@ const instances: Record<ProviderId, PaymentProvider> = {
   PAYME: new PaymeProvider(),
   UZUM: new UzumProvider(),
   PAYNET: new PaynetProvider(),
-  TEST: new TestProvider(),
 };
 
 const BY_METHOD: Record<string, ProviderId> = {
@@ -23,7 +20,6 @@ const BY_METHOD: Record<string, ProviderId> = {
   payme: 'PAYME',
   uzum: 'UZUM',
   paynet: 'PAYNET',
-  test: 'TEST',
 };
 
 export function getProvider(method: string): PaymentProvider {
@@ -36,25 +32,37 @@ export interface ProviderAvailability {
   method: ProviderId;
   label: string;
   available: boolean;
-  reason?: 'not_configured' | 'test_only' | 'ok';
+  reason?: 'not_configured' | 'not_implemented' | 'ok';
+}
+
+/**
+ * UZUM va PAYNET adapterlari hali rasmiy spetsifikatsiya asosida to'ldirilmagan
+ * (createPayment/webhook stub) — ularni "ulangan" deb ko'rsatish yolg'on.
+ * Faqat to'liq ulangan provayderlar tanlanadigan bo'ladi, qolganlari "Tez orada".
+ */
+const IMPLEMENTED: Record<ProviderId, boolean> = { CLICK: true, PAYME: true, UZUM: false, PAYNET: false };
+
+/** Provayder haqiqatan ulangan va to'lov qabul qilishga tayyormi. */
+export function isProviderAvailable(id: string): boolean {
+  const p = instances[id as ProviderId];
+  if (!p) return false;
+  return IMPLEMENTED[id as ProviderId] && p.isConfigured();
 }
 
 /** Checkout kartalari uchun provayder holati ro'yxati. */
 export function getProviderAvailability(): ProviderAvailability[] {
-  const list: ProviderAvailability[] = (['CLICK', 'PAYME', 'UZUM', 'PAYNET'] as ProviderId[]).map((id) => {
+  return (['CLICK', 'PAYME', 'UZUM', 'PAYNET'] as ProviderId[]).map((id) => {
     const p = instances[id];
+    const implemented = IMPLEMENTED[id];
+    const configured = p.isConfigured();
+    if (!implemented) {
+      return { method: id, label: p.label, available: false, reason: 'not_implemented' as const };
+    }
     return {
       method: id,
       label: p.label,
-      available: p.isConfigured(),
-      reason: p.isConfigured() ? 'ok' as const : 'not_configured' as const,
+      available: configured,
+      reason: configured ? 'ok' as const : 'not_configured' as const,
     };
   });
-  list.push({
-    method: 'TEST',
-    label: instances['TEST'].label,
-    available: config.payments.mode === 'test',
-    reason: config.payments.mode === 'test' ? 'ok' as const : 'test_only' as const,
-  });
-  return list;
 }

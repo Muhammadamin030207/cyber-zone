@@ -1,4 +1,4 @@
-export type ProviderId = 'CLICK' | 'PAYME' | 'UZUM' | 'PAYNET' | 'TEST';
+export type ProviderId = 'CLICK' | 'PAYME' | 'UZUM' | 'PAYNET';
 
 export type ProviderPaymentStatus =
   | 'CREATED'
@@ -54,7 +54,7 @@ export interface VerifyPaymentInput {
   providerTransactionId?: string | null;
   amount: number;
   currency: string;
-  /** Payment.metadata — provayder holatini saqlash uchun (test uchun qulay) */
+  /** Payment.metadata — provayder holatini saqlash uchun */
   storedMetadata?: Record<string, any> | null;
 }
 
