@@ -2,7 +2,7 @@
 
 /* ============================================================
    CYBERARENA HUB — Sharp "no radius" Dark Design System
-   Aksentlar: zumrad + oltin
+   Aksentlar: zumrad (primary) + cyan (secondary) + oltin (subtle)
    4 ideal mavzu: obsidian (default), midnight, cyberpunk, aurora
    ============================================================ */
 
@@ -14,8 +14,10 @@
 html[data-theme="obsidian"] {
   --acc-a: #10b981;          /* zumrad / primary */
   --acc-a-soft: #34d399;
-  --acc-b: #f59e0b;          /* oltin / secondary */
-  --acc-b-soft: #fbbf24;
+  --acc-b: #22d3ee;          /* cyan / secondary */
+  --acc-b-soft: #67e8f9;
+  --acc-c: #f59e0b;          /* oltin / subtle accent */
+  --acc-c-soft: #fbbf24;
   --bg-0: #0a0a0c;           /* chuqur obsidian */
   --bg-1: #101014;           /* card */
   --bg-2: #18181c;           /* hover / input */
@@ -482,7 +484,7 @@ a:hover { opacity: 0.92; }
 .btn-amber {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(180deg, var(--acc-b), color-mix(in srgb, var(--acc-b) 68%, #000));
+  background: linear-gradient(180deg, var(--acc-c), color-mix(in srgb, var(--acc-c) 68%, #000));
   color: #160e02;
   font-weight: 700;
   border-radius: 0.75rem;
@@ -594,9 +596,9 @@ a:hover { opacity: 0.92; }
 }
 
 .chip-warn {
-  color: var(--acc-b);
-  border-color: color-mix(in srgb, var(--acc-b) 35%, transparent);
-  background: color-mix(in srgb, var(--acc-b) 10%, transparent);
+  color: var(--acc-c);
+  border-color: color-mix(in srgb, var(--acc-c) 35%, transparent);
+  background: color-mix(in srgb, var(--acc-c) 10%, transparent);
 }
 
 .chip-danger {

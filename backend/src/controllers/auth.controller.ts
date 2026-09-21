@@ -540,9 +540,11 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     if (user.status !== 'ACTIVE') return unauthorized(res, 'Akkauntingiz bloklangan');
 
     const passwordHash = await bcrypt.hash(String(newPassword), 10);
+    // Parol tiklangach login bloklanishi ham tozalanadi — foydalanuvchi
+    // havola orqali parol o'rnatgach darhol kira oladi (§4.2).
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash, resetToken: null, resetTokenExpiresAt: null },
+      data: { passwordHash, resetToken: null, resetTokenExpiresAt: null, ...resetData() },
     });
 
     return ok(res, null, 'Parol muvaffaqiyatli tiklandi. Endi kirishingiz mumkin.');

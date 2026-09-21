@@ -62,11 +62,11 @@ export const config = {
   },
   security: {
     // Login brute-force himoyasi: nechta ketma-ket xato urinishdan keyin bloklash
-    // va blok muddatlari (daqiqa). Progressiv: 1-blok, 2-blok, 3-blok ...
+    // va blok muddatlari (daqiqa). Avvalgi bosqichlar tez(keyin 24 soat).
     // Oxirgi qiymat keyingi barcha bloklar uchun ishlatiladi. Env orqali
-    // sozlanadi (hardcode emas).
-    loginMaxAttempts: Math.max(1, parseInt(process.env.LOGIN_MAX_ATTEMPTS || '5', 10)),
-    loginLockMinutes: (process.env.LOGIN_LOCK_MINUTES || '5,30,1440')
+    // sozlanadi (hardcode emas). Default: 10 xato urinish -> 24 soat blok.
+    loginMaxAttempts: Math.max(1, parseInt(process.env.LOGIN_MAX_ATTEMPTS || '10', 10)),
+    loginLockMinutes: (process.env.LOGIN_LOCK_MINUTES || '1440')
       .split(',')
       .map((v) => parseInt(v.trim(), 10))
       .filter((v) => Number.isFinite(v) && v > 0),
