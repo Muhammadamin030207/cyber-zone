@@ -126,11 +126,16 @@ const DEFAULT_WH = { open: '09:00', close: '23:00' };
 export function normalizeWorkingHours(wh: WorkingHoursLike | null | undefined): WorkingHoursNorm {
   const fallback = (v: unknown, def: string): string =>
     v === undefined || v === null || v === '' ? def : String(v);
-  const open = parseTime(fallback(wh?.open, DEFAULT_WH.open));
-  let close = parseTime(fallback(wh?.close, DEFAULT_WH.close));
+  const openStr = fallback(wh?.open, DEFAULT_WH.open);
+  const closeStr = fallback(wh?.close, DEFAULT_WH.close);
+  const open = parseTime(openStr);
+  // "24:00" — kun oxiri (keyingi kun 00:00 bilan bir xil). parseTime "24:xx" ni
+  // qabul qilmaydi, shuning uchun yopilishni 1440 ga bevosita belgilaymiz.
+  const closeIsMidnight24 = /^24:00$/.test(closeStr);
+  let close = closeIsMidnight24 ? 1440 : parseTime(closeStr);
   if (open === null || close === null) return { open: 540, close: 1380 };
   if (close === 0) close = 1440;
-  if (close < open) close += 1440;
+  else if (close < open) close += 1440;
   return { open, close };
 }
 

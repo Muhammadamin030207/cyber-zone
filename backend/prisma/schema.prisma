@@ -228,6 +228,7 @@ model Booking {
   depositPercent   Int           @default(30) @map("deposit_percent") // foydalanuvchi tanlagan depozit foizi
   status           BookingStatus @default(PENDING)
   notes            String?
+  idempotencyKey   String?       @map("idempotency_key") // takroriy so'rovlardan himoya (user bo'yicha unique)
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
 
@@ -239,6 +240,7 @@ model Booking {
   payments Payment[]
   barOrder BarOrder?
 
+  @@unique([userId, idempotencyKey])
   @@map("bookings")
 }
 

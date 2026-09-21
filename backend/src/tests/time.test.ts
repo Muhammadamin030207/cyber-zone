@@ -113,6 +113,9 @@ describe('normalizeWorkingHours', () => {
   it('handles 00:00 close as full day', () => {
     expect(normalizeWorkingHours({ open: '09:00', close: '00:00' })).toEqual({ open: 540, close: 1440 });
   });
+  it('handles 24:00 close as end of day', () => {
+    expect(normalizeWorkingHours({ open: '09:00', close: '24:00' })).toEqual({ open: 540, close: 1440 });
+  });
   it('falls back on garbage input', () => {
     expect(normalizeWorkingHours({ open: 'xx', close: 'yy' })).toEqual({ open: 540, close: 1380 });
   });

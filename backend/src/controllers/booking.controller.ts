@@ -17,10 +17,58 @@ import {
   slotWithinWorkingHours,
   freeWindowsInDay,
   toISODate,
+  type SlotNorm,
 } from '../utils/time';
 import { expireUnpaidBeforeRead } from '../utils/bookingExpiry';
 
 const ACTIVE_BOOKING_STATUSES = ['PENDING', 'PENDING_PAYMENT', 'PARTIALLY_PAID', 'PAID', 'CONFIRMED', 'ACTIVE'] as BookingStatus[];
+
+type BookingRow = { computerId: string | null; startTime: string; endTime: string; date: Date };
+
+/**
+ * Berilgan kun uchun FAOL bronlarni qaytaradi. Tungi (tunga oshgan) bronlar
+ * keyingi kunga ham tegishli bo'lgani uchun X kun so'rovida avvalgi kun (X-1)
+ * bronlari ham tekshiriladi: agar X-1 dagi bron yarim tundan oshsa
+ * (masalan 23:00-01:00), X kungi [00:00, 01:00) oraliq band hisoblanadi.
+ *
+ * Natija har bir kompyuter uchun normallashtirilgan [start, end) daqiqalari —
+ * yarim tundan oshgan qism X kuni [0, end-1440) sifatida beriladi.
+ */
+async function activeBookingsForDay(
+  client: { booking: { findMany: (args: any) => Promise<BookingRow[]> } },
+  args: { zoneId: string; computerIds: string[]; date: Date }
+): Promise<Map<string, Array<SlotNorm>>> {
+  const prevDate = new Date(args.date.getTime() - 86_400_000);
+  const rows = await client.booking.findMany({
+    where: {
+      zoneId: args.zoneId,
+      computerId: { in: args.computerIds },
+      date: { in: [args.date, prevDate] },
+      status: { in: ACTIVE_BOOKING_STATUSES },
+    },
+    select: { computerId: true, startTime: true, endTime: true, date: true },
+  });
+
+  const byComputer = new Map<string, Array<SlotNorm>>();
+  for (const b of rows) {
+    const slot = normalizeSlot(b.startTime, b.endTime);
+    if (!slot || !b.computerId) continue;
+    const isPrevDay = b.date.getTime() === prevDate.getTime();
+    // Avvalgi kunda boshlanib, yarim tundan oshgan bron — bugungi [00:00, end-1440) ni band qiladi
+    if (isPrevDay) {
+      if (slot.end > 1440) {
+        const list = byComputer.get(b.computerId) ?? [];
+        list.push({ start: 0, end: slot.end - 1440 });
+        byComputer.set(b.computerId, list);
+      }
+    } else {
+      const list = byComputer.get(b.computerId) ?? [];
+      list.push(slot);
+      byComputer.set(b.computerId, list);
+    }
+  }
+  return byComputer;
+}
 
 const BOOKING_INCLUDE = {
   user: { select: { id: true, fullName: true, phone: true, email: true } },
@@ -62,11 +110,25 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
     // Muddati o'tgan to'lanmagan bronlarni tozalash — band joylar qaytariladi
     await expireUnpaidBeforeRead();
 
-    const { roomId, zoneId, computerId, date, startTime, durationHours, notes, promoCode, usePoints } = req.body;
+    const { roomId, zoneId, computerId, date, startTime, durationHours, notes, promoCode, usePoints, idempotencyKey } = req.body;
     let endTime = req.body.endTime as string | undefined;
 
     if (!roomId || !zoneId || !date || !startTime) {
       return badRequest(res, 'roomId, zoneId, date, startTime majburiy');
+    }
+
+    // Idempotentlik: ikkinchi bosish / refresh / takroriy so'rov bilan bir xil
+    // kalit kelsa — yangi bron YARATMAYMIZ, avval yaratilganini qaytaramiz.
+    const idemKey = typeof idempotencyKey === 'string' && idempotencyKey.trim() ? idempotencyKey.trim().slice(0, 64) : null;
+    if (idemKey) {
+      const existing = await prisma.booking.findFirst({
+        where: { userId: req.user!.userId, idempotencyKey: idemKey },
+        include: BOOKING_INCLUDE,
+      });
+      if (existing) {
+        io.emit('booking_status_changed', { roomId: existing.roomId, type: 'new_booking' });
+        return created(res, existing, `Bron yaratildi. ${Number(existing.depositPercent) || 30}% oldindan to'lov kerak`);
+      }
     }
 
     const startMin = parseTime(startTime);
@@ -178,25 +240,15 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
           throw new Error('COMPUTER_BUSY');
         }
 
-        // Ushbu kun uchun faol bronlarni olib, vaqtlarni JS'da normallashtiramiz
-        const dayBookings = await tx.booking.findMany({
-          where: {
-            zoneId,
-            computerId: { in: candidateIds },
-            date: bookingDate,
-            status: { in: ACTIVE_BOOKING_STATUSES },
-          },
-          select: { computerId: true, startTime: true, endTime: true },
+        const dayBookings = await activeBookingsForDay(tx, {
+          zoneId,
+          computerIds: candidateIds,
+          date: bookingDate,
         });
 
         const bookedByComputer = new Map<string, Array<{ start: number; end: number }>>();
-        for (const b of dayBookings) {
-          if (!b.computerId) continue;
-          const s = normalizeSlot(b.startTime, b.endTime);
-          if (!s) continue;
-          const list = bookedByComputer.get(b.computerId) ?? [];
-          list.push(s);
-          bookedByComputer.set(b.computerId, list);
+        for (const [compId, slots] of dayBookings) {
+          bookedByComputer.set(compId, slots);
         }
 
         let selectedComputerId: string | null = null;
@@ -262,6 +314,7 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
             zoneId,
             computerId: selectedComputerId,
             promoCodeId: promo ? promo.id : null,
+            idempotencyKey: idemKey,
             date: bookingDate,
             startTime,
             endTime: endTime as string,
@@ -314,6 +367,24 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
       return created(res, booking, `Bron yaratildi. ${Number(booking.depositPercent) || 30}% oldindan to'lov kerak`);
     } catch (txErr: any) {
       const msg = txErr.message || '';
+      // Idempotentlik: raqobatli (concurrent) takroriy so'rov bir xil kalit bilan
+      // unique-constraint'ga tushsa — yangi bron yaratilmaydi, avvalgisini qaytaramiz.
+      if (txErr?.code === 'P2002' && idemKey) {
+        // Raqobatli takroriy so'rov: birinchi tranzaksiya ayni paytda commit bo'layotgan
+        // bo'lishi mumkin — bir necha urinishda avval yaratilgan bronni topamiz.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const existing = await prisma.booking.findFirst({
+            where: { userId: req.user!.userId, idempotencyKey: idemKey },
+            include: BOOKING_INCLUDE,
+          });
+          if (existing) {
+            io.emit('booking_status_changed', { roomId: existing.roomId, type: 'new_booking' });
+            return created(res, existing, `Bron yaratildi. ${Number(existing.depositPercent) || 30}% oldindan to'lov kerak`);
+          }
+          await new Promise((r) => setTimeout(r, 150 * (attempt + 1)));
+        }
+        return badRequest(res, 'Bron yaratish yakunlanmoqda, sahifani yangilab ko\'ring');
+      }
       if (msg === 'COMPUTER_NOT_FOUND') return notFoundMsg(res, 'Kompyuter topilmadi');
       if (msg === 'COMPUTER_MISMATCH') return badRequest(res, 'Kompyuter zona/xonaga mos emas');
       if (msg === 'COMPUTER_BUSY') return badRequest(res, 'Bu kompyuter hozirda band');
@@ -536,25 +607,15 @@ export const getAvailability = async (req: Request, res: Response, next: NextFun
     // Har bir zona uchun: jami kompyuterlar, band bo'lganlari, bo'shlari va band vaqtlar
     const zones = [];
     for (const zone of room.zones) {
-      const dayBookings = await prisma.booking.findMany({
-        where: {
-          zoneId: zone.id,
-          date: availabilityDate,
-          status: { in: ACTIVE_BOOKING_STATUSES },
-        },
-        select: { computerId: true, startTime: true, endTime: true },
+      // Avvalgi kun tungi bronlarini ham hisobga oladi (00:00 bandligi to'g'ri chiqadi)
+      const bookedByComputer = await activeBookingsForDay(prisma, {
+        zoneId: zone.id,
+        computerIds: zone.computers.map((c) => c.id),
+        date: availabilityDate,
       });
 
       // Har bir kompyuter uchun band vaqtlar (normallashtirilgan)
-      const slotsByComputer = new Map<string, Array<{ start: number; end: number }>>();
-      for (const b of dayBookings) {
-        if (!b.computerId) continue;
-        const s = normalizeSlot(b.startTime, b.endTime);
-        if (!s) continue;
-        const list = slotsByComputer.get(b.computerId) ?? [];
-        list.push(s);
-        slotsByComputer.set(b.computerId, list);
-      }
+      const slotsByComputer = bookedByComputer;
 
       // Kunning bo'sh oynalari — kompyuter biror bo'sh oynaga ega bo'lsa tanlanadigan
       const allComputers = zone.computers.map((c) => {
