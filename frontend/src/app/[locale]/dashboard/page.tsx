@@ -13,6 +13,7 @@ import { confirmDialog } from '@/lib/confirm';
 import type { Booking } from '@/lib/types';
 import { formatPrice, formatDate, formatDateTime, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
+import { getSocket } from '@/lib/socket';
 import Logo from '@/components/brand/Logo';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -36,21 +37,43 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [tab, setTab] = useState<'active' | 'history'>('active');
 
-  const fetchBookings = useCallback(async () => {
-    setLoading(true);
+  const fetchBookings = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     setError(null);
     try {
       const { data } = await api.get('/api/bookings');
       setBookings(data.data || []);
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      if (!opts?.silent) setError(getApiErrorMessage(err));
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     if (user) fetchBookings();
+  }, [user, fetchBookings]);
+
+  // §5.15 — bron holati backend'dan yangilanadi: fokus/qayta ko'rinish va
+  // real-time socket voqeasida jimgina qayta so'raymiz (F5 shart emas).
+  useEffect(() => {
+    if (!user) return;
+    const onFocus = () => fetchBookings({ silent: true });
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') fetchBookings({ silent: true });
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    const socket = getSocket();
+    const onBookingChanged = () => fetchBookings({ silent: true });
+    socket.on('booking_status_changed', onBookingChanged);
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      socket.off('booking_status_changed', onBookingChanged);
+    };
   }, [user, fetchBookings]);
 
   async function cancelBooking(id: string) {

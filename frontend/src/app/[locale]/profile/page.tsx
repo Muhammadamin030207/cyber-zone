@@ -10,6 +10,7 @@ import { useRouter, Link } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { toastSuccess, toastError } from '@/lib/toast';
+import { confirmDialog } from '@/lib/confirm';
 import SupportChat from '@/components/support/SupportChat';
 
 function initials(name: string) {
@@ -142,6 +143,20 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
       toastError(getApiErrorMessage(e, 'Parol almashishda xatolik'));
     }
     setPassSaving(false);
+  }
+
+  async function handleLogout() {
+    const ok = await confirmDialog({
+      title: 'Tizimdan chiqish',
+      message: 'Hisobingizdan chiqishni tasdiqlaysizmi?',
+      confirmLabel: 'Chiqish',
+      cancelLabel: 'Bekor qilish',
+      danger: true,
+    });
+    if (ok) {
+      logout();
+      router.push('/');
+    }
   }
 
   const roleLabel = user.role === 'SUPER_ADMIN' ? 'Super Admin' : user.role === 'ADMIN' ? 'Admin' : 'Foydalanuvchi';
@@ -335,7 +350,7 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
           </div>
 
           <button
-            onClick={() => { logout(); router.push('/'); }}
+            onClick={handleLogout}
             className="inline-flex items-center gap-2 text-sm text-red-400 hover:text-red-300"
           >
             <LogOut size={16} /> Chiqish

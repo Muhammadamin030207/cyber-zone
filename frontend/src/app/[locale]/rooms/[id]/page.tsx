@@ -16,6 +16,7 @@ import BookingWidget from '@/components/booking/BookingWidget';
 import BarOrdering from '@/components/bar/BarOrdering';
 import Logo from '@/components/brand/Logo';
 import { useAuthStore } from '@/store/auth';
+import { getSocket } from '@/lib/socket';
 
 const RoomMiniMap = dynamic(() => import('@/components/rooms/RoomsMap'), { ssr: false });
 
@@ -67,6 +68,28 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
   useEffect(() => {
     if (roomId) fetchAvailability();
   }, [fetchAvailability, roomId]);
+
+  // §5.15 — PC/xona holati statik emas: sahifa fokusga qaytganda va boshqa
+  // foydalanuvchi bron qilganda (socket) mavjudlik backend'dan qayta olinadi.
+  useEffect(() => {
+    if (!roomId) return;
+    const onFocus = () => fetchAvailability();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') fetchAvailability();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    const socket = getSocket();
+    const onBookingChanged = () => fetchAvailability();
+    socket.on('booking_status_changed', onBookingChanged);
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      socket.off('booking_status_changed', onBookingChanged);
+    };
+  }, [roomId, fetchAvailability]);
 
   const minPrice = useMemo(() => {
     if (!room?.zones?.length) return 0;

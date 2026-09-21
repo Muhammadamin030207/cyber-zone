@@ -8,6 +8,7 @@ import { useChatUnread } from '@/hooks/useChatUnread';
 import LanguageSwitcher from './LanguageSwitcher';
 import ThemeSwitcher from './ThemeSwitcher';
 import Logo from '@/components/brand/Logo';
+import { confirmDialog } from '@/lib/confirm';
 
 export default function Header() {
   const t = useTranslations('nav');
@@ -15,6 +16,17 @@ export default function Header() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const unread = useChatUnread();
+
+  const handleLogout = async () => {
+    const ok = await confirmDialog({
+      title: 'Tizimdan chiqish',
+      message: 'Hisobingizdan chiqishni tasdiqlaysizmi?',
+      confirmLabel: 'Chiqish',
+      cancelLabel: 'Bekor qilish',
+      danger: true,
+    });
+    if (ok) logout();
+  };
 
   const links = [
     { href: '/', label: t('home') },
@@ -118,7 +130,7 @@ export default function Header() {
                 {userInitial}
               </Link>
               <button
-                onClick={logout}
+                onClick={handleLogout}
                 className="px-3 py-2 text-sm font-medium rounded-lg text-red-400 hover:bg-red-500/10"
               >
                 {t('logout')}
