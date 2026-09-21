@@ -6,6 +6,26 @@ function paymeAuth() {
   return `Basic ${creds}`;
 }
 
+function clickWebhookParams({ action, merchantTransId, clickTransId, clickPaydocId, amount, serviceId = '' }: {
+  action: number;
+  merchantTransId: string;
+  clickTransId?: string;
+  clickPaydocId?: string;
+  amount: number;
+  serviceId?: string;
+}) {
+  return {
+    action: String(action),
+    click_trans_id: clickTransId || '',
+    service_id: serviceId,
+    click_paydoc_id: clickPaydocId || '',
+    merchant_trans_id: merchantTransId,
+    amount: String(amount),
+    sign_time: String(Date.now()),
+    sign_string: '',
+  };
+}
+
 function performBody(orderId: string, amountSom: number, txnId = 'txn-1') {
   return {
     method: 'PerformTransaction',
@@ -139,6 +159,102 @@ describe('E2E: Payments — ownership, amount validation, duplicate protection, 
     expect(res.status).toBe(200);
 
     const pay = await prisma.payment.findUnique({ where: { id: 'pay-w-2' } });
+    expect(pay!.status).toBe('PROCESSING');
+  });
+
+  it('CLICK WEBHOOK: Prepare (action=0) -> PROCESSING, no fake PAID on prepare', async () => {
+    const booking = await createBookingFixture(userAId, roomId, zoneId, 100000);
+    await prisma.payment.create({
+      data: {
+        id: 'pay-clk-1',
+        bookingId: booking.id,
+        userId: userAId,
+        amount: 30000,
+        type: 'ADVANCE',
+        method: 'CLICK',
+        provider: 'CLICK',
+        status: 'PROCESSING',
+        depositPercent: 30,
+        providerTransactionId: 'pay-clk-1',
+      },
+    });
+
+    const res = await api()
+      .post('/api/payments/webhook/click')
+      .query(
+        clickWebhookParams({
+          action: 0,
+          merchantTransId: 'pay-clk-1',
+          clickTransId: 'ct-1',
+          clickPaydocId: 'pd-1',
+          amount: 30000,
+          serviceId: '',
+        })
+      );
+    expect(res.status).toBe(200);
+
+    // Prepare hech qachon PAID qilmaydi — holat PROCESSING da qoladi.
+    const pay = await prisma.payment.findUnique({ where: { id: 'pay-clk-1' } });
+    expect(pay!.status).toBe('PROCESSING');
+    const b = await prisma.booking.findUnique({ where: { id: booking.id } });
+    expect(b!.status).toBe('PENDING');
+  });
+
+  it('CLICK WEBHOOK: Complete (action=1) -> PAID, bron PARTIALLY_PAID', async () => {
+    const booking = await createBookingFixture(userAId, roomId, zoneId, 100000);
+    await prisma.payment.create({
+      data: {
+        id: 'pay-clk-2',
+        bookingId: booking.id,
+        userId: userAId,
+        amount: 30000,
+        type: 'ADVANCE',
+        method: 'CLICK',
+        provider: 'CLICK',
+        status: 'PROCESSING',
+        depositPercent: 30,
+        providerTransactionId: 'pay-clk-2',
+      },
+    });
+
+    const res = await api()
+      .post('/api/payments/webhook/click')
+      .query(clickWebhookParams({ action: 1, merchantTransId: 'pay-clk-2', clickTransId: 'ct-2', clickPaydocId: 'pd-2', amount: 30000 }));
+    expect(res.status).toBe(200);
+    expect(res.body.data?.action).toBe('complete');
+
+    const pay = await prisma.payment.findUnique({ where: { id: 'pay-clk-2' } });
+    expect(pay!.status).toBe('PAID');
+    expect(pay!.paidAt).not.toBeNull();
+    expect(pay!.providerPaymentId).toBe('pd-2');
+
+    const b = await prisma.booking.findUnique({ where: { id: booking.id } });
+    expect(b!.status).toBe('PARTIALLY_PAID');
+  });
+
+  it('CLICK WEBHOOK: summa mos kelmasa PAID qilinmaydi (idempotent)', async () => {
+    const booking = await createBookingFixture(userAId, roomId, zoneId, 100000);
+    await prisma.payment.create({
+      data: {
+        id: 'pay-clk-3',
+        bookingId: booking.id,
+        userId: userAId,
+        amount: 30000,
+        type: 'ADVANCE',
+        method: 'CLICK',
+        provider: 'CLICK',
+        status: 'PROCESSING',
+        depositPercent: 30,
+        providerTransactionId: 'pay-clk-3',
+      },
+    });
+
+    const res = await api()
+      .post('/api/payments/webhook/click')
+      .query(clickWebhookParams({ action: 1, merchantTransId: 'pay-clk-3', clickTransId: 'ct-3', clickPaydocId: 'pd-3', amount: 35000 }));
+    expect(res.status).toBe(200);
+
+    const pay = await prisma.payment.findUnique({ where: { id: 'pay-clk-3' } });
     expect(pay!.status).toBe('PROCESSING');
   });
 

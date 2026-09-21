@@ -5,7 +5,7 @@ import { UzumProvider } from './providers/uzum';
 import { PaynetProvider } from './providers/paynet';
 
 export type * from './types';
-export { ProviderNotConfiguredError, type ProviderId, type PaymentProvider } from './types';
+export { ProviderNotConfiguredError, type ProviderId, type PaymentProvider, SANDBOX_CLICK, SANDBOX_PAYME } from './types';
 export { ProviderUnavailableError } from './providers/payme';
 
 const instances: Record<ProviderId, PaymentProvider> = {

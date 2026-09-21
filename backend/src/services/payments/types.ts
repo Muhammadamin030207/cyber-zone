@@ -1,5 +1,21 @@
 export type ProviderId = 'CLICK' | 'PAYME' | 'UZUM' | 'PAYNET';
 
+/**
+ * SANDBOX (dev) kredensiallari — real CLICK_ va PAYME_ env o'zgarmayganda
+ * checkout/webhook oqimini lokal sinash uchun. Webhook imzosi HAMON
+ * mana shu dev secret bilan tekshiriladi — "soxta PAID" qabul qilinmaydi.
+ */
+export const SANDBOX_CLICK = {
+  serviceId: 'dev-click-service',
+  merchantUserId: 'dev-click-user',
+  secretKey: 'dev-click-secret',
+} as const;
+
+export const SANDBOX_PAYME = {
+  merchantId: 'dev-payme-merchant',
+  merchantKey: 'dev-payme-secret',
+} as const;
+
 export type ProviderPaymentStatus =
   | 'CREATED'
   | 'PENDING'

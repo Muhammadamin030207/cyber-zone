@@ -1,6 +1,7 @@
 import type { PaymentProvider, CreatePaymentInput, CreatePaymentResult, VerifyPaymentInput, VerifyPaymentResult, WebhookContext, WebhookResult } from '../types';
 import { config } from '../../../config';
 import { md5hex, safeEqual } from '../crypto';
+import { SANDBOX_CLICK } from '../types';
 
 /**
  * CLICK provider — klassik merchant (2 fazali) integratsoiya.
@@ -23,7 +24,19 @@ export class ClickProvider implements PaymentProvider {
     return config.payments.click;
   }
 
+  private get sandbox() {
+    return config.payments.devMode;
+  }
+
+  /** Real kredensiallar bo'lsa ularni, aks holda SANDBOX dev kredensiallarini qaytaradi. */
+  private get active() {
+    const c = this.creds;
+    if (c.serviceId && c.secretKey) return c;
+    return { ...SANDBOX_CLICK, endpoint: `${config.payments.localOrigin}/api/payments/mock/click` };
+  }
+
   isConfigured(): boolean {
+    if (this.sandbox) return true;
     return Boolean(this.creds.serviceId && this.creds.secretKey);
   }
 
@@ -36,22 +49,27 @@ export class ClickProvider implements PaymentProvider {
     if (!this.isConfigured()) {
       throw new Error('CLICK_* kredensiallari sozlanmagan');
     }
+    const a = this.active;
     const now = new Date();
     const signTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
     const amount = this.normalizeAmount(input.amount);
-    const signString = md5hex([input.paymentId, this.creds.serviceId, String(amount), input.callbackUrl, this.creds.secretKey].join(''));
+    const signString = md5hex([input.paymentId, a.serviceId, String(amount), input.callbackUrl, a.secretKey].join(''));
     const qs = new URLSearchParams({
-      service_id: this.creds.serviceId,
+      service_id: a.serviceId,
       merchant_trans_id: input.paymentId,
-      merchant_user_id: this.creds.merchantUserId,
+      merchant_user_id: a.merchantUserId || input.paymentId,
       amount: String(amount),
       sign_time: signTime,
       sign_string: signString,
     });
+    if (this.sandbox) {
+      // SANDBOX: qaytish manzilini mock gatewayga uzatamiz (browser qaytishi uchun).
+      if (input.returnUrl) qs.set('return_url', input.returnUrl);
+    }
     return {
       providerPaymentId: input.paymentId,
       providerTransactionId: input.paymentId,
-      checkoutUrl: `${this.creds.endpoint}?${qs.toString()}`,
+      checkoutUrl: `${a.endpoint}?${qs.toString()}`,
       status: 'REDIRECT_REQUIRED',
       raw: { sign_time: signTime, amount },
     };
@@ -68,6 +86,7 @@ export class ClickProvider implements PaymentProvider {
   }
 
   async handleWebhook(ctx: WebhookContext): Promise<WebhookResult> {
+    const a = this.active;
     const p = ctx.query;
     const action = p['action'] === '1' ? 1 : 0;
     const clickTransId = p['click_trans_id'] || '';
@@ -86,7 +105,7 @@ export class ClickProvider implements PaymentProvider {
       error_note: error === 0 ? 'Success' : p['error_note'] || errorNote || 'Failed',
     });
 
-    if (serviceId && serviceId !== this.creds.serviceId) {
+    if (serviceId && serviceId !== a.serviceId) {
       return { acknowledged: true, action: action === 1 ? 'complete' : 'prepare', providerTransactionId: merchantTransId || undefined, response: response(-1) };
     }
 
@@ -97,7 +116,7 @@ export class ClickProvider implements PaymentProvider {
         return { acknowledged: true, action: action === 1 ? 'complete' : 'prepare', providerTransactionId: merchantTransId || undefined, response: response(-1) };
       }
       const expected = md5hex(
-        [clickTransId, serviceId || this.creds.serviceId, this.creds.secretKey, merchantTransId, amountStr, String(action), signTime].join('')
+        [clickTransId, serviceId || a.serviceId, a.secretKey, merchantTransId, amountStr, String(action), signTime].join('')
       );
       if (!safeEqual(signString, expected)) {
         return { acknowledged: true, action: action === 1 ? 'complete' : 'prepare', providerTransactionId: merchantTransId || undefined, response: response(-1) };

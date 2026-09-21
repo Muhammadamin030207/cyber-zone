@@ -41,6 +41,34 @@ export const config = {
   payments: {
     minDepositPercent: Math.min(100, Math.max(1, parseInt(process.env.MIN_DEPOSIT_PERCENT || '10', 10))),
     callbackBaseUrl: process.env.PROVIDER_CALLBACK_URL || '',
+    /**
+     * SANDBOX (dev) rejimi — real kredensiallarsiz Click/Payme to'lov oqimini
+     * lokal sinash uchun.
+     *   PAYMENTS_DEV_MODE=1|true   → dev/test muhitida yoqiladi
+     *   PAYMENTS_DEV_MODE=force    → production'da ham (orangli: mock gateway
+     *                                ochiladi — faqat sinash uchun, real pul emas)
+     * Boshqa hollarda (production + force bo'lmasa) o'chirilgan.
+     * Webhook imzolari HAMON tekshiriladi — soxta "PAID" yo'q.
+     */
+    devMode: (() => {
+      const raw = (process.env.PAYMENTS_DEV_MODE || '').trim().toLowerCase();
+      const wanted = raw === '1' || raw === 'true' || raw === 'force';
+      if (!wanted) return false;
+      if (process.env.NODE_ENV === 'production' && raw !== 'force') {
+        console.warn('[PAYMENTS] PAYMENTS_DEV_MODE production\'da faqat "force" qiymati bilan yoqiladi. Sandbox o\'chirildi.');
+        return false;
+      }
+      if (raw === 'force') {
+        console.warn('[PAYMENTS] ⚠️ SANDBOX rejimi yoqildi (force) — bu REAL PUL qabul qilmaydigan sinov rejimi.');
+      } else {
+        console.log('[PAYMENTS] SANDBOX rejimi yoqildi — Click/Payme dev kredensiallari bilan sinovda.');
+      }
+      return true;
+    })(),
+    /** Mock gateway'ni chaqirish uchun maxsus kalit (SANDBOX'da mo`ljallangan). */
+    devMockKey: process.env.PAYMENTS_DEV_MOCK_KEY || 'cyberzone-dev-mock',
+    /** Sandbox'da checkout URL'lar uchun bazaviy origin (callback bo'lmasa, shu server). */
+    localOrigin: (process.env.PROVIDER_CALLBACK_URL || `http://localhost:${parseInt(process.env.PORT || '5000', 10)}`).replace(/\/$/, ''),
     click: {
       serviceId: process.env.CLICK_SERVICE_ID || '',
       merchantId: process.env.CLICK_MERCHANT_ID || '',

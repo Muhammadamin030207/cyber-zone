@@ -2,6 +2,7 @@ import type { PaymentProvider, CreatePaymentInput, CreatePaymentResult, VerifyPa
 import { config } from '../../../config';
 import { round2 } from '../../../utils/money';
 import { safeEqual } from '../crypto';
+import { SANDBOX_PAYME } from '../types';
 
 /** Provayder bilan bog'lanishda xato — foydalanuvchiga "vaqtincha ishlamayapti" ko'rsatiladi. */
 export class ProviderUnavailableError extends Error {
@@ -18,12 +19,12 @@ function tiyinToSom(t: number): number {
 }
 
 /** Webhook Authorization header'ini tekshiradi (Merchant API auth). */
-function isAuthorized(ctx: WebhookContext): boolean {
-  if (!config.payments.payme.merchantId || !config.payments.payme.merchantKey) return false;
+function isAuthorized(ctx: WebhookContext, creds: { merchantId: string; merchantKey: string }): boolean {
+  if (!creds.merchantId || !creds.merchantKey) return false;
   const raw = ctx?.headers?.authorization ?? ctx?.headers?.Authorization;
   const auth = Array.isArray(raw) ? String(raw[0]) : String(raw || '');
-  const expected = 'Basic ' + Buffer.from(`${config.payments.payme.merchantId}:${config.payments.payme.merchantKey}`).toString('base64');
-  return safeEqual(auth, expected) || safeEqual(auth, `Bearer ${config.payments.payme.merchantKey}`);
+  const expected = 'Basic ' + Buffer.from(`${creds.merchantId}:${creds.merchantKey}`).toString('base64');
+  return safeEqual(auth, expected) || safeEqual(auth, `Bearer ${creds.merchantKey}`);
 }
 
 /**
@@ -45,7 +46,24 @@ export class PaymeProvider implements PaymentProvider {
     return config.payments.payme;
   }
 
+  private get sandbox() {
+    return config.payments.devMode;
+  }
+
+  /** Real kredensiallar bo'lsa ularni, aks holda SANDBOX dev kredensiallarini qaytaradi. */
+  private get active() {
+    const c = this.creds;
+    if (c.merchantId && c.merchantKey) return c;
+    return {
+      merchantId: SANDBOX_PAYME.merchantId,
+      merchantKey: SANDBOX_PAYME.merchantKey,
+      checkoutUrl: `${config.payments.localOrigin}/api/payments/mock/payme`,
+      apiEndpoint: '',
+    };
+  }
+
   isConfigured(): boolean {
+    if (this.sandbox) return true;
     return Boolean(this.creds.merchantId && this.creds.merchantKey);
   }
 
@@ -79,23 +97,32 @@ export class PaymeProvider implements PaymentProvider {
     if (!this.isConfigured()) {
       throw new Error('PAYME_* kredensiallari sozlanmagan');
     }
+    const a = this.active;
     const amount = this.toTiyin(input.amount);
     let providerTransactionId = input.paymentId;
-    try {
-      const created = await this.rpc('CreateTransaction', {
-        amount,
-        account: { order_id: input.paymentId },
-      });
-      providerTransactionId = String(created?.result?.transaction || created?.result?.t || providerTransactionId);
-    } catch (err) {
-      // Trans yaratishda provayder ishlamay qolsa ham checkout link beramiz;
-      // qaytishda status tekshiruvi yakuniy hal qiladi.
-      if (err instanceof ProviderUnavailableError) throw err;
+    if (!this.sandbox) {
+      // Real rejimda provayderdan trans id olinadi.
+      try {
+        const created = await this.rpc('CreateTransaction', {
+          amount,
+          account: { order_id: input.paymentId },
+        });
+        providerTransactionId = String(created?.result?.transaction || created?.result?.t || providerTransactionId);
+      } catch (err) {
+        // Trans yaratishda provayder ishlamay qolsa ham checkout link beramiz;
+        // qaytishda status tekshiruvi yakuniy hal qiladi.
+        if (err instanceof ProviderUnavailableError) throw err;
+      }
+    }
+    const qs = new URLSearchParams({ m: a.merchantId, 'ac.order_id': input.paymentId });
+    if (this.sandbox) {
+      // SANDBOX: qaytish manzilini mock gatewayga uzatamiz (browser qaytishi uchun).
+      if (input.returnUrl) qs.set('return_url', input.returnUrl);
     }
     return {
       providerPaymentId: providerTransactionId,
       providerTransactionId,
-      checkoutUrl: `${this.creds.checkoutUrl}?m=${this.creds.merchantId}&ac.order_id=${encodeURIComponent(input.paymentId)}`,
+      checkoutUrl: `${a.checkoutUrl}?${qs.toString()}`,
       status: 'REDIRECT_REQUIRED',
       raw: { order_id: input.paymentId, amount },
     };
@@ -103,6 +130,11 @@ export class PaymeProvider implements PaymentProvider {
 
   async verifyPayment(input: VerifyPaymentInput): Promise<VerifyPaymentResult> {
     const transId = input.providerTransactionId || input.paymentId;
+    if (this.sandbox) {
+      // SANDBOX: tashqi provayderga murojaat qilinmaydi — yakuniy holat
+      // imzolangan webhook (mock gateway) orqali keladi.
+      return { status: 'PENDING', providerTransactionId: transId };
+    }
     if (!this.isConfigured()) {
       // Kredensial yo'q — faqat webhook ma'lumotlariga tayanamiz.
       return { status: 'PENDING', providerTransactionId: transId };
@@ -131,7 +163,7 @@ export class PaymeProvider implements PaymentProvider {
   async handleWebhook(ctx: WebhookContext): Promise<WebhookResult> {
     // Merchant API autentifikatsiya — imzosiz/soxta webhook bilan to'lovni
     // PAID qilib bo'lmaydi. Provayder ulangan bo'lsa header MAJBURIY.
-    if (!isAuthorized(ctx)) {
+    if (!isAuthorized(ctx, this.active)) {
       return {
         acknowledged: true,
         action: ctx.body?.method || 'CheckPerformTransaction',

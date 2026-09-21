@@ -10,8 +10,9 @@ import {
   Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy, MessagesSquare,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
-import { toastError } from '@/lib/toast';
+import { toastError, toastSuccess } from '@/lib/toast';
 import { confirmDialog } from '@/lib/confirm';
+import { getSocket } from '@/lib/socket';
 import type { Room, Zone, Computer, Booking, PromoCode, NewsItem, BookingStatus } from '@/lib/types';
 import { formatPrice, formatDate, formatDateTime, todayISO, zoneTypeLabel, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
@@ -484,40 +485,116 @@ function ComputersTab({ room }: { room: Room }) {
 }
 
 /* ====================== BOOKINGS TAB ====================== */
+type BookingsError = { kind: 'unauthorized' | 'server' | 'network' | 'unknown'; message: string };
+
+function classifyBookingsError(err: any): BookingsError {
+  const status = err?.response?.status;
+  if (status === 401) return { kind: 'unauthorized', message: 'Ruxsat muddati tugagan. Qaytadan kirib ko\'ring.' };
+  if (status === 403) return { kind: 'unauthorized', message: 'Sizga bu bo\'limga ruxsat berilmagan.' };
+  if (status && status >= 500) return { kind: 'server', message: 'Serverda xatolik yuz berdi. Qayta urinib ko\'ring.' };
+  if (!err?.response && err?.request) return { kind: 'network', message: 'Internet aloqasi yo\'q. Tarmoqqa ulanganligingizni tekshiring.' };
+  return { kind: 'unknown', message: getApiErrorMessage(err, 'Bronlarni yuklashda xatolik yuz berdi') };
+}
+
 function BookingsTab({ room }: { room: Room }) {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<BookingsError | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.get('/api/bookings/admin/bookings').then(({ data }) => setBookings(data.data || [])).finally(() => setLoading(false));
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
+    setError(null);
+    try {
+      const { data } = await api.get('/api/bookings/admin/bookings');
+      // Backend kontrakti: data = { success, message, data: { bookings: Booking[], total } }
+      const list = data?.data?.bookings;
+      setBookings(Array.isArray(list) ? list : []);
+      setTotal(typeof data?.data?.total === 'number' ? data.data.total : (Array.isArray(list) ? list.length : 0));
+    } catch (err) {
+      if (!opts?.silent) setError(classifyBookingsError(err));
+    } finally {
+      if (!opts?.silent) setLoading(false);
+    }
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
+  // Real vaqt: yangi bron / holat o'zgarishi / sahifa fokusiga qaytishda jimgina yangilash
+  useEffect(() => {
+    const onFocus = () => load({ silent: true });
+    const onVisibility = () => { if (document.visibilityState === 'visible') load({ silent: true }); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    const socket = getSocket();
+    const onBookingChanged = () => load({ silent: true });
+    socket.on('booking_status_changed', onBookingChanged);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      socket.off('booking_status_changed', onBookingChanged);
+    };
+  }, [load]);
+
   async function setStatus(id: string, status: BookingStatus) {
+    setUpdatingId(id);
     try {
       await api.patch(`/api/bookings/admin/bookings/${id}/status`, { status });
       setBookings((prev) => prev.map((b) => b.id === id ? { ...b, status } : b));
+      toastSuccess(`Bron: ${status}`);
     } catch (err) { toastError(getApiErrorMessage(err)); }
+    finally { setUpdatingId(null); }
   }
 
   const STATUS_BADGE: Record<string, string> = {
-    PENDING: 'bg-yellow-500/15 text-yellow-400', CONFIRMED: 'bg-neon-cyan/15 text-neon-cyan',
+    PENDING: 'bg-yellow-500/15 text-yellow-400', PENDING_PAYMENT: 'bg-orange-500/15 text-orange-400',
+    PARTIALLY_PAID: 'bg-sky-500/15 text-sky-400', PAID: 'bg-neon-green/15 text-neon-green',
+    CONFIRMED: 'bg-neon-cyan/15 text-neon-cyan',
     ACTIVE: 'bg-neon-green/15 text-neon-green', COMPLETED: 'bg-gray-500/15 text-gray-400', CANCELLED: 'bg-red-500/15 text-red-400',
   };
 
+  const paidPayments = (b: Booking) => (Array.isArray(b.payments) ? b.payments : []).filter((p) => p.status === 'COMPLETED');
+  const paidTotal = (b: Booking) => paidPayments(b).reduce((acc, p) => acc + Number(p.amount || 0), 0);
+  const paidMethods = (b: Booking) => paidPayments(b).map((p) => p.method || p.provider).filter(Boolean).join(', ');
+
   return (
     <div className="neo-card rounded-2xl p-5">
-      <h3 className="font-bold mb-4">Bronlar ({bookings.length})</h3>
-      {loading ? <div className="space-y-2">{[1, 2].map((i) => <div key={i} className="h-16 rounded-xl bg-cyber-800 animate-pulse" />)}</div>
-        : bookings.length === 0 ? <p className="text-sm text-gray-500 text-center py-10">Bronlar yo'q</p> : (
+      <h3 className="font-bold mb-4">Bronlar ({total})</h3>
+
+      {loading ? (
+        <div className="space-y-2">{[1, 2].map((i) => <div key={i} className="h-16 rounded-xl bg-cyber-800 animate-pulse" />)}</div>
+      ) : error ? (
+        <div className="text-center py-12">
+          <AlertCircle size={36} className="mx-auto mb-3 text-red-400" />
+          <p className="text-sm text-gray-300 font-medium mb-1">
+            {error.kind === 'unauthorized' ? 'Ruxsat muammosi' : error.kind === 'server' ? 'Server xatosi' : error.kind === 'network' ? 'Tarmoq xatosi' : 'Xatolik'}
+          </p>
+          <p className="text-sm text-gray-500 mb-5">{error.message}</p>
+          <button
+            onClick={() => load()}
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl neon-btn text-sm font-bold"
+          >
+            <RefreshCw size={15} /> Qayta urinish
+          </button>
+        </div>
+      ) : bookings.length === 0 ? (
+        <div className="text-center py-14">
+          <CalendarDays size={32} className="mx-auto mb-3 text-gray-600" />
+          <p className="text-sm text-gray-500">Bronlar hozircha yo'q</p>
+        </div>
+      ) : (
         <div className="overflow-x-auto table-scroll-mobile">
-          <table className="w-full min-w-[720px] text-sm table-hover">
+          <table className="w-full min-w-[900px] text-sm table-hover">
             <thead>
               <tr className="text-gray-500 text-xs uppercase">
                 <th className="text-left pb-2 pr-4">Foydalanuvchi</th>
                 <th className="text-left pb-2 pr-4">Telefon</th>
                 <th className="text-left pb-2 pr-4">Sana</th>
                 <th className="text-left pb-2 pr-4">Vaqt</th>
+                <th className="text-left pb-2 pr-4">Kompyuter</th>
                 <th className="text-left pb-2 pr-4">Narx</th>
+                <th className="text-left pb-2 pr-4">To'lov</th>
                 <th className="text-left pb-2 pr-4">Holat</th>
                 <th className="text-left pb-2">Amallar</th>
               </tr>
@@ -528,25 +605,37 @@ function BookingsTab({ room }: { room: Room }) {
                   <td className="py-3 pr-4">
                     <span className="font-medium text-gray-100 flex items-center gap-2">
                       <span className="w-7 h-7 rounded-lg grid place-items-center text-[10px] font-bold bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan shrink-0">
-                        {(b.user?.fullName || '?').slice(0, 1).toUpperCase()}
+                        {((b.user?.fullName || '?').trim().charAt(0) || '?').toUpperCase()}
                       </span>
-                      {b.user?.fullName || b.userId?.slice(0, 8)}
+                      {b.user?.fullName?.trim() || (b.userId ? b.userId.slice(0, 8) : '—')}
                     </span>
                   </td>
                   <td className="py-3 pr-4 text-gray-300">{b.user?.phone || '—'}</td>
-                  <td className="py-3 pr-4 text-gray-300">{formatDate(b.date)}</td>
-                  <td className="py-3 pr-4 text-gray-300">{b.startTime}—{b.endTime}</td>
+                  <td className="py-3 pr-4 text-gray-300">{b.date ? formatDate(b.date) : '—'}</td>
+                  <td className="py-3 pr-4 text-gray-300">{b.startTime || '—'}—{b.endTime || '—'}</td>
+                  <td className="py-3 pr-4 text-gray-300">{b.computer?.name || '—'}</td>
                   <td className="py-3 pr-4 font-medium text-neon-cyan">{formatPrice(b.finalPrice)}</td>
                   <td className="py-3 pr-4">
-                    <span className={cn('px-2 py-1 rounded text-xs font-medium', STATUS_BADGE[b.status])}>{b.status}</span>
+                    {paidPayments(b).length === 0 ? (
+                      <span className="text-xs text-gray-600">To'lanmagan</span>
+                    ) : (
+                      <span>
+                        <span className="font-medium text-neon-green">{formatPrice(paidTotal(b))} so'm</span>
+                        {paidMethods(b) && <span className="text-[10px] text-gray-500 block">{paidMethods(b)}</span>}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3 pr-4">
+                    <span className={cn('px-2 py-1 rounded text-xs font-medium', STATUS_BADGE[b.status] || 'bg-gray-500/15 text-gray-400')}>{b.status}</span>
                   </td>
                   <td className="py-3">
-                    {b.status === 'PENDING' && (
+                    {updatingId === b.id ? (
+                      <Loader2 size={14} className="animate-spin text-neon-cyan" />
+                    ) : ['PENDING', 'PENDING_PAYMENT'].includes(b.status) ? (
                       <button onClick={() => setStatus(b.id, 'CONFIRMED')} className="text-xs text-neon-green hover:underline">Tasdiqlash</button>
-                    )}
-                    {['CONFIRMED', 'ACTIVE'].includes(b.status) && (
+                    ) : ['CONFIRMED', 'ACTIVE', 'PARTIALLY_PAID', 'PAID'].includes(b.status) ? (
                       <button onClick={() => setStatus(b.id, 'COMPLETED')} className="text-xs text-gray-400 hover:underline">Yakunlash</button>
-                    )}
+                    ) : null}
                   </td>
                 </tr>
               ))}

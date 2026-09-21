@@ -5,7 +5,8 @@ import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/respon
 import { toNumber, round2, isValidAmount } from '../utils/money';
 import { io } from '../lib/socket';
 import { Prisma } from '@prisma/client';
-import { getProvider, getProviderAvailability, isProviderAvailable, ProviderNotConfiguredError, ProviderUnavailableError } from '../services/payments';
+import { getProvider, getProviderAvailability, isProviderAvailable, ProviderNotConfiguredError, ProviderUnavailableError, SANDBOX_CLICK, SANDBOX_PAYME } from '../services/payments';
+import { md5hex } from '../services/payments/crypto';
 import { config } from '../config';
 
 type TxClient = Prisma.TransactionClient;
@@ -435,6 +436,82 @@ export const getProviders = async (_req: Request, res: Response) => {
     providers: getProviderAvailability(),
     minDepositPercent: config.payments.minDepositPercent,
   });
+};
+
+// ============ GET /api/payments/mock/:provider — SANDBOX mock gateway ============
+// Faqat PAYMENTS_DEV_MODE yoqilganida ochiladi. Provayder "checkout"ini
+// simulyatsiya qiladi: to'lovni yakunlab, IMZOLANGAN webhook orqali yuboradi.
+// Webhook validatsiyasi (Click sign_string yoki Payme Basic auth) HAMON majburiy —
+// shuning uchun "soxta PAID" texnik jihatdan imkonsiz. Haqiqiy pul olinmaydi.
+export const mockSandboxPayment = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!config.payments.devMode) return res.status(404).json({ error: 'not found' });
+    const mockKey = String(req.query.mock_key || '');
+    if (mockKey !== config.payments.devMockKey) return res.status(404).json({ error: 'not found' });
+
+    const provider = String(req.params.provider || '').toLowerCase();
+    if (!['click', 'payme'].includes(provider)) return res.status(400).json({ error: 'unknown provider' });
+
+    const q = req.query as Record<string, string | undefined>;
+    const orderId = String(q.order_id || q.merchant_trans_id || q['ac.order_id'] || '');
+    if (!orderId) return res.status(400).json({ error: 'order_id majburiy' });
+
+    const payment = await prisma.payment.findUnique({ where: { providerTransactionId: orderId } });
+    if (!payment) return res.status(404).json({ error: 'To\'lov topilmadi' });
+    if (!['CREATED', 'REDIRECT_REQUIRED', 'PROCESSING'].includes(payment.status)) {
+      return res.status(409).json({ error: `To'lov holati ${payment.status} — yakunlangan` });
+    }
+
+    const amount = round2(toNumber(payment.amount));
+    const origin = `${req.protocol}://${req.get('host')}`;
+    const webhookUrl = `${origin}/api/payments/webhook/${provider}`;
+    const now = new Date();
+    const signTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+
+    let hookRes: any;
+    if (provider === 'click') {
+      const c = config.payments.click;
+      const creds = c.serviceId && c.secretKey ? { serviceId: c.serviceId, secretKey: c.secretKey } : SANDBOX_CLICK;
+      const clickTransId = `dev-${Date.now()}`;
+      const params = new URLSearchParams({
+        action: '1',
+        click_trans_id: clickTransId,
+        service_id: creds.serviceId,
+        click_paydoc_id: `dev-${payment.id}`,
+        merchant_trans_id: orderId,
+        amount: String(Math.round(amount)),
+        sign_time: signTime,
+      });
+      params.set('sign_string', md5hex([clickTransId, creds.serviceId, creds.secretKey, orderId, String(Math.round(amount)), '1', signTime].join('')));
+      hookRes = await fetch(`${webhookUrl}?${params.toString()}`, { method: 'POST', signal: AbortSignal.timeout(15000) });
+    } else {
+      const p = config.payments.payme;
+      const creds = p.merchantId && p.merchantKey ? { merchantId: p.merchantId, merchantKey: p.merchantKey } : SANDBOX_PAYME;
+      const basic = Buffer.from(`${creds.merchantId}:${creds.merchantKey}`).toString('base64');
+      hookRes = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Basic ${basic}` },
+        body: JSON.stringify({
+          method: 'PerformTransaction',
+          params: { id: orderId, amount: Math.round(round2(amount) * 100), account: { order_id: orderId } },
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+    }
+
+    const body = await hookRes.text();
+    if (!hookRes.ok) {
+      return res.status(502).json({ error: 'webhook rad etildi', provider, response: body });
+    }
+
+    const returnUrl = String(q.return_url || '');
+    if (returnUrl.startsWith('http')) {
+      return res.redirect(302, returnUrl);
+    }
+    return res.json({ ok: true, provider, payment: payment.id, status: 'PAID (sandbox)' });
+  } catch (err) {
+    next(err);
+  }
 };
 
 // ============ GET /api/payments/:id/status — USER: to'lov holati (poll + verify) ============
