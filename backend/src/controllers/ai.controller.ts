@@ -3,6 +3,12 @@ import prisma from '../lib/prisma';
 import { config } from '../config';
 import { ok } from '../utils/response';
 import { AuthRequest } from '../types';
+import {
+  tashkentNowHHMM,
+  parseTime,
+  minutesToHHMM,
+  normalizeWorkingHours,
+} from '../utils/time';
 
 // Gemini chaqiruv uchun taym-aut (abadiy kutib qolishning oldini oladi)
 const GEMINI_TIMEOUT_MS = 15_000;
@@ -62,11 +68,11 @@ async function geminiChat(
   const system = [
     'Sen Cyber-ZONE — kompyuter xona (gaming club) platformasining rasmiy AI yordamchisisan.',
     'Foydalanuvchilarga o\'zbek tilida, do\'stona va aniq javob ber. Kerakli joyda emojilar ishlat 😊🎮💡.',
-    'Savol platformaga tegishli bo\'lmasa (masalan, umumiy bilim) — qisqa va xushmuomalalik bilan javob ber, lekin imkoni boricha platformaga bog\'la.',
-    'Narx, ish vaqti, xona ro\'yxati va promo-kodlar haqidagi ma\'lumotlarni FAQAT quyida berilgan KONTEKSTDAN ol. Unda yo\'q bo\'lsa — "hozircha ma\'lumot yo\'q" deb ayt, o\'ylab chiqma.',
+    'Foydalanuvchi oddiy suhbat qurmoqchi bo\'lsa (salomlashish, o\'yinlar, umumiy savollar, maslahat) — erkin, qisqa va xushmuomalalik bilan javob ber. Sun\'iy ravishda hamma savolni platformaga bog\'lash shart emas.',
+    'Narx, ish vaqti, xona ro\'yxati, promo-kodlar va mavjudlik haqidagi ma\'lumotlarni FAQAT quyida berilgan KONTEKSTDAN ol. Unda yo\'q bo\'lsa — "hozircha ma\'lumot yo\'q" deb ayt, o\'ylab chiqma.',
     'Foydalanuvchining shaxsiy bronlari, to\'lovlari, bonus balansi, profil ma\'lumoti faqat KONTEKSTDAGI "FOYDALANUVCHI MA\'LUMOTI" bo\'limida berilganini ayt. U yerda yo\'q narsani uydirma. Masalan bron holati haqida faqat ro\'yxatda kelgan bronlarni ko\'rsat.',
     'AI hech qachon bronni o\'zi tasdiqlamaydi, to\'lovni muvaffaqiyatli deb aytmaydi va narxni taxmin qilmaydi — bular platforma/backenda tekshiriladi.',
-    'Bron qilish qadamlari haqida aniq ayt: 1) xona sahifasi, 2) sana/vaqt/zonani tanlash, 3) promo-kod (agar bo\'lsa), 4) to\'lov (Uzum/Click/Payme/naqd), 5) tasdiqlanish.',
+    'Bron qilish qadamlari haqida aniq ayt: 1) xona sahifasi, 2) sana/vaqt/zonani tanlash, 3) promo-kod (agar bo\'lsa), 4) to\'lov (Click/PayMe/naqd), 5) tasdiqlanish.',
     'Havolalarni /rooms, /chat, /profile, /news kabi sahifa nomlari bilan ko\'rsat.',
     'Foydalanuvchining tiliga moslash: o\'zbekcha — o\'zbekcha, ruscha — ruscha, inglizcha — inglizcha javob ber.',
     'Javobni 3-6 qisqa paragraf yoki ro\'yxat shaklida yoz, uzun bo\'lmasin.',
@@ -209,7 +215,7 @@ async function buildContext(): Promise<string> {
   const newsLines = news.map((n) => `• [${n.type}] ${n.title} — ${n.content.slice(0, 90)}`);
 
   const faq = [
-    'Qanday to\'lash mumkin? — Uzum, Click, PayMe, UZCard/HUMO kartasi yoki xonada naqd. Bron 30% avans, qolgani 70% bron vaqtida.',
+    'Qanday to\'lash mumkin? — Click, PayMe yoki xonada naqd pul. Bron 30% avans, qolgani 70% bron vaqtida.',
     'Bronni qanday bekor qilish? — Profil > Bronlar bo\'limi, yoki admin/super admin\'ga murojaat qiling.',
     'Bonus ballar qanday ishlaydi? — Har to\'lovdan bonus ballar yig\'iladi (1 ball = 1 so\'m), keyingi bronlarda ishlatish mumkin.',
     'Parol unutildi? — Login sahifasida "Parolni unutdingizmi" tugmasi orqali email\'ga havola yuboriladi.',
@@ -234,6 +240,35 @@ async function buildContext(): Promise<string> {
 
 function countWords(msg: string): number {
   return msg.trim().split(/\s+/).filter(Boolean).length;
+}
+
+// ---------- Bugungi jonli mavjudlik (AI bu ma'lumotni haqiqiy premium sifatida beradi) ----------
+async function buildAvailabilityContext(): Promise<string> {
+  const nowStr = tashkentNowHHMM();
+  const nowMin = parseTime(nowStr) ?? 0;
+  const rooms = await prisma.computerRoom.findMany({
+    where: { status: 'ACTIVE' },
+    select: {
+      name: true,
+      address: true,
+      workingHours: true,
+      zones: { select: { computers: { select: { status: true } } } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 4,
+  });
+  if (!rooms.length) return 'BUGUNGI MAVJUDLIK: hozircha faol xona yo\'q.';
+
+  const lines = rooms.map((r) => {
+    const wh = normalizeWorkingHours((r.workingHours as any) || null);
+    const comps = (r.zones || []).flatMap((z) => z.computers || []);
+    const freeNow = comps.filter((c) => c.status === 'AVAILABLE').length;
+    const openLabel = minutesToHHMM(wh.open > 1440 ? wh.open - 1440 : wh.open);
+    const closeLabel = wh.close % 1440 === 0 ? '24:00' : minutesToHHMM(wh.close);
+    return `• ${r.name}${r.address ? ` (${r.address})` : ''} — hozir bo'sh kompyuterlar ${freeNow}/${comps.length}, ish vaqti ${openLabel}-${closeLabel}`;
+  });
+
+  return `BUGUNGI MAVJUDLIK (${nowStr} da):\n${lines.join('\n')}\n\n(Javobda "hozir bo'sh" degan raqamlarni faqat KONTEKSTDAN oling, ular vaqt o'tishi bilan o'zgaradi.)`;
 }
 
 // ---------- Foydalanuvchi shaxsiy konteksti (o'qish uchun, faqat o'zi haqida) ----------
@@ -412,12 +447,14 @@ export const chat = async (req: AuthRequest, res: ExpressResponse, next: NextFun
     const latN = Number(lat);
     const lngN = Number(lng);
 
-    // 1) Platforma konteksti + foydalanuvchining o'z ma'lumotlari (faqat o'qish)
-    const [platform, userCtx] = await Promise.all([
+    // 1) Platforma konteksti + foydalanuvchining o'z ma'lumotlari (faqat o'qish) + bugungi mavjudlik
+    const [platform, userCtx, availability] = await Promise.all([
       buildContext(),
       buildUserContext(req.user!.userId),
+      buildAvailabilityContext(),
     ]);
-    const context = `===== FOYDALANUVCHI MA'LUMOTI =====\n${userCtx}\n\n` + platform;
+    const context =
+      `===== FOYDALANUVCHI MA'LUMOTI =====\n${userCtx}\n\n` + platform + '\n\n' + availability;
 
     // 2) Haqiqiy Gemini bilan javob berish (taym-aut va fallback bilan)
     let reply: string | null = null;

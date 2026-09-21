@@ -14,9 +14,11 @@ export function errorHandler(err: any, req: Request, res: Response, next: NextFu
   }
 
   const status = err.status || 500;
+  // Ichki tafsilotlar (SMTP xato matni, SQL, stack) foydalanuvchiga chiqarilmaydi —
+  // faqat logda qoladi. Foydalanuvchiga tushunarli umumiy xabar.
   return res.status(status).json({
     success: false,
-    message: err.message || 'Serverda xatolik yuz berdi',
+    message: status >= 500 ? 'Serverda xatolik yuz berdi. Iltimos, birozdan keyin qayta urinib ko\'ring.' : err.message || 'Noto\'g\'ri so\'rov',
   });
 }
 
