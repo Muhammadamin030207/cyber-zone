@@ -121,30 +121,85 @@ model User {
   role                 Role                 @default(USER)
   language             String               @default("uz") // uz | ru | en
   status               UserStatus           @default(ACTIVE)
-  loyaltyBalance       Int                  @default(0) @map("loyalty_balance") // bonus ballar (1 ball = 1 so'm)
-  resetToken           String?              @unique @map("reset_token")
-  resetTokenExpiresAt  DateTime?            @map("reset_token_expires_at")
-  // Brute-force himoyasi: ketma-ket xato urinishlar va vaqtincha bloklash
-  failedLoginAttempts  Int                  @default(0) @map("failed_login_attempts")
-  loginLockStage       Int                  @default(0) @map("login_lock_stage") // progressiv blok bosqichi (0,1,2...)
-  loginLockedUntil     DateTime?            @map("login_locked_until")
-  createdAt            DateTime             @default(now()) @map("created_at")
-  updatedAt            DateTime             @updatedAt @map("updated_at")
+loyaltyBalance Int @default(0) @map("loyalty_balance") // bonus ballar (1 ball = 1 so'm)
 
-  computerRoom          ComputerRoom? // admin egalik qiladi
-  bookings              Booking[]
-  payments              Payment[]
-  news                  News[]
-  reviews               Review[]
-  notifications         Notification[]
-  promoCodes            PromoCode[]
-  barOrders             BarOrder[]
-  chatMessages          ChatMessage[]
-  supportThread         SupportMessage[] @relation("SupportThread")
-  supportSent           SupportMessage[] @relation("SupportSender")
-  loyaltyTransactions   LoyaltyTransaction[]
+  resetToken           String?   @unique @map("reset_token")
+  resetTokenExpiresAt  DateTime? @map("reset_token_expires_at")
+  // VaQTINCHALIK PAROL (forgot-password): hash saqlanadi, plain text hech qachon DB'da yo'q
+  tempPasswordHash      String?  @map("temp_password_hash")
+  tempPasswordExpiresAt DateTime? @map("temp_password_expires_at")
+  // Login bilan: parolni majburiy yangilash (vaqtinchalik parol bilan kirilganda)
+  mustChangePassword Boolean @default(false) @map("must_change_password")
+
+  // WebAuthn/Passkey: platform Face ID / fingerprint / security key
+  requirePasskey Boolean @default(false) @map("require_passkey") // server-enforced "verify with passkey" policy
+
+  // Brute-force himoyasi: ketma-ket xato urinishlar va vaqtincha bloklash
+  failedLoginAttempts  Int      @default(0) @map("failed_login_attempts")
+  loginLockStage       Int      @default(0) @map("login_lock_stage") // progressiv blok bosqichi (0,1,2...)
+  loginLockedUntil     DateTime? @map("login_locked_until")
+
+  // Server-side session invalidation: har bir JWT shu versiyani olib yuradi.
+  // Logout / parol o'zgartirishda oshiriladi — eski tokenlar darhol kuchsizlanadi.
+  tokenVersion Int @default(0) @map("token_version")
+
+  // TOTP (RFC 6238) ikki faktorli autentifikatsiya. Secret faqat 2FA yoqilganda
+  // saqlanadi; `twoFactorConfirmedAt` — setup tugallanganini bildiradi.
+  twoFactorEnabled     Boolean   @default(false) @map("two_factor_enabled")
+  twoFactorSecret      String?   @map("two_factor_secret")
+  twoFactorConfirmedAt DateTime? @map("two_factor_confirmed_at")
+  // Bir martalik tiklash kodlari (bcrypt hash'lar massivi, JSON)
+  twoFactorBackupCodes Json?     @map("two_factor_backup_codes")
+
+  // "Yangi qurilma" aniqlash uchun oxirgi muvaffaqiyatli login ma'lumotlari
+  lastLoginAt        DateTime? @map("last_login_at")
+  lastLoginIp        String?   @map("last_login_ip")
+  lastLoginUserAgent String?   @map("last_login_user_agent")
+
+  securityEvents SecurityEvent[]
+
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  computerRoom ComputerRoom? // admin egalik qiladi
+  bookings     Booking[]
+  payments     Payment[]
+  news         News[]
+  reviews      Review[]
+  notifications Notification[]
+  promoCodes   PromoCode[]
+  barOrders    BarOrder[]
+  chatMessages ChatMessage[]
+  passkeys     Passkey[]
+  conversations AIConversation[]
+  supportThread SupportMessage[] @relation("SupportThread")
+  supportSent   SupportMessage[] @relation("SupportSender")
+  loyaltyTransactions LoyaltyTransaction[]
 
   @@map("users")
+}
+
+// ============ XAVFSIZLIK VOQEALARI (AUDIT) ============
+// Har bir muhim xavfsizlik hodisasi (login, lockout, parol o'zgarishi, 2FA,
+// passkey va boshqalar) shu yerda qat'iy qayd etiladi — Security Center va audit
+// uchun. Faqat append-only jadval; hech narsa o'chirilmaydi/tahrirlanmaydi.
+model SecurityEvent {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  // LOGIN_SUCCESS | LOGIN_FAILED | LOGIN_LOCKED | LOGIN_UNLOCKED |
+  // PASSWORD_CHANGED | PASSWORD_RESET | TWOFA_ENABLED | TWOFA_DISABLED |
+  // TWOFA_RECOVERY_USED | PASSKEY_ADDED | PASSKEY_REMOVED | LOGOUT | SESSION_REVOKED
+  type      String   @map("type")
+  ip        String?  @map("ip")
+  userAgent String?  @map("user_agent")
+  metadata  Json?    @map("metadata")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+  @@map("security_events")
 }
 
 model ComputerRoom {
@@ -459,4 +514,58 @@ model LoyaltyTransaction {
   @@index([userId])
   @@index([bookingId])
   @@map("loyalty_transactions")
+}
+
+// ============ WEBAUTHN / PASSKEY (Face ID, fingerprint, security key) ============
+// Server-da credential metadatasi saqlanadi. Privpat key HECH QACHON serverga
+// yuborilmaydi — WebAuthn attestation/assertion signature orqali ishlaydi.
+model Passkey {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  // WebAuthn credential ID (base64url) — unique
+  credentialId String   @unique @map("credential_id")
+  // Credential public key (Buffer) — private key serverda YO'Q
+  publicKey    Bytes    @map("public_key")
+  counter      BigInt   @default(0) @map("counter") // replay himoyasi
+  // Authenticator transports (usb, internal, nfc, ble) — JSON nusxasi
+  transports   Json?
+  deviceName   String   @default("") @map("device_name") // user tomonidan nomlanadi
+  // Qaysi AAGUID (authenticator modeli) — platforma, might be empty
+  aaguid       String?  @default("") @map("aaguid")
+  createdAt    DateTime @default(now()) @map("created_at")
+  lastUsedAt   DateTime? @map("last_used_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("passkeys")
+}
+
+// ============ AI SUHBATLAR (conversations / messages) ============
+model AIConversation {
+  id        String      @id @default(uuid())
+  userId    String      @map("user_id")
+  title     String      @default("Yangi suhbat") @map("title")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AIMessage[]
+
+  @@index([userId, updatedAt])
+  @@map("ai_conversations")
+}
+
+model AIMessage {
+  id             String        @id @default(uuid())
+  conversationId String        @map("conversation_id")
+  role           String        // user | assistant | system
+  content        String
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  conversation AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
 }

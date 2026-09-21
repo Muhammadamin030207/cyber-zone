@@ -11,6 +11,9 @@ export interface User {
   status: 'ACTIVE' | 'BLOCKED';
   loyaltyBalance?: number;
   createdAt?: string;
+  mustChangePassword?: boolean;
+  requirePasskey?: boolean;
+  twoFactorEnabled?: boolean;
 }
 
 export interface AuthResponse {

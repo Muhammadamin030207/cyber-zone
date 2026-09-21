@@ -16,7 +16,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     // Token faqat token emas — foydalanuvchi hali ham mavjud va faol ekanini tekshiramiz
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { id: true, role: true, status: true },
+      select: { id: true, role: true, status: true, tokenVersion: true },
     });
     if (!user) {
       return res.status(401).json({ success: false, message: 'Foydalanuvchi topilmadi' });
@@ -25,7 +25,18 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       return res.status(403).json({ success: false, message: 'Foydalanuvchi bloklangan' });
     }
 
-    req.user = { userId: user.id, email: decoded.email, role: user.role as JwtPayload['role'] };
+    // Server-side sessiya bekor qilish: logout/parol o'zgarishidan keyin eski
+    // tokenlardan foydalanib bo'lmaydi (tokenVersion mos kelmasa rad etiladi).
+    if ((decoded.tokenVersion ?? 0) !== user.tokenVersion) {
+      return res.status(401).json({ success: false, message: 'Sessiya tugagan. Iltimos, qaytadan kiring.', code: 'SESSION_INVALIDATED' });
+    }
+
+    req.user = {
+      userId: user.id,
+      email: decoded.email,
+      role: user.role as JwtPayload['role'],
+      tokenVersion: user.tokenVersion,
+    };
     next();
   } catch (error) {
     return res.status(401).json({ success: false, message: 'Token yaroqsiz yoki muddati otgan' });

@@ -5,18 +5,29 @@ import { persist } from 'zustand/middleware';
 import api, { setAccessToken, setRefreshToken, getApiErrorMessage } from '@/lib/api';
 import type { AuthResponse, User } from '@/lib/types';
 
+export interface LoginResult {
+  success: boolean;
+  code?: string;
+  message?: string;
+  data?: AuthResponse;
+  pendingLoginToken?: string;
+  userId?: string;
+  mustChangePassword?: boolean;
+}
+
 interface AuthState {
   user: User | null;
   token: string | null;
   refreshToken: string | null;
   initialized: boolean;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginResult>;
   googleLogin: (idToken: string) => Promise<{ data?: { data?: { pendingRegister?: boolean; profile?: any; user?: User } } } | undefined>;
   register: (data: { email: string; password?: string; fullName: string; phone?: string; language?: string; googleToken?: string }) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   setAuth: (auth: AuthResponse) => void;
   updateUser: (patch: Partial<User>) => void;
+  setNewPassword: (newPassword: string, currentPassword?: string) => Promise<void>;
   fetchMe: () => Promise<void>;
   clearError: () => void;
   error: string | null;
@@ -44,14 +55,61 @@ export const useAuthStore = create<AuthState>()(
         set({ user: { ...current, ...patch } });
       },
 
-      login: async (email, password) => {
+      login: async (email, password): Promise<LoginResult> => {
         set({ loading: true, error: null });
         try {
-          const { data } = await api.post<{ success: boolean; data: AuthResponse }>('/api/auth/login', {
-            email,
-            password,
-          });
-          get().setAuth(data.data);
+          const res = await api.post<{
+            success: boolean;
+            code?: string;
+            message?: string;
+            data?: AuthResponse & { userId?: string; pendingLoginToken?: string; mustChangePassword?: boolean };
+          }>('/api/auth/login', { email, password });
+
+          // Oddiy muvaffaqiyatli login
+          if (res.data?.success && res.data?.data) {
+            get().setAuth(res.data.data);
+            return { success: true, data: res.data.data };
+          }
+
+          // PASSKEY_REQUIRED (202): parol to'g'ri, passkey ikkinchi bosqichi kerak
+          if (res.data?.code === 'PASSKEY_REQUIRED' && res.data?.data) {
+            set({ error: null });
+            return {
+              success: false,
+              code: res.data.code,
+              message: res.data.message,
+              pendingLoginToken: res.data.data.pendingLoginToken,
+              userId: res.data.data.userId,
+              mustChangePassword: res.data.data.mustChangePassword,
+            };
+          }
+
+          // TWO_FACTOR_REQUIRED (202): parol to'g'ri, TOTP kodi kerak
+          if (res.data?.code === 'TWO_FACTOR_REQUIRED' && res.data?.data) {
+            set({ error: null });
+            return {
+              success: false,
+              code: res.data.code,
+              message: res.data.message,
+              pendingLoginToken: res.data.data.pendingLoginToken,
+              userId: res.data.data.userId,
+            };
+          }
+
+          // MUST_CHANGE_PASSWORD: temp parol bilan kirdi — yangi parol majburiy
+          if (res.data?.code === 'MUST_CHANGE_PASSWORD' && res.data?.data) {
+            if (res.data.data.accessToken) get().setAuth(res.data.data);
+            return {
+              success: false,
+              code: res.data.code,
+              message: res.data.message,
+              data: res.data.data as AuthResponse,
+              mustChangePassword: true,
+            };
+          }
+
+          set({ error: res.data?.message || 'Kirishda xatolik' });
+          return { success: false, code: res.data?.code, message: res.data?.message };
         } catch (err) {
           set({ error: getApiErrorMessage(err, 'Kirishda xatolik') });
           throw err;
@@ -93,7 +151,22 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: () => {
+      logout: async () => {
+        // Server-side sessiyani bekor qilish (tokenVersion++). Tarmoq xatosi bo'lsa
+        // ham lokal holat tozalanadi (foydalanuvchi tizimdan chiqqan hisoblanadi).
+        try {
+          if (get().token) await api.post('/api/auth/logout');
+        } catch {
+          /* ignore — lokal logout baribir bajariladi */
+        }
+        setAccessToken(null);
+        setRefreshToken(null);
+        set({ user: null, token: null, refreshToken: null });
+      },
+
+      setNewPassword: async (newPassword, currentPassword) => {
+        await api.post('/api/auth/set-new-password', { newPassword, currentPassword });
+        // Parol almashdi — lokal foydalanuvchi tozalanadi, qayta login talab qilinadi
         setAccessToken(null);
         setRefreshToken(null);
         set({ user: null, token: null, refreshToken: null });

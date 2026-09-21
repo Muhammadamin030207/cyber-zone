@@ -13,7 +13,7 @@ export default function ForgotPasswordPage({ params }: { params: Promise<{ local
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ message: string; devToken?: string } | null>(null);
+  const [done, setDone] = useState<{ message: string; devTempPassword?: string } | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,8 +23,8 @@ export default function ForgotPasswordPage({ params }: { params: Promise<{ local
     try {
       const { data } = await api.post('/api/auth/forgot-password', { email });
       setDone({
-        message: data?.message || 'Parolni tiklash havolasi emailingizga yuborildi',
-        devToken: data?.data?.devToken,
+        message: data?.message || 'Vaqtinchalik parol emailingizga yuborildi',
+        devTempPassword: data?.data?.devTempPassword,
       });
     } catch (err) {
       setError(getApiErrorMessage(err));
@@ -55,7 +55,8 @@ export default function ForgotPasswordPage({ params }: { params: Promise<{ local
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight mb-1">Parolni tiklash</h1>
           <p className="text-sm text-gray-400 mb-6">
-            Emailingizni kiriting — parolni tiklash havolasini yuboramiz.
+            Emailingizni kiriting — <b className="text-neon-cyan">vaqtinchalik parol</b> yuboramiz.
+            Bu parol bilan kirib, darhol yangi parol o&apos;rnatasiz.
           </p>
 
           {done ? (
@@ -64,11 +65,16 @@ export default function ForgotPasswordPage({ params }: { params: Promise<{ local
                 <CheckCircle2 size={16} className="shrink-0 mt-0.5" />
                 <span>{done.message}</span>
               </div>
-              {done.devToken && (
+              {done.devTempPassword && (
                 <div className="px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 mb-4 break-all">
-                  <b>Dev tokeningiz:</b> {done.devToken}
+                  <b>Dev (sinov) vaqtinchalik parol:</b>{' '}
+                  <code className="font-mono font-bold">{done.devTempPassword}</code>
                 </div>
               )}
+              <div className="mb-4 px-3 py-2.5 rounded-lg bg-neon-cyan/5 border border-neon-cyan/20 text-xs text-gray-300 leading-relaxed">
+                Kirishda so&apos;ralgan yangi parol oynasida xohlagan parolingizni o&apos;rnating.
+                Bitta parol faqat bitta kirishda ishlatiladi.
+              </div>
               <Link href="/login" className="block w-full text-center py-3 rounded-xl neon-btn text-sm font-bold">
                 Kirish sahifasiga qaytish
               </Link>
@@ -102,7 +108,7 @@ export default function ForgotPasswordPage({ params }: { params: Promise<{ local
                 className="w-full py-3 rounded-xl neon-btn flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {submitting ? <Loader2 size={18} className="animate-spin" /> : <Mail size={18} />}
-                Havolani yuborish
+                Vaqtinchalik parol yuborish
               </button>
             </form>
           )}

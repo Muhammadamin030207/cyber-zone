@@ -68,6 +68,19 @@ services:
       # Muddati o'tgan to'lanmagan bron avtomatik bekor qilingan vaqt (daqiqa)
       - key: UNPAID_BOOKING_TTL_MINUTES
         value: 60
+      # To'lov provayderlari callback/webhook bazaviy URL — mahalliy "localhost"ga tushmaslik
+      - key: PROVIDER_CALLBACK_URL
+        value: https://cyberzone-backend-api.onrender.com
+      # Login brute-force: progressiv bloklash (1-soat -> 2-soat -> 5-soat -> 24-soat, hisob bo'yicha)
+      - key: LOGIN_LOCK_MINUTES
+        value: "60,120,300,1440"
+      - key: LOGIN_MAX_ATTEMPTS
+        value: "10"
+      # WebAuthn: Frontend domeni (passkey bog'langan origin)
+      - key: WEBAUTHN_RP_ID
+        value: cyber-zone-delta.vercel.app
+      - key: WEBAUTHN_EXPECTED_ORIGINS
+        value: https://cyber-zone-delta.vercel.app, https://frontend-six-bay-25.vercel.app, https://frontend-fullstacks-projects-ffc4c9c9.vercel.app, https://cyber-zone-fullstacks-projects-ffc4c9c9.vercel.app
       - key: NODE_ENV
         value: production
       - key: PORT

@@ -61,15 +61,33 @@ export const config = {
     },
   },
   security: {
-    // Login brute-force himoyasi: nechta ketma-ket xato urinishdan keyin bloklash
-    // va blok muddatlari (daqiqa). Avvalgi bosqichlar tez(keyin 24 soat).
-    // Oxirgi qiymat keyingi barcha bloklar uchun ishlatiladi. Env orqali
-    // sozlanadi (hardcode emas). Default: 10 xato urinish -> 24 soat blok.
+    // Login brute-force himoyasi: hisob bo'yicha ketma-ket xato urinishlar soni
+    // va progressiv blok muddatlari (daqiqa): 1-soat -> 2-soat -> 5-soat -> 24-soat.
+    // Oxirgi qiymat keyingi barcha bloklar uchun qoladi. Env orqali sozlanadi
+    // (hardcode emas). Bu GLOBAL emas — faqat shu hisobga tegishli.
     loginMaxAttempts: Math.max(1, parseInt(process.env.LOGIN_MAX_ATTEMPTS || '10', 10)),
-    loginLockMinutes: (process.env.LOGIN_LOCK_MINUTES || '1440')
+    loginLockMinutes: (process.env.LOGIN_LOCK_MINUTES || '60,120,300,1440')
       .split(',')
       .map((v) => parseInt(v.trim(), 10))
       .filter((v) => Number.isFinite(v) && v > 0),
+  },
+  webauthn: {
+    // WebAuthn/Passkey sozlamalari. rpID — passkey bog'langan domain (production:
+    // frontend domain). expectedOrigins — CORS bilan mos.
+    rpName: process.env.WEBAUTHN_RP_NAME || 'Cyber-ZONE',
+    rpID:
+      process.env.WEBAUTHN_RP_ID ||
+      (() => {
+        const firstUrl = (process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:3006')
+          .split(',')[0]
+          .trim();
+        return new URL(firstUrl).hostname;
+      })(),
+    expectedOrigins: (process.env.WEBAUTHN_EXPECTED_ORIGINS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    tempPasswordMinutes: Math.max(10, parseInt(process.env.TEMP_PASSWORD_MINUTES || '30', 10)),
   },
   ai: {
     geminiApiKey: process.env.GEMINI_API_KEY || '',

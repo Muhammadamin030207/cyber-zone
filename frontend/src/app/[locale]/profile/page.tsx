@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   Mail, Phone, UserRound, Save, Loader2, KeyRound, ShieldCheck, CalendarDays, LogOut, Coins,
-  Lock, Camera, X, Undo2,
+  Lock, Camera, X, Undo2, Languages,
 } from 'lucide-react';
 import { useRouter, Link } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
@@ -12,6 +12,9 @@ import api, { getApiErrorMessage } from '@/lib/api';
 import { toastSuccess, toastError } from '@/lib/toast';
 import { confirmDialog } from '@/lib/confirm';
 import SupportChat from '@/components/support/SupportChat';
+import PasskeySettings from '@/components/profile/PasskeySettings';
+import TwoFactorSettings from '@/components/profile/TwoFactorSettings';
+import SecurityActivity from '@/components/profile/SecurityActivity';
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -26,12 +29,13 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const initialized = useAuthStore((s) => s.initialized);
-  const setAuth = useAuthStore((s) => s.setAuth);
+  const updateUser = useAuthStore((s) => s.updateUser);
   const logout = useAuthStore((s) => s.logout);
   const token = useAuthStore((s) => s.token);
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [language, setLanguage] = useState('uz');
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
@@ -54,6 +58,7 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
       queueMicrotask(() => {
         setFullName(u.fullName || '');
         setPhone(u.phone || '');
+        setLanguage(u.language || 'uz');
         setAvatarUrl(u.avatarUrl || null);
         setDirty(false);
         setPreview(null);
@@ -83,8 +88,8 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
     }
     setSaving(true);
     try {
-      const { data } = await api.put('/api/auth/profile', { fullName: name, phone: phone.trim() });
-      setAuth({ user: { ...currentUser, ...(data.data || {}) }, accessToken: token!, refreshToken: '' });
+      const { data } = await api.put('/api/auth/profile', { fullName: name, phone: phone.trim(), language });
+      updateUser({ ...(data.data || {}) });
       setDirty(false);
       toastSuccess("Ma'lumotlar saqlandi");
     } catch (e) {
@@ -96,6 +101,7 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
   function resetProfile() {
     setFullName(currentUser.fullName || '');
     setPhone(currentUser.phone || '');
+    setLanguage(currentUser.language || 'uz');
     setPreview(null);
     setAvatarUrl(currentUser.avatarUrl || null);
     if (fileRef.current) fileRef.current.value = '';
@@ -116,7 +122,7 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
       fd.append('file', file);
       const { data } = await api.post('/api/auth/avatar', fd);
       const newAvatar = data.data?.avatarUrl || avatarUrl;
-      setAuth({ user: { ...currentUser, avatarUrl: newAvatar }, accessToken: token!, refreshToken: '' });
+      updateUser({ avatarUrl: newAvatar });
       setAvatarUrl(newAvatar);
       toastSuccess('Avatar yangilandi');
     } catch (e) {
@@ -136,9 +142,12 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
     setPassSaving(true);
     try {
       await api.put('/api/auth/change-password', { oldPassword: oldPass, newPassword: newPass });
-      toastSuccess("Parol o'zgartirildi");
+      // Backend barcha sessiyalarni bekor qiladi (tokenVersion++) — qayta login shart.
       setOldPass('');
       setNewPass('');
+      toastSuccess("Parol o'zgartirildi. Xavfsizlik uchun qaytadan kiring.");
+      await logout();
+      router.push('/login');
     } catch (e) {
       toastError(getApiErrorMessage(e, 'Parol almashishda xatolik'));
     }
@@ -154,7 +163,7 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
       danger: true,
     });
     if (ok) {
-      logout();
+      await logout();
       router.push('/');
     }
   }
@@ -266,6 +275,21 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
                 />
               </div>
               <div>
+                <label htmlFor="profile-language" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5 flex items-center gap-1">
+                  <Languages size={12} /> Interfeys tili
+                </label>
+                <select
+                  id="profile-language"
+                  value={language}
+                  onChange={(e) => { setLanguage(e.target.value); setDirty(true); }}
+                  className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
+                >
+                  <option value="uz">O&apos;zbekcha</option>
+                  <option value="ru">Русский</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
+              <div>
                 <label htmlFor="profile-email" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5 flex items-center gap-1">
                   <Mail size={12} /> Email
                 </label>
@@ -348,6 +372,18 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
               </button>
             </div>
           </div>
+
+          {/* Ikki faktorli himoya (TOTP) */}
+          <TwoFactorSettings />
+
+          {/* Passkey / biometriya */}
+          <PasskeySettings />
+
+          {/* Ikki faktorli himoya (TOTP) */}
+          <TwoFactorSettings />
+
+          {/* So'nggi xavfsizlik voqealari */}
+          <SecurityActivity />
 
           <button
             onClick={handleLogout}

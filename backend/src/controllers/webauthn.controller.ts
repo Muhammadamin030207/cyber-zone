@@ -1,0 +1,445 @@
+import { Request, Response, NextFunction } from 'express';
+import jwt, { Secret } from 'jsonwebtoken';
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+} from '@simplewebauthn/server';
+import type {
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from '@simplewebauthn/server';
+import { config } from '../config';
+import prisma from '../lib/prisma';
+import { AuthRequest } from '../types';
+import { generateTokens } from '../lib/jwt';
+import { ok, badRequest, forbidden, notFoundMsg, serverError } from '../utils/response';
+import bcrypt from 'bcryptjs';
+import { verifyTotp } from '../utils/totp';
+import { sendSecurityAlert, clientIp, describeUserAgent, recordSecurityEvent } from '../lib/securityAlerts';
+
+// ============ SERVER-SIDE CHALLENGE STORAGE ============
+// Challenge faqat serverda saqlanadi — client mustaqil yaratmaydi, signature
+// server tomonidan tekshiriladi. Hozircha in-memory (bitta instance uchun);
+// ko'p-instansiyali deploy'da Redis'ga ko'chirilishi kerak.
+const challengeTTLMs = 5 * 60 * 1000; // 5 daqiqa
+const challengeStore = new Map<string, { value: string; expiresAt: number }>();
+
+function setChallenge(key: string, value: string) {
+  challengeStore.set(key, { value, expiresAt: Date.now() + challengeTTLMs });
+  setTimeout(() => challengeStore.delete(key), challengeTTLMs);
+}
+
+function getChallenge(key: string): string | null {
+  const entry = challengeStore.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    challengeStore.delete(key);
+    return null;
+  }
+  challengeStore.delete(key); // single-use
+  return entry.value;
+}
+
+/** Frontend origin — WebAuthn expectedOrigin (mavjud FRONTEND_URLS dan). */
+function expectedOrigins(): string[] {
+  if (config.webauthn.expectedOrigins.length) return config.webauthn.expectedOrigins;
+  return config.frontendUrls;
+}
+
+function rpID(): string {
+  return config.webauthn.rpID;
+}
+
+function rpName(): string {
+  return config.webauthn.rpName;
+}
+
+// ============ REGISTRATION ============
+// POST /api/webauthn/register/options (auth)
+export async function registerOptions(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+    if (!user) return notFoundMsg(res, 'Foydalanuvchi topilmadi');
+
+    // Foydalanuvchi oldin ro'yxatdan o'tgan credentiallari — takroriy ro'yxatdan o'tishni cheklash
+    const existing = await prisma.passkey.findMany({
+      where: { userId: user.id },
+      select: { credentialId: true, transports: true },
+    });
+
+    const options: PublicKeyCredentialCreationOptionsJSON = await generateRegistrationOptions({
+      rpName: rpName(),
+      rpID: rpID(),
+      userName: user.email,
+      userDisplayName: user.fullName,
+      userID: Buffer.from(user.id),
+      attestationType: 'none',
+      timeout: 60_000,
+      excludeCredentials: existing.map((c) => ({
+        id: c.credentialId,
+        transports: Array.isArray(c.transports) ? (c.transports as string[]) : ['internal'],
+      })),
+      authenticatorSelection: {
+        residentKey: 'preferred',
+        userVerification: 'preferred',
+      },
+    });
+
+    // Challenge serverda saqlanadi (clientga berilmaydi)
+    setChallenge(`wa:reg:${user.id}`, options.challenge);
+
+    return ok(res, options);
+  } catch (err) {
+    console.error('[webauthn] register options:', (err as Error).message);
+    next(err as Error);
+  }
+}
+
+// POST /api/webauthn/register/verify (auth)
+export async function registerVerify(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { response, deviceName } = req.body;
+    if (!response) return badRequest(res, 'WebAuthn response talab qilinadi');
+    const userId = req.user!.userId;
+
+    const expectedChallenge = getChallenge(`wa:reg:${userId}`);
+    if (!expectedChallenge) return badRequest(res, 'Registratsiya challenge muddati o\'tgan. Qayta urinib ko\'ring.');
+
+    let verification;
+    try {
+      verification = await verifyRegistrationResponse({
+        response,
+        expectedChallenge,
+        expectedOrigin: expectedOrigins(),
+        expectedRPID: rpID(),
+        requireUserVerification: false,
+      });
+    } catch (verifyErr) {
+      console.warn('[webauthn] register verify rad etildi:', (verifyErr as Error).message);
+      return badRequest(res, 'WebAuthn registratsiyasi tasdiqlanmadi');
+    }
+
+    if (!verification.verified || !verification.registrationInfo) {
+      return badRequest(res, 'WebAuthn registratsiyasi tasdiqlanmadi');
+    }
+
+    const { credential } = verification.registrationInfo;
+    const existing = await prisma.passkey.findUnique({
+      where: { credentialId: credential.id },
+      select: { id: true },
+    });
+    if (existing) return badRequest(res, 'Ushbu passkey allaqachon ro\'yxatdan o\'tgan');
+
+    // Private key SERVERGA YUBORILMAYDI — faqat public key + counter saqlanadi.
+    const passkey = await prisma.passkey.create({
+      data: {
+        userId,
+        credentialId: credential.id,
+        publicKey: Buffer.from(credential.publicKey),
+        counter: BigInt(credential.counter),
+        deviceName: String(deviceName || '').trim() || 'Yangi qurilma',
+        transports: (response.response.transports as string[]) || ['internal'],
+        aaguid: verification.registrationInfo.aaguid || '',
+      },
+    });
+
+    const owner = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, fullName: true } });
+    if (owner) {
+      void recordSecurityEvent(userId, 'PASSKEY_ADDED', {
+        ip: clientIp(req),
+        userAgent: req.headers['user-agent'] as string | undefined,
+        metadata: { deviceName: passkey.deviceName },
+      });
+      void sendSecurityAlert(owner.email, owner.fullName, 'PASSKEY_ADDED', {
+        ip: clientIp(req),
+        device: describeUserAgent(req.headers['user-agent'] as string | undefined),
+        userAgent: passkey.deviceName,
+        when: new Date(),
+      });
+    }
+
+    return ok(res, { passkeyId: passkey.id, deviceName: passkey.deviceName }, 'Passkey muvaffaqiyatli qo\'shildi');
+  } catch (err) {
+    console.error('[webauthn] register verify:', (err as Error).message);
+    next(err as Error);
+  }
+}
+
+// ============ AUTHENTICATION (passwordless / second factor) ============
+// POST /api/webauthn/auth/options  (email orqali -> allowed credentials)
+export async function authOptions(req: Request, res: Response, next: NextFunction) {
+  try {
+    const email = String(req.body?.email || '').toLowerCase().trim();
+    if (!email) return badRequest(res, 'Email talab qilinadi');
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, status: true },
+    });
+    // Enumeration oldini olish — passkey yo'q userlarga ham generic xato
+    if (!user) return badRequest(res, 'Ushbu qurilmada passkey ro\'yxatdan o\'tgan emas');
+
+    const credentials = await prisma.passkey.findMany({
+      where: { userId: user.id },
+      select: { credentialId: true, transports: true },
+    });
+    if (!credentials.length) {
+      return badRequest(res, 'Ushbu qurilmada passkey ro\'yxatdan o\'tgan emas');
+    }
+
+    const options: PublicKeyCredentialRequestOptionsJSON = await generateAuthenticationOptions({
+      rpID: rpID(),
+      timeout: 60_000,
+      allowCredentials: credentials.map((c) => ({
+        id: c.credentialId,
+        type: 'public-key',
+        transports: Array.isArray(c.transports) ? (c.transports as string[]) : ['internal'],
+      })),
+      userVerification: 'preferred',
+    });
+
+    setChallenge(`wa:auth:${user.id}`, options.challenge);
+
+    return ok(res, { options, userId: user.id });
+  } catch (err) {
+    next(err as Error);
+  }
+}
+
+// POST /api/webauthn/auth/verify  (authentication assertion + login)
+export async function authVerify(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { response, userId, pendingLoginToken } = req.body;
+    if (!response || !userId) return badRequest(res, 'WebAuthn javob talab qilinadi');
+
+    // PASSKEY_REQUIRED (2-bosqich) holatida: password tekshirildi, pending token berildi.
+    // Endi bu token shu user uchun va hali amalda ekanini server tekshiradi — boshqa
+    // yo'l bilan token berish mumkin emas.
+    if (pendingLoginToken) {
+      try {
+        const decoded = jwt.verify(pendingLoginToken, config.jwt.secret as Secret) as {
+          type?: string;
+          userId?: string;
+          exp?: number;
+        };
+        const okType = decoded.type === 'pending-passkey';
+        const okUser = decoded.userId === userId;
+        const notExpired = typeof decoded.exp === 'number' && decoded.exp * 1000 > Date.now();
+        if (!okType || !okUser || !notExpired) {
+          return badRequest(res, 'Sessiya muddati o\'tgan. Qaytadan parol bilan kiring.');
+        }
+      } catch {
+        return badRequest(res, 'Sessiya muddati o\'tgan. Qaytadan parol bilan kiring.');
+      }
+    }
+
+    const expectedChallenge = getChallenge(`wa:auth:${userId}`);
+    if (!expectedChallenge) return badRequest(res, 'Authentication challenge muddati o\'tgan. Qayta urinib ko\'ring.');
+
+    const passkey = await prisma.passkey.findUnique({
+      where: { credentialId: response.id as string },
+    });
+    if (!passkey) return badRequest(res, 'Passkey topilmadi');
+
+    // Resource owner tekshiruvi: passkey faqat o'z egasiga
+    if (passkey.userId !== userId) return forbidden(res, 'Ushbu passkey boshqa foydalanuvchiga tegishli');
+
+    let verification;
+    try {
+      verification = await verifyAuthenticationResponse({
+        response,
+        expectedChallenge,
+        expectedOrigin: expectedOrigins(),
+        expectedRPID: rpID(),
+        credential: {
+          id: passkey.credentialId,
+          publicKey: new Uint8Array(passkey.publicKey),
+          counter: Number(passkey.counter),
+        },
+        requireUserVerification: false,
+      });
+    } catch (verifyErr) {
+      console.warn('[webauthn] auth verify rad etildi:', (verifyErr as Error).message);
+      return badRequest(res, 'Passkey tekshiruvidan o\'tmadi');
+    }
+
+    if (!verification.verified) return badRequest(res, 'Passkey tekshiruvidan o\'tmadi');
+
+    // Replay himoyasi: counter monotonik o'sishi shart
+    if (verification.authenticationInfo.newCounter <= Number(passkey.counter)) {
+      // Ba'zi authenticatorlar counterni 0 ushlaydi; egalik o'zgarganida bloklash
+      return badRequest(res, 'Passkey qayta ishlatilgan. Yangi imkoniyat kun bosing.');
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return notFoundMsg(res, 'Foydalanuvchi topilmadi');
+    if (user.status !== 'ACTIVE') return forbidden(res, 'Foydalanuvchi bloklangan');
+
+    await prisma.passkey.update({
+      where: { id: passkey.id },
+      data: {
+        counter: BigInt(verification.authenticationInfo.newCounter),
+        lastUsedAt: new Date(),
+      },
+    });
+
+    const tokens = generateTokens({ userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion });
+
+    // Vaqtinchalik parol/temp bosqich bekor bo'lmagan bo'lsa (forgot->passkey) yangi parol majburiy
+    if (user.mustChangePassword) {
+      return res.status(200).json({
+        success: false,
+        code: 'MUST_CHANGE_PASSWORD',
+        message: 'Vaqtinchalik parol bilan kirdingiz. Yangi parol o\'rnatishingiz shart.',
+        data: { user: sanitizeUser(user), ...tokens, mustChangePassword: true },
+      });
+    }
+
+    return ok(res, { user: sanitizeUser(user), ...tokens }, 'Xush kelibsiz!');
+  } catch (err) {
+    console.error('[webauthn] auth verify:', (err as Error).message);
+    next(err as Error);
+  }
+}
+
+// ============ PASSKEY MANAGEMENT ============
+// GET /api/webauthn/passkeys (auth) — o'z passkeylarini ro'yxati
+export async function listPasskeys(req: AuthRequest, res: Response, _next: NextFunction) {
+  try {
+    const passkeys = await prisma.passkey.findMany({
+      where: { userId: req.user!.userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        deviceName: true,
+        createdAt: true,
+        lastUsedAt: true,
+        aaguid: true,
+      },
+    });
+    return ok(res, passkeys);
+  } catch (err) {
+    _next(err as Error);
+  }
+}
+
+// PATCH /api/webauthn/passkeys/:id (auth) — nomini o'zgartirish
+export async function renamePasskey(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const passkey = await prisma.passkey.findUnique({ where: { id: req.params.id } });
+    if (!passkey) return notFoundMsg(res, 'Passkey topilmadi');
+    if (passkey.userId !== req.user!.userId) return forbidden(res, 'Sizga ruxsat berilmagan');
+
+    const deviceName = String(req.body?.deviceName || '').trim().slice(0, 60);
+    if (!deviceName) return badRequest(res, 'Qurilma nomi talab qilinadi');
+
+    const updated = await prisma.passkey.update({
+      where: { id: passkey.id },
+      data: { deviceName },
+      select: { id: true, deviceName: true },
+    });
+    return ok(res, updated, 'Qurilma nomi yangilandi');
+  } catch (err) {
+    next(err as Error);
+  }
+}
+
+// DELETE /api/webauthn/passkeys/:id (auth) — o'chirish (revoke)
+export async function removePasskey(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const passkey = await prisma.passkey.findUnique({ where: { id: req.params.id } });
+    if (!passkey) return notFoundMsg(res, 'Passkey topilmadi');
+    if (passkey.userId !== req.user!.userId) return forbidden(res, 'Sizga ruxsat berilmagan');
+
+    // Foydalanuvchini hech qanday login usuli qolmaydigan qilmaslik
+    const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+    const remaining = await prisma.passkey.count({ where: { userId: req.user!.userId } });
+    if (!user?.passwordHash && !user?.googleId && remaining <= 1) {
+      return badRequest(res, 'Hisobda boshqa login usuli qolmagan. Avval parol o\'rnating.');
+    }
+
+    // Xavfsizlik: passkeyni o'chirishdan oldin qayta autentifikatsiya talab qilinadi.
+    // Parol bo'lsa — parol; bo'lmasa lekin 2FA bo'lsa — TOTP kod; ikkisi ham bo'lmasa
+    // (masalan faqat Google bilan kirgan) — sessiya egasi yetarli.
+    if (user?.passwordHash) {
+      const password = String(req.body?.password || '');
+      const okPass = password ? await bcrypt.compare(password, user.passwordHash) : false;
+      if (!okPass) return badRequest(res, 'Passkeyni o\'chirish uchun joriy parolni kiriting');
+    } else if (user?.twoFactorEnabled && user.twoFactorSecret) {
+      const code = String(req.body?.code || '');
+      if (!code || !verifyTotp(user.twoFactorSecret, code)) {
+        return badRequest(res, 'Passkeyni o\'chirish uchun 2FA kodini kiriting');
+      }
+    }
+
+    await prisma.passkey.delete({ where: { id: passkey.id } });
+
+    if (user) {
+      void recordSecurityEvent(user.id, 'PASSKEY_REMOVED', {
+        ip: clientIp(req),
+        userAgent: req.headers['user-agent'] as string | undefined,
+        metadata: { deviceName: passkey.deviceName },
+      });
+      void sendSecurityAlert(user.email, user.fullName, 'PASSKEY_REMOVED', {
+        ip: clientIp(req),
+        device: describeUserAgent(req.headers['user-agent'] as string | undefined),
+        userAgent: passkey.deviceName,
+        when: new Date(),
+      });
+    }
+
+    return ok(res, null, 'Passkey o\'chirildi');
+  } catch (err) {
+    next(err as Error);
+  }
+}
+
+function sanitizeUser(user: any) {
+  const {
+    passwordHash,
+    resetToken,
+    resetTokenExpiresAt,
+    tempPasswordHash,
+    tempPasswordExpiresAt,
+    failedLoginAttempts,
+    loginLockStage,
+    loginLockedUntil,
+    twoFactorSecret,
+    twoFactorBackupCodes,
+    ...rest
+  } = user;
+  return rest;
+}
+
+// ============ SECURITY POLICY ============
+// PATCH /api/webauthn/settings (auth) — passkey bilan kirishni talab qilish/chertish
+export async function updateRequirePasskey(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { requirePasskey } = req.body;
+    if (typeof requirePasskey !== 'boolean') {
+      return badRequest(res, 'requirePasskey boolean bo\'lishi kerak');
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+    if (!user) return notFoundMsg(res, 'Foydalanuvchi topilmadi');
+
+    if (requirePasskey) {
+      // Passkey talab qilish uchun kamida 1 ta passkey bo'lishi shart (hech kim qulfsiz qolmasligi)
+      const count = await prisma.passkey.count({ where: { userId: user.id } });
+      if (count === 0) {
+        return badRequest(res, 'Avval kamida bitta passkey qo\'shing. So\'ng passkey talabini yoqing.');
+      }
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { requirePasskey },
+    });
+
+    return ok(res, { requirePasskey }, requirePasskey ? 'Passkey tasdiqlash yoqildi' : 'Passkey tasdiqlash o\'chirildi');
+  } catch (err) {
+    next(err);
+  }
+}

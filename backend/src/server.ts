@@ -17,6 +17,8 @@ import notificationRoutes from './routes/notification.routes';
 import barRoutes from './routes/bar.routes';
 import chatRoutes from './routes/chat.routes';
 import aiRoutes from './routes/ai.routes';
+import aiConversationsRoutes from './routes/aiConversations.routes';
+import webauthnRoutes from './routes/webauthn.routes';
 import supportRoutes from './routes/support.routes';
 import loyaltyRoutes from './routes/loyalty.routes';
 import { errorHandler, notFound } from './middlewares/error';
@@ -116,6 +118,11 @@ io.on('connection', (socket) => {
 redisClient.connect().catch((e: Error) => console.warn('[REDIS]', e.message));
 
 // Middlewares
+// Render/Vercel ortidagi proxy — X-Forwarded-For ni ishonchli deb bilamiz.
+// Aks holda barcha foydalanuvchilar bitta proxy IP bilan ko'rinadi va
+// global rate-limit butun platformani birga cheklab qo'yadi.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(
   cors({
@@ -189,6 +196,8 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/bar', barRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/ai', aiConversationsRoutes);
+app.use('/api/webauthn', webauthnRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/loyalty', loyaltyRoutes);
 

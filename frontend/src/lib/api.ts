@@ -26,7 +26,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-const authEndpointRe = /\/api\/auth\/(login|login\/google|register|refresh|forgot-password|reset-password)$/;
+const authEndpointRe = /\/api\/auth\/(login|login\/google|register|refresh|logout|forgot-password|reset-password|2fa\/verify)$/;
 
 // Refresh-token bilan yangi access token olish (single-flight — parallel 401'lar
 // bitta refresh chaqiruvini baham ko'radi). Muvaffaqiyat: auth:refreshed event.

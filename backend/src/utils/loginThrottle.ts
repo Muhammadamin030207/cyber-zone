@@ -4,7 +4,7 @@ import { config } from '../config';
  * Login brute-force himoyasi yordamchilari.
  *
  * Mantiq: ketma-ket `loginMaxAttempts` marta xato parol kiritilsa, hisob
- * vaqtincha bloklanadi. Blok muddati progressiv (default: 5 -> 30 -> 1440 daqiqa).
+ * vaqtincha bloklanadi. Blok muddati progressiv (default: 60 -> 120 -> 300 -> 1440 daqiqa).
  * Blok tugagach hisoblagich noldan boshlanadi, lekin bosqich (stage) saqlanadi —
  * qayta-qayta urinishlar tobora uzoqroq bloklanadi. Muvaffaqiyatli login
  * barcha hisoblagichlarni nolga tushiradi.

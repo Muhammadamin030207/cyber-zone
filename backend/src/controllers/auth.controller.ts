@@ -1,13 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import jwt, { Secret } from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import prisma from '../lib/prisma';
 import { generateTokens, verifyRefreshToken } from '../lib/jwt';
 import { config } from '../config';
 import { AuthRequest } from '../types';
 import { ok, badRequest, unauthorized, notFoundMsg, serverError } from '../utils/response';
-import { sendEmail, buildResetEmail, buildResetText } from '../lib/mailer';
+import { sendEmail, buildResetEmail, buildResetText, buildTempPasswordEmail, buildTempPasswordText } from '../lib/mailer';
+import { sendSecurityAlert, clientIp, describeUserAgent, recordSecurityEvent } from '../lib/securityAlerts';
 import { getLockState, computeAfterFailure, resetData } from '../utils/loginThrottle';
 
 const googleClient = new OAuth2Client(config.google.clientId);
@@ -24,6 +26,55 @@ function normalizePhone(p: string): string | null {
 function normalizeEmail(e: string): string {
   return String(e).trim().toLowerCase();
 }
+
+/**
+ * Muvaffaqiyatli login faktini saqlaydi va yangi qurilma aniqlansa xavfsizlik
+ * ogohlantirishini yuboradi (parol to'g'ri bo'lsa ham hisob egasini xabardor qilish).
+ */
+export async function recordSuccessfulLogin(
+  user: { id: string; email: string; fullName: string; lastLoginAt?: Date | null; lastLoginIp?: string | null; lastLoginUserAgent?: string | null },
+  req: Request
+): Promise<void> {
+  const ip = clientIp(req);
+  const ua = (req.headers['user-agent'] as string | undefined) || null;
+  const isNewDevice = Boolean(user.lastLoginAt) && (user.lastLoginIp !== ip || user.lastLoginUserAgent !== ua);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      lastLoginAt: new Date(),
+      lastLoginIp: ip,
+      lastLoginUserAgent: ua,
+    },
+  });
+
+  if (isNewDevice) {
+    void sendSecurityAlert(user.email, user.fullName, 'NEW_DEVICE_LOGIN', {
+      ip,
+      device: describeUserAgent(ua),
+      when: new Date(),
+    });
+  }
+}
+
+// ============ LOGOUT (server-side sessiyani bekor qilish) ============
+// Stateless JWT bo'lsa ham tokenVersion oshiriladi — shu foydalanuvchining
+// barcha mavjud tokenlari darhol yaroqsiz bo'ladi (boshqa qurilmalar ham).
+export const logout = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { tokenVersion: { increment: 1 } },
+    });
+    void recordSecurityEvent(req.user!.userId, 'LOGOUT', {
+      ip: clientIp(req),
+      userAgent: req.headers['user-agent'] as string | undefined,
+    });
+    return ok(res, null, 'Tizimdan muvaffaqiyatli chiqdingiz');
+  } catch (err) {
+    next(err);
+  }
+};
 
 // ============ REGISTER (USER) ============
 // googleToken berilganda parvoz qilib, parol ixtiyoriy (avtomatik random parol qo'yiladi)
@@ -105,6 +156,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       userId: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: user.tokenVersion,
     });
 
     return ok(
@@ -146,13 +198,33 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
     if (!user) return badRequest(res, 'Email yoki parol noto\'g\'ri');
 
-    if (!user.passwordHash) return badRequest(res, 'Ushbu akkaunt Google orqali yaratilgan');
+    // ============ VAQTINCHALIK PAROL (forgot-password) ============
+    // User'ning temp paroli haqiqiy login paroli sifatida ishlaydi; kiritilgach
+    // mustChangePassword=TRUE (yangi parol majburiy). Bir giymetli va expiring.
+    let usedTempPassword = false;
+    if (user.tempPasswordHash && user.tempPasswordExpiresAt && user.tempPasswordExpiresAt > new Date()) {
+      const tempOk = await bcrypt.compare(password, user.tempPasswordHash);
+      if (tempOk) usedTempPassword = true;
+    }
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
+    // Oddiy BJ parol tekshiruvi (user parolga ega bo'lsa). Google-only account parolga
+    // ega emas — unda faqat temp parol yo'li ishlaydi.
+    const valid = usedTempPassword ? true : user.passwordHash ? await bcrypt.compare(password, user.passwordHash) : false;
+
     if (!valid) {
       const outcome = computeAfterFailure(user);
       await prisma.user.update({ where: { id: user.id }, data: outcome.data });
+      void recordSecurityEvent(user.id, outcome.locked ? 'LOGIN_LOCKED' : 'LOGIN_FAILED', {
+        ip: clientIp(req),
+        userAgent: req.headers['user-agent'] as string | undefined,
+        metadata: { stage: outcome.data.loginLockStage, failedAttempts: outcome.data.failedLoginAttempts },
+      });
       if (outcome.locked) {
+        void sendSecurityAlert(user.email, user.fullName, 'ACCOUNT_LOCKED', {
+          ip: clientIp(req),
+          device: describeUserAgent(req.headers['user-agent'] as string | undefined),
+          when: new Date(),
+        });
         return res.status(429).json({
           success: false,
           message: 'Juda ko\'p noto\'g\'ri urinish. Hisob vaqtincha bloklandi.',
@@ -174,16 +246,82 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
     if (user.status !== 'ACTIVE') return unauthorized(res, 'Akkauntingiz bloklangan');
 
+    // ============ PASSKEY SECOND FACTOR (server enforcement) ============
+    // Shaxsiy passkey talab qiladigan hisoblar: parol to'g'ri bo'lsa ham,
+    // passkey verificationdan o'tmasdan TOKEN BERILMAYDI. Server qaror qiladi.
+    if (user.requirePasskey) {
+      const hasPasskeys = await prisma.passkey.count({ where: { userId: user.id } });
+      if (hasPasskeys > 0) {
+        // Muvaffaqiyatli parol — hisoblagichlarni tozalash
+        if (user.failedLoginAttempts || user.loginLockStage || user.loginLockedUntil) {
+          await prisma.user.update({ where: { id: user.id }, data: resetData() });
+        }
+        // Faqat 5 daqiqa amal qiladigan "pending" token — keyingi passkey bosqichi uchun
+        const pendingLoginToken = jwt.sign(
+          { type: 'pending-passkey', userId: user.id },
+          config.jwt.secret as Secret,
+          { expiresIn: '5m' }
+        );
+        return res.status(202).json({
+          success: false,
+          code: 'PASSKEY_REQUIRED',
+          message: 'Xavfsizlik uchun passkey bilan tasdiqlash talab qilinadi.',
+          data: { requirePasskeyVerified: false, pendingLoginToken, userId: user.id },
+        });
+      }
+      // passkey bo'lmasa — parol yetarli (user keyin qo'shishi mumkin)
+    }
+
+    // ============ IKKI FAKTORLI AUTENTIFIKATSIYA (TOTP) ============
+    // Parol to'g'ri, ammo hisobda 2FA yoqilgan — token berilmaydi, faqat 5 daqiqalik
+    // "pending" token qaytariladi. Kod /two-factor/verify da tasdiqlanadi.
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      if (user.failedLoginAttempts || user.loginLockStage || user.loginLockedUntil) {
+        await prisma.user.update({ where: { id: user.id }, data: resetData() });
+      }
+      const pendingLoginToken = jwt.sign(
+        { type: 'pending-2fa', userId: user.id },
+        config.jwt.secret as Secret,
+        { expiresIn: '5m' }
+      );
+      return res.status(202).json({
+        success: false,
+        code: 'TWO_FACTOR_REQUIRED',
+        message: 'Ikki faktorli himoya yoqilgan. Autentifikator kodini kiriting.',
+        data: { requiresTwoFactor: true, pendingLoginToken, userId: user.id },
+      });
+    }
+
+    // ============ MUVAFIQQIYATLI LOGIN ============
     // Muvaffaqiyatli login — brute-force hisoblagichlarini tozalash
     if (user.failedLoginAttempts || user.loginLockStage || user.loginLockedUntil) {
       await prisma.user.update({ where: { id: user.id }, data: resetData() });
     }
 
+    await recordSuccessfulLogin(user, req);
+
+    void recordSecurityEvent(user.id, 'LOGIN_SUCCESS', {
+      ip: clientIp(req),
+      userAgent: req.headers['user-agent'] as string | undefined,
+    });
+
     const tokens = generateTokens({
       userId: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: user.tokenVersion,
     });
+
+    // Vaqtinchalik parol bilan kirilganda — mustChangePassword=true va
+    // faqat shartli token (yangi parol o'rnatilgunga qadar asosiy session yo'q).
+    if (user.mustChangePassword) {
+      return res.status(200).json({
+        success: false,
+        code: 'MUST_CHANGE_PASSWORD',
+        message: 'Vaqtinchalik parol bilan kirdingiz. Yangi parol o\'rnatishingiz shart.',
+        data: { user: sanitizeUser(user), ...tokens, mustChangePassword: true },
+      });
+    }
 
     return ok(res, { user: sanitizeUser(user), ...tokens }, 'Xush kelibsiz!');
   } catch (err) {
@@ -269,6 +407,7 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
       userId: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: user.tokenVersion,
     });
 
     return ok(
@@ -308,10 +447,17 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
     if (!user) return notFoundMsg(res, 'Foydalanuvchi topilmadi');
     if (user.status === 'BLOCKED') return unauthorized(res, 'Akkauntingiz bloklangan');
 
+    // Server-side sessiya bekor qilingan bo'lsa (logout/parol o'zgarishi), refresh
+    // token ham ishlamaydi — aks holda bekor qilishni chetlab o'tish mumkin bo'lardi.
+    if ((decoded.tokenVersion ?? 0) !== user.tokenVersion) {
+      return unauthorized(res, 'Sessiya tugagan. Iltimos, qaytadan kiring.');
+    }
+
     const tokens = generateTokens({
       userId: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: user.tokenVersion,
     });
 
     return ok(res, tokens, 'Token yangilandi');
@@ -426,6 +572,10 @@ export const changePassword = async (req: AuthRequest, res: Response, next: Next
 
     if (!user.passwordHash) return badRequest(res, 'Ushbu akkaunt Google orqali yaratilgan');
 
+    if (!oldPassword || typeof oldPassword !== 'string') {
+      return badRequest(res, 'Eski parol talab qilinadi');
+    }
+
     const valid = await bcrypt.compare(oldPassword, user.passwordHash);
     if (!valid) return badRequest(res, 'Eski parol noto\'g\'ri');
 
@@ -436,10 +586,20 @@ export const changePassword = async (req: AuthRequest, res: Response, next: Next
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash },
+      data: { passwordHash, tokenVersion: { increment: 1 } },
     });
 
-    return ok(res, null, 'Parol muvaffaqiyatli o\'zgartirildi');
+    void recordSecurityEvent(user.id, 'PASSWORD_CHANGED', {
+      ip: clientIp(req),
+      userAgent: req.headers['user-agent'] as string | undefined,
+    });
+    void sendSecurityAlert(user.email, user.fullName, 'PASSWORD_CHANGED', {
+      ip: clientIp(req),
+      device: describeUserAgent(req.headers['user-agent'] as string | undefined),
+      when: new Date(),
+    });
+
+    return ok(res, null, 'Parol muvaffaqiyatli o\'zgartirildi. Barcha qurilmalardan chiqdingiz — qaytadan kiring.');
   } catch (err) {
     next(err);
   }
@@ -465,7 +625,10 @@ function resetBaseUrl(req: Request): string {
   return config.frontendUrls[0] || `http://localhost:${config.port}`;
 }
 
-// ============ FORGOT PASSWORD (email orqali havola) ============
+// ============ FORGOT PASSWORD (vaqtinchalik parol email orqali) ============
+// P3: Server xavfsiz tasodifiy VAQTINCHALIK parol yaratadi -> hash qiladi ->
+// expiring saqlaydi -> emailga yuboradi. User shu parol bilan kiradi -> majburiy
+// yangi parol o'rnatadi (mustChangePassword).
 export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const email = normalizeEmail(req.body.email);
@@ -478,52 +641,58 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
       // Xavfsizlik: user topilmasa ham "yuborildi" deb javob beramiz (enumeration oldini olish)
       return ok(res, null, 'Parolni tiklash havolasi emailingizga yuborildi');
     }
+    if (user.status !== 'ACTIVE') {
+      return ok(res, null, 'Parolni tiklash havolasi emailingizga yuborildi');
+    }
 
-    // Har bir so'rov yangi token yaratadi (rate-limit spam oldini oladi). Bu, email
-    // eski tokenning amal qilishini kutmasdan qayta yuborish imkonini beradi.
-    const token = crypto.randomBytes(32).toString('hex');
-    const tokenHash = resetTokenHash(token);
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 soat
+    // Xavfsiz tasodifiy VAQTINCHALIK parol (12-16 belgi, alfanumerik + belgilar)
+    const tempPassword = crypto.randomBytes(10).toString('base64url'); // ~14 belgi
+    const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
+    const expiresAt = new Date(Date.now() + config.webauthn.tempPasswordMinutes * 60 * 1000);
 
+    // Hash saqlanadi — plain text DB'da YO'Q. Blok zanjiridan mustaqil.
     await prisma.user.update({
       where: { id: user.id },
-      data: { resetToken: tokenHash, resetTokenExpiresAt: expiresAt },
+      data: {
+        tempPasswordHash,
+        tempPasswordExpiresAt: expiresAt,
+        mustChangePassword: true,
+        resetToken: null,
+        resetTokenExpiresAt: null,
+      },
     });
 
-    const base = resetBaseUrl(req);
-    const resetUrl = `${base}/reset-password?token=${token}`;
-    const expiryLabel = expiresAt.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
-
     try {
-      await sendEmail(user.email, 'Cyber-ZONE — Parolni tiklash', buildResetEmail(resetUrl), buildResetText(resetUrl, expiryLabel ?? '1 soat'));
+      await sendEmail(user.email, 'Cyber-ZONE — Vaqtinchalik parol', buildTempPasswordEmail(user.fullName, tempPassword, expiresAt), buildTempPasswordText(user.fullName, tempPassword, expiresAt));
+      void recordSecurityEvent(user.id, 'PASSWORD_RESET_REQUESTED', {
+        ip: clientIp(req),
+        userAgent: req.headers['user-agent'] as string | undefined,
+      });
     } catch (sendErr) {
-      // Soxta "yuborildi" javobi qaytarmaymiz: SMTP xatosi yuz berdi.
-      // Sabab log'da aniq qoladi va token bekor qilinadi (qayta urinish mumkin).
-      console.error(`[forgot-password] Email yuborilmadi -> user=${user.id} email=${user.email} resetUrl=${resetUrl}`);
+      console.error(`[forgot-password] Email yuborilmadi -> user=${user.id} email=${user.email}`);
       console.error(`[forgot-password] Sabab: ${(sendErr as Error).stack || (sendErr as Error).message}`);
+      // Token bekor qilinadi (qayta urinish mumkin)
       await prisma.user
-        .update({ where: { id: user.id }, data: { resetToken: null, resetTokenExpiresAt: null } })
+        .update({ where: { id: user.id }, data: { tempPasswordHash: null, tempPasswordExpiresAt: null } })
         .catch(() => undefined);
-
       if (process.env.NODE_ENV === 'production') {
-        return serverError(res, 'Parolni tiklash havolasini yuborishda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko\'ring.');
+        return serverError(res, 'Vaqtinchalik parolni yuborishda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko\'ring.');
       }
-      // Dev: SMTP sozlanmagan bo'lsa ham token ishlatilishi uchun davom etamiz (devToken yetarli).
     }
 
     return ok(
       res,
       process.env.NODE_ENV === 'production'
         ? null
-        : { devToken: token }, // faqat dev/test uchun (haqiqiy SMTP bo'lmasa)
-      'Parolni tiklash havolasi emailingizga yuborildi'
+        : { devTempPassword: tempPassword }, // faqat dev/test uchun (haqiqiy SMTP bo'lmasa)
+      'Vaqtinchalik parol emailingizga yuborildi'
     );
   } catch (err) {
     next(err);
   }
 };
 
-// ============ RESET PASSWORD (token orqali) ============
+// ============ RESET PASSWORD (eskirgan token orqali, kompat/backup) ============
 export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { token, newPassword } = req.body;
@@ -540,11 +709,29 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     if (user.status !== 'ACTIVE') return unauthorized(res, 'Akkauntingiz bloklangan');
 
     const passwordHash = await bcrypt.hash(String(newPassword), 10);
-    // Parol tiklangach login bloklanishi ham tozalanadi — foydalanuvchi
-    // havola orqali parol o'rnatgach darhol kira oladi (§4.2).
+    // Parol yangilangach barcha hisoblagichlar va vaqtinchalik parol tozalanadi.
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash, resetToken: null, resetTokenExpiresAt: null, ...resetData() },
+      data: {
+        passwordHash,
+        resetToken: null,
+        resetTokenExpiresAt: null,
+        tempPasswordHash: null,
+        tempPasswordExpiresAt: null,
+        mustChangePassword: false,
+        tokenVersion: { increment: 1 },
+        ...resetData(),
+      },
+    });
+
+    void recordSecurityEvent(user.id, 'PASSWORD_RESET', {
+      ip: clientIp(req),
+      userAgent: req.headers['user-agent'] as string | undefined,
+    });
+    void sendSecurityAlert(user.email, user.fullName, 'PASSWORD_RESET', {
+      ip: clientIp(req),
+      device: describeUserAgent(req.headers['user-agent'] as string | undefined),
+      when: new Date(),
     });
 
     return ok(res, null, 'Parol muvaffaqiyatli tiklandi. Endi kirishingiz mumkin.');
@@ -553,14 +740,84 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
   }
 };
 
-function sanitizeUser(user: any) {
+// ============ MUST CHANGE PASSWORD (vaqtinchalik parol bilan kirilgach) ============
+// POST /api/auth/security/change-password — autentifikatsiyalangan va mustChangePassword=true bo'lgan
+// user yangi parol o'rnatadi. Temp parol berilgan holatda login qilgan bo'lishi kerak.
+export const setNewPassword = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { newPassword, currentPassword } = req.body;
+    const userId = req.user!.userId;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return notFoundMsg(res, 'Foydalanuvchi topilmadi');
+
+    if (!newPassword || String(newPassword).length < 6) {
+      return badRequest(res, "Yangi parol kamida 6 ta belgidan iborat bo'lishi kerak");
+    }
+
+    // mustChangePassword rejimi: temp parol emas, balki hozirgi (eski) parol bilan ham tasdiqlash
+    if (!user.mustChangePassword) {
+      if (!currentPassword) return badRequest(res, 'Joriy parol talab qilinadi');
+      const okCurrent = user.passwordHash ? await bcrypt.compare(String(currentPassword), user.passwordHash) : false;
+      if (!okCurrent) return badRequest(res, 'Joriy parol noto\'g\'ri');
+    }
+
+    const passwordHash = await bcrypt.hash(String(newPassword), 10);
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash,
+        mustChangePassword: false,
+        tempPasswordHash: null,
+        tempPasswordExpiresAt: null,
+        tokenVersion: { increment: 1 },
+      },
+    });
+
+    void recordSecurityEvent(user.id, 'PASSWORD_CHANGED', {
+      ip: clientIp(req),
+      userAgent: req.headers['user-agent'] as string | undefined,
+    });
+    void sendSecurityAlert(user.email, user.fullName, 'PASSWORD_CHANGED', {
+      ip: clientIp(req),
+      device: describeUserAgent(req.headers['user-agent'] as string | undefined),
+      when: new Date(),
+    });
+
+    return ok(res, null, 'Parol muvaffaqiyatli yangilandi. Qaytadan kiring.');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ SECURITY EVENTS (audit histori — Security Center) ============
+// GET /api/auth/security/events (auth) — oxirgi xavfsizlik voqealari.
+export const securityEvents = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const events = await prisma.securityEvent.findMany({
+      where: { userId: req.user!.userId },
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+      select: { id: true, type: true, ip: true, userAgent: true, metadata: true, createdAt: true },
+    });
+    return ok(res, events);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export function sanitizeUser(user: any) {
   const {
     passwordHash,
     resetToken,
     resetTokenExpiresAt,
+    tempPasswordHash,
+    tempPasswordExpiresAt,
     failedLoginAttempts,
     loginLockStage,
     loginLockedUntil,
+    twoFactorSecret,
+    twoFactorBackupCodes,
     ...rest
   } = user;
   return rest;

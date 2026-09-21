@@ -479,3 +479,46 @@ export const chat = async (req: AuthRequest, res: ExpressResponse, next: NextFun
     next(err);
   }
 };
+
+// ============ SUHBAT DAVOMIY GENERATORI (conversations API uchun) ============
+// Suhbat tarixi DB (AIMessage) dan yig'iladi — frontend history bilan aralashtirilmaydi.
+export async function generateAIReply(
+  userId: string,
+  message: string,
+  history: ChatHistoryItem[],
+  lat?: number,
+  lng?: number
+): Promise<{ reply: string; model: string }> {
+  const [platform, userCtx, availability] = await Promise.all([
+    buildContext(),
+    buildUserContext(userId),
+    buildAvailabilityContext(),
+  ]);
+  const context = `===== FOYDALANUVCHI MA'LUMOTI =====\n${userCtx}\n\n` + platform + '\n\n' + availability;
+
+  let reply: string | null = null;
+  let usedModel = 'fallback';
+  try {
+    const result = await geminiChat(message, context, config.ai.model, history);
+    if (result) {
+      reply = result.text;
+      usedModel = result.model;
+    }
+  } catch (err) {
+    console.warn('[AI] generateAIReply Gemini xatoligi:', (err as Error).message);
+  }
+
+  if (!reply) {
+    reply = await fallbackReply(message, Number.isFinite(lat) ? lat : undefined, Number.isFinite(lng) ? lng : undefined);
+  }
+
+  return { reply, model: usedModel };
+}
+
+/** AIMessage[] ni Gemini uchun suhbat tarixiga o'tkazadi (so'nggi 8 ta). */
+export function conversationToHistory(messages: Array<{ role: string; content: string }>): ChatHistoryItem[] {
+  return messages
+    .slice(-8)
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .map((m) => ({ role: m.role, content: m.content.slice(0, 1500) }));
+}
