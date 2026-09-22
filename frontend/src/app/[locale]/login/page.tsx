@@ -5,14 +5,14 @@ import { useTranslations } from 'next-intl';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { LogIn, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, Fingerprint, ShieldCheck } from 'lucide-react';
+import { LogIn, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, Fingerprint, ScanFace, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import type { AuthResponse, User } from '@/lib/types';
 import GoogleButton from '@/components/auth/GoogleButton';
 import Logo from '@/components/brand/Logo';
-import { finishPasskeyLogin, passwordlessLogin, supportsBiometric } from '@/lib/webauthn';
+import { finishPasskeyLogin, passwordlessLogin, supportsBiometric, detectBiometric, type BiometricInfo } from '@/lib/webauthn';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email kiriting').email('Email noto\u2019g\u2019ri'),
@@ -57,6 +57,7 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
   const [tick, setTick] = useState(() => Date.now());
   // WebAuthn: PASSKEY_REQUIRED ikkinchi bosqich / passwordless holati
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [bioInfo, setBioInfo] = useState<BiometricInfo | null>(null);
   const [passkeyStep, setPasskeyStep] = useState<{ email: string; pendingLoginToken: string } | null>(null);
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
@@ -84,7 +85,11 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
 
   useEffect(() => {
     supportsBiometric().then(setBiometricAvailable).catch(() => setBiometricAvailable(false));
+    detectBiometric().then(setBioInfo).catch(() => setBioInfo(null));
   }, []);
+
+  const BiometricIcon: LucideIcon = bioInfo?.method === 'faceid' ? ScanFace : Fingerprint;
+  const bioLabel = bioInfo?.label ?? 'Face ID / barmoq izi';
 
   // MUST_CHANGE_PASSWORD holatini komponent tepasida qayta ishga tushirish (navigation uzoq)
   useEffect(() => {
@@ -199,7 +204,7 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
   async function launchPasswordless() {
     const email = getValues('email').trim().toLowerCase();
     if (!email) {
-      setError('Avval email kiriting, so&apos;ng "Barmoq izi/Face ID bilan kirish" tugmasini bosing.');
+      setError(`Avval email kiriting, so'ng "${bioLabel} bilan kirish" tugmasini bosing.`);
       return;
     }
     setPasskeyBusy(true);
@@ -526,12 +531,12 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
               // ===== 2-BOSQICH: PASSKEY (biometric) tasdiqlash =====
               <div className="text-center py-2">
                 <div className="mx-auto w-14 h-14 rounded-2xl border border-neon-cyan/40 bg-neon-cyan/10 flex items-center justify-center mb-4">
-                  {passkeyBusy ? <Loader2 size={24} className="animate-spin text-neon-cyan" /> : <Fingerprint size={24} className="text-neon-cyan" />}
+                  {passkeyBusy ? <Loader2 size={24} className="animate-spin text-neon-cyan" /> : <BiometricIcon size={24} className="text-neon-cyan" />}
                 </div>
                 <h2 className="text-lg font-bold mb-1">Xavfsizlik tasdiqlashi</h2>
                 <p className="text-sm text-gray-400 mb-5">
                   Parol kiritildi. Endi <b className="text-neon-cyan">{passkeyStep.email}</b> akkauntida
-                  passkey (Face ID / barmoq izi) bilan tasdiqlang.
+                  {bioInfo?.method === 'faceid' ? ' yuzingiz bilan (Face ID) ' : ' passkey (Face ID / barmoq izi) '}tasdiqlang.
                 </p>
                 <button
                   type="button"
@@ -539,8 +544,8 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
                   onClick={runPasskeySecondStep}
                   className="w-full py-3 rounded-xl neon-btn flex items-center justify-center gap-2 disabled:opacity-60"
                 >
-                  {passkeyBusy ? <Loader2 size={18} className="animate-spin" /> : <Fingerprint size={18} />}
-                  Passkey bilan tasdiqlash
+                  {passkeyBusy ? <Loader2 size={18} className="animate-spin" /> : <BiometricIcon size={18} />}
+                  {bioInfo?.method === 'faceid' ? `${bioLabel} bilan tasdiqlash` : 'Passkey bilan tasdiqlash'}
                 </button>
                 <button
                   type="button"
@@ -704,8 +709,8 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
                     onClick={launchPasswordless}
                     className="w-full mb-3 py-3 rounded-xl border border-neon-green/40 bg-neon-green/5 text-neon-green hover:bg-neon-green/10 flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-60 transition-colors"
                   >
-                    {passkeyBusy ? <Loader2 size={18} className="animate-spin" /> : <Fingerprint size={18} />}
-                    Passkey (Face ID / barmoq izi) bilan kirish
+                    {passkeyBusy ? <Loader2 size={18} className="animate-spin" /> : <BiometricIcon size={18} />}
+                    {bioInfo?.method === 'faceid' ? `${bioLabel} bilan kirish` : 'Passkey (Face ID / barmoq izi) bilan kirish'}
                   </button>
                 )}
 

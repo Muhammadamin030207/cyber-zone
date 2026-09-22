@@ -48,14 +48,58 @@ export async function supportsBiometric(): Promise<boolean> {
   }
 }
 
-const platformName = () => {
-  const s = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-  if (/iPhone|iPad|Mac/.test(s)) return 'Apple (Face ID/Touch ID)';
-  if (s.includes('Android')) return 'Android biometriya';
-  if (/Windows/.test(s)) return 'Windows Hello';
-  if (s.includes('Linux')) return 'Biometrik qurilma';
-  return 'Yangi qurilma';
+export type BiometricMethod = 'faceid' | 'touchid' | 'fingerprint' | 'android' | 'generic';
+
+export interface BiometricInfo {
+  method: BiometricMethod;
+  /** Interfeysda ko'rsatiladigan qurilma nomi (masalan "Face ID"). */
+  label: string;
+}
+
+const hasCameraDevice = (): Promise<boolean> => {
+  const md = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
+  if (!md?.enumerateDevices) return Promise.resolve(false);
+  return md
+    .enumerateDevices()
+    .then((devices) => devices.some((d) => d.kind === 'videoinput'))
+    .catch(() => false);
 };
+
+/**
+ * Ushbu qurilmada qaysi biometrik usul mavjudligini aniqlaydi:
+ * - iPhone/iPad -> Face ID, Mac -> Touch ID
+ * - Windows (kamera bor) -> Windows Hello Face, aks holda barmoq izi
+ * - Android -> Android biometriya
+ * WebAuthn o'zi OS so'rovini (yuz/parol/barmoq) ochadi — bu faqat
+ * interfeysda to'g'ri belgi va yozuv ko'rsatish uchun.
+ */
+export async function detectBiometric(): Promise<BiometricInfo> {
+  const s = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+
+  if (/iPhone/.test(s)) return { method: 'faceid', label: 'Face ID' };
+  if (/iPad/.test(s)) return { method: 'faceid', label: 'Face ID' };
+  if (/Mac/.test(s)) return { method: 'touchid', label: 'Touch ID' };
+
+  if (s.includes('Android')) return { method: 'android', label: 'Android biometriya' };
+
+  if (/Windows/.test(s)) {
+    const hasCamera = await hasCameraDevice();
+    return hasCamera
+      ? { method: 'faceid', label: 'Windows Hello (Face ID)' }
+      : { method: 'fingerprint', label: 'Windows Hello (barmoq izi)' };
+  }
+
+  return { method: 'generic', label: 'Biometrik qurilma' };
+}
+
+export async function platformName(): Promise<string> {
+  const info = await detectBiometric();
+  if (info.method === 'android') return 'Android biometriya';
+  if (info.method === 'touchid') return 'Apple Touch ID';
+  if (info.method === 'fingerprint') return 'Windows Hello (barmoq izi)';
+  if (info.method === 'generic') return 'Biometrik qurilma';
+  return info.label;
+}
 
 // ============ REGISTRATION (passkey qo'shish) ============
 export async function addPasskey(deviceName?: string): Promise<PasskeyRecord> {
@@ -63,7 +107,7 @@ export async function addPasskey(deviceName?: string): Promise<PasskeyRecord> {
   const assertion = await startRegistration({ optionsJSON: optsData.data });
   const { data: results } = await api.post<{ success: boolean; data: PasskeyRecord; message?: string }>(
     '/api/webauthn/register/verify',
-    { response: assertion, deviceName: deviceName || platformName() }
+    { response: assertion, deviceName: deviceName || (await platformName()) }
   );
   return results.data;
 }

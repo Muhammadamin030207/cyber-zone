@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Fingerprint, Plus, Loader2, Trash2, Pencil, ShieldCheck, Smartphone } from 'lucide-react';
+import { Fingerprint, ScanFace, Plus, Loader2, Trash2, Pencil, ShieldCheck, Smartphone, type LucideIcon } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { toastSuccess, toastError } from '@/lib/toast';
 import { confirmDialog } from '@/lib/confirm';
-import { addPasskey, supportsBiometric, type PasskeyRecord } from '@/lib/webauthn';
+import { addPasskey, supportsBiometric, detectBiometric, type BiometricInfo, type PasskeyRecord } from '@/lib/webauthn';
 import { useAuthStore } from '@/store/auth';
 
 export default function PasskeySettings() {
@@ -15,6 +15,7 @@ export default function PasskeySettings() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [bioAvailable, setBioAvailable] = useState(false);
+  const [bioInfo, setBioInfo] = useState<BiometricInfo | null>(null);
   const [requirePasskey, setRequirePasskey] = useState(false);
   const [deviceName, setDeviceName] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
@@ -22,6 +23,9 @@ export default function PasskeySettings() {
   // O'chirishdan oldin qayta autentifikatsiya (parol) uchun
   const [removeAsk, setRemoveAsk] = useState<string | null>(null);
   const [removePass, setRemovePass] = useState('');
+
+  const BiometricIcon: LucideIcon = bioInfo?.method === 'faceid' ? ScanFace : Fingerprint;
+  const bioLabel = bioInfo?.label ?? 'Passkey';
 
   async function load() {
     setLoading(true);
@@ -38,6 +42,7 @@ export default function PasskeySettings() {
   useEffect(() => {
     load();
     supportsBiometric().then(setBioAvailable).catch(() => setBioAvailable(false));
+    detectBiometric().then(setBioInfo).catch(() => setBioInfo(null));
     if (user) setRequirePasskey(!!user.requirePasskey);
   }, [user?.id]);
 
@@ -131,11 +136,11 @@ export default function PasskeySettings() {
     <div className="neo-card rounded-2xl p-5 sm:p-6">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
         <h3 className="font-bold flex items-center gap-2">
-          <Fingerprint size={16} className="text-neon-cyan" /> Passkey va biometriya
+          <BiometricIcon size={16} className="text-neon-cyan" /> Passkey va biometriya
         </h3>
         {bioAvailable ? (
           <span className="text-[10px] px-2 py-1 rounded-full bg-neon-green/10 text-neon-green border border-neon-green/25 font-bold uppercase tracking-wider">
-            Qurilma qo&apos;llab-quvvatlaydi
+            {bioLabel}
           </span>
         ) : (
           <span className="text-[10px] px-2 py-1 rounded-full bg-red-500/10 text-red-300 border border-red-500/25 font-bold uppercase tracking-wider">
@@ -145,7 +150,7 @@ export default function PasskeySettings() {
       </div>
 
       <p className="text-xs text-gray-500 leading-relaxed mb-4">
-        Passkey — Face ID, Touch ID yoki barmoq izi orqali xavfsiz kirish. Private key
+        Passkey — {bioLabel} orqali xavfsiz kirish. Private key
         hech qachon serverga yuborilmaydi, faqat qurilmangizda saqlanadi.
       </p>
 
