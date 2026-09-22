@@ -42,6 +42,9 @@ export default function BottomTabBar() {
   const isTab = (href: string) =>
     href === '/' ? pathname === '/' || pathname === '' : pathname.startsWith(href);
 
+  // Bosh sahifada HeroCountdownCard o'z floating pill navini olib boradi
+  if (pathname === '/' || pathname === '') return null;
+
   return (
     <nav
       aria-label="Asosiy navigatsiya"

@@ -9,6 +9,7 @@ import { useRouter } from '@/i18n/navigation';
 import api from '@/lib/api';
 import type { Room } from '@/lib/types';
 import RoomCard from '@/components/rooms/RoomCard';
+import HeroCountdownCard from '@/components/home/HeroCountdownCard';
 
 const RoomsMap = dynamic(() => import('@/components/rooms/RoomsMap'), { ssr: false });
 
@@ -48,49 +49,57 @@ export default function HomePage() {
   return (
     <div>
       {/* ===== HERO ===== */}
-      <section className="relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-14 sm:pt-20 pb-12 text-center">
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight mb-4">
-            <span className="grad-text">{t('heroTitle')}</span>
-          </h1>
-          <p className="text-base sm:text-lg text-gray-400 max-w-2xl mx-auto mb-8">
-            {t('heroSubtitle')}
-          </p>
+      <HeroCountdownCard
+        targetDate="2026-11-30T20:00:00.000Z"
+        eventLabel="Cyber Tournament"
+        eventTitle="NEXUS CUP"
+        stationsFree={12}
+        stationsTotal={20}
+        ctaHref="/rooms"
+      />
 
-          {/* Search */}
-          <form
-            onSubmit={submitSearch}
-            className="max-w-2xl mx-auto flex flex-col sm:flex-row gap-2 p-1.5 sm:p-2 surface rounded-2xl"
-          >
-            <label className="flex-1 flex items-center gap-3 px-3 sm:px-4">
-              <Search size={18} className="text-gray-400 shrink-0" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('searchPlaceholder')}
-                className="flex-1 bg-transparent outline-none py-2.5 sm:py-3 text-sm placeholder:text-gray-500"
-                aria-label={t('searchPlaceholder')}
-              />
-            </label>
-            <button type="submit" className="sm:self-center px-5 py-2.5 sm:py-3 rounded-xl neon-btn text-sm">
-              {t('searchBtn')}
-            </button>
-          </form>
+      {/* ===== SEARCH ZONE ===== */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-20 sm:pt-24 pb-12 text-center">
+        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight mb-3">
+          <span className="grad-text">{t('heroTitle')}</span>
+        </h2>
+        <p className="text-sm sm:text-base text-gray-400 max-w-2xl mx-auto mb-8">
+          {t('heroSubtitle')}
+        </p>
 
-          {/* Trust row */}
-          <div className="mt-10 flex items-center justify-center gap-0">
-            {stats.map((s, i) => (
-              <div key={i} className="flex items-center gap-6 px-6">
-                <div className="text-center">
-                  <div className="text-lg sm:text-xl font-bold text-white">{s.value}</div>
-                  <div className="text-[11px] text-gray-500 mt-0.5">{s.label}</div>
-                </div>
-                {i < stats.length - 1 && (
-                  <span className="w-px h-8 bg-white/10" aria-hidden="true" />
-                )}
+        {/* Search */}
+        <form
+          onSubmit={submitSearch}
+          className="max-w-2xl mx-auto flex flex-col sm:flex-row gap-2 p-1.5 sm:p-2 surface rounded-2xl"
+        >
+          <label className="flex-1 flex items-center gap-3 px-3 sm:px-4">
+            <Search size={18} className="text-gray-400 shrink-0" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('searchPlaceholder')}
+              className="flex-1 bg-transparent outline-none py-2.5 sm:py-3 text-sm placeholder:text-gray-500"
+              aria-label={t('searchPlaceholder')}
+            />
+          </label>
+          <button type="submit" className="sm:self-center px-5 py-2.5 sm:py-3 rounded-xl neon-btn text-sm">
+            {t('searchBtn')}
+          </button>
+        </form>
+
+        {/* Trust row */}
+        <div className="mt-10 flex items-center justify-center gap-0">
+          {stats.map((s, i) => (
+            <div key={i} className="flex items-center gap-6 px-6">
+              <div className="text-center">
+                <div className="text-lg sm:text-xl font-bold text-white">{s.value}</div>
+                <div className="text-[11px] text-gray-500 mt-0.5">{s.label}</div>
               </div>
-            ))}
-          </div>
+              {i < stats.length - 1 && (
+                <span className="w-px h-8 bg-white/10" aria-hidden="true" />
+              )}
+            </div>
+          ))}
         </div>
       </section>
 

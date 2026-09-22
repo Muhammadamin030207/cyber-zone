@@ -121,9 +121,9 @@ export default function HeroCountdownCard({
 
   const navItems: Array<{ href: string; icon: LucideIcon; label: string }> = [
     { href: '/', icon: Home, label: 'Home' },
-    { href: '/bookings', icon: CalendarCheck, label: 'Bookings' },
-    { href: '/leaderboard', icon: Trophy, label: 'Leaderboard' },
-    { href: '/wallet', icon: Wallet, label: 'Wallet' },
+    { href: '/rooms', icon: CalendarCheck, label: 'Bookings' },
+    { href: '/news', icon: Trophy, label: 'Leaderboard' },
+    { href: '/dashboard', icon: Wallet, label: 'Wallet' },
     { href: '/profile', icon: UserRound, label: 'Profile' },
   ];
 
