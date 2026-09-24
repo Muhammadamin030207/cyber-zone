@@ -27,7 +27,7 @@ function fetchWithTimeout(url: string, init: RequestInit, ms = GEMINI_TIMEOUT_MS
 // qoidaviy (intent) tizimga auto-fallback qilinadi.
 // ============================================================================
 
-const INTRO = 'Men Cyber-ZONE AI yordamchisiman 🎮👋';
+const INTRO = 'Men Cyber-ZONE AI yordamchisiman';
 
 // ---------- Haqiqiy Gemini chaqiruv ----------
 interface ChatHistoryItem {
@@ -68,7 +68,7 @@ async function geminiChat(
 
   const system = [
     'Sen Cyber-ZONE — kompyuter xona (gaming club) platformasining rasmiy AI yordamchisisan.',
-    'Foydalanuvchilarga o\'zbek tilida, do\'stona va aniq javob ber. Kerakli joyda emojilar ishlat 😊🎮💡.',
+    'Foydalanuvchilarga o\'zbek tilida, do\'stona va aniq javob ber. Kerakli joyda emojilar ishlat.',
     'Foydalanuvchi oddiy suhbat qurmoqchi bo\'lsa (salomlashish, o\'yinlar, umumiy savollar, maslahat) — erkin, qisqa va xushmuomalalik bilan javob ber. Sun\'iy ravishda hamma savolni platformaga bog\'lash shart emas.',
     'Narx, ish vaqti, xona ro\'yxati, promo-kodlar va mavjudlik haqidagi ma\'lumotlarni FAQAT quyida berilgan KONTEKSTDAN ol. Unda yo\'q bo\'lsa — "hozircha ma\'lumot yo\'q" deb ayt, o\'ylab chiqma.',
     'Foydalanuvchining shaxsiy bronlari, to\'lovlari, bonus balansi, profil ma\'lumoti faqat KONTEKSTDAGI "FOYDALANUVCHI MA\'LUMOTI" bo\'limida berilganini ayt. U yerda yo\'q narsani uydirma. Masalan bron holati haqida faqat ro\'yxatda kelgan bronlarni ko\'rsat.',
@@ -607,7 +607,7 @@ async function fallbackReply(message: string, lat?: number, lng?: number): Promi
       : 'Salom! Xonalar, narxlar, bron qilish va promo-kodlar bo\'yicha yordam bera olaman. Nima bilmoqchisiz?';
   }
   if (intent === 'thanks') return 'Arzimaydi! Boshqa savolingiz bo\'lsa, bemalol so\'rang.';
-  if (intent === 'bye') return 'Xayr! Tashrifingiz uchun rahmat. Yana keling! 👋';
+  if (intent === 'bye') return 'Xayr! Tashrifingiz uchun rahmat. Yana keling!';
 
   if (intent === 'promo') {
     const promos = await prisma.promoCode.findMany({

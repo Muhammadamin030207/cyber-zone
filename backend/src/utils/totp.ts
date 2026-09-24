@@ -8,6 +8,62 @@ import crypto from 'crypto';
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
+// ============================================================================
+// TOTP secret'ni DB'da ENKRIPSIYA (at-rest encryption)
+// ============================================================================
+// Spec §P2: twoFactorSecret bazaga OCHIQ (plaintext) yozilmaydi — AES-256-GCM
+// bilan shifrlanib saqlanadi. Ushbu fayl barcha o'qish (verifyTotp) va yozish
+// (encryptTotpSecret) nuqtalarini bitta chokepoint qilib birlashtiradi, shuning
+// uchun auth/webauthn/twoFactor controller'larida hech narsa o'zgartirilmaydi.
+//
+// Mavjud (eski, ochiq) secretlar ham ishlaydi: agar qiymat `ck1:` prefiksiga
+// ega bo'lmasa — legacy plaintext deb qabul qilinadi va SHU SECRET bilan
+// verify qilinadi (foydalanuvchi kodini kiritishi shart emas). Keyingi
+// `twoFactorSecret: encryptTotpSecret(...)` yozuvi uni avtomatik yangilaydi.
+//
+// Kalit manbasi: `TOTP_AT_REST_KEY` (32 bayt hex yoki base64). O'rnatilmagan
+// bo'lsa — `JWT_SECRET`'dan deterministik HKDF-SHA256 orqali olinadi (xuddi
+// shu ish jarayonida, DB'dagi eski yozuvlar ochib berilishi mumkinligi uchun
+// kalit o'zgarishi PORCHda eski secret buzilishiga olib keladi — shuning uchun
+// production'da alohida TOTP_AT_REST_KEY o'rnating).
+const TOTP_ENC_PREFIX = 'ck1:';
+
+function totpAtRestKey(): Buffer {
+  const raw = process.env.TOTP_AT_REST_KEY || process.env.JWT_SECRET || 'cyber-zone-dev-totp-key';
+  const info = Buffer.from('cyber-zone:totp-at-rest:v1', 'utf8');
+  return crypto.createHmac('sha256', raw).update(info).digest(); // 32 bayt
+}
+
+/** Secret'ni at-rest shifrlab qaytaradi (DB'da mana shu saqlanadi). */
+export function encryptTotpSecret(secretBase32: string): string {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', totpAtRestKey(), iv);
+  const ct = Buffer.concat([cipher.update(secretBase32, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  const payload = Buffer.concat([iv, tag, ct]).toString('base64');
+  return `${TOTP_ENC_PREFIX}${payload}`;
+}
+
+/** Shifrlangan secret'ni ochadi. Legacy (ochiq) bo'lsa — o'zini qaytaradi. */
+export function decryptTotpSecret(stored: string): string {
+  if (!stored || !stored.startsWith(TOTP_ENC_PREFIX)) return stored; // legacy plaintext
+  try {
+    const buf = Buffer.from(stored.slice(TOTP_ENC_PREFIX.length), 'base64');
+    const iv = buf.subarray(0, 12);
+    const tag = buf.subarray(12, 28);
+    const ct = buf.subarray(28);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', totpAtRestKey(), iv);
+    decipher.setAuthTag(tag);
+    const plain = Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
+    if (!plain) return stored;
+    return plain;
+  } catch {
+    // Kalit o'zgargan yoki buzuq yozuv — ochiq deb hisoblanmaydi, asl qiymatni qaytaramiz.
+    // (verify keyin muvaffaqiyatsiz bo'ladi; admin sekretni qayta o'rnatishi mumkin.)
+    return stored;
+  }
+}
+
 /** Xavfsiz tasodifiy base32 secret (default 20 bayt = 160 bit, RFC tavsiyasi). */
 export function generateTotpSecret(bytes = 20): string {
   return base32Encode(crypto.randomBytes(bytes));

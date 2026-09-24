@@ -7,6 +7,9 @@ import {
   getRoomBookings,
   updateBookingStatus,
   getAvailability,
+  startBookingSession,
+  endBookingSession,
+  getSessionInfo,
 } from '../controllers/booking.controller';
 import { authenticate, authorize } from '../middlewares/auth';
 
@@ -21,6 +24,11 @@ router.post('/', authenticate, authorize('USER'), createBooking);
 router.get('/', authenticate, getMyBookings);
 router.get('/:id', authenticate, getBookingById);
 router.put('/:id/cancel', authenticate, cancelBooking);
+
+// SESSIYA (check-in/check-out) — foydalanuvchi yoki xona egasi/boshqaruvchi boshqara oladi.
+router.get('/:id/session', authenticate, getSessionInfo);
+router.post('/:id/session/start', authenticate, startBookingSession);
+router.post('/:id/session/end', authenticate, endBookingSession);
 
 // ============ ADMIN ============
 router.get('/admin/bookings', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), getRoomBookings);

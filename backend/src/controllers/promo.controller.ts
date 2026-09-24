@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../types';
 import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/response';
+import { getPromoIdentityIds, isPromoRecipient } from '../utils/promoIdentity';
 
 async function getMyRoom(req: AuthRequest, res: Response) {
   if (req.user!.role === 'SUPER_ADMIN') return null; // Super admin platform-wide yaratadi
@@ -18,6 +19,40 @@ function normalizeScope(value: unknown): 'SINGLE_USE' | 'USER_LIMITED' | 'MULTI_
   const v = String(value || '').trim().toUpperCase();
   if (v === 'USER_LIMITED' || v === 'MULTI_USE') return v;
   return 'SINGLE_USE';
+}
+
+/**
+ * Per-account ishlatish sonini (1|2|N) normalashtiradi. Chegara 1..20.
+ * Berilmagan bo'lsa — 1 (mavjud default xatti-harakat saqlanadi).
+ */
+function normalizeLimitPerUser(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(20, Math.floor(n)));
+}
+
+/**
+ * Shaxsiy (personal) promo-kod sozlamalarini yig'adi. Kamida bitta identifikator
+ * (recipientUserId | recipientPhone | recipientEmail) majburiy; IP EMAS ishlatiladi.
+ * return undefined bo'lsa — invalidatsiya xatosi bor.
+ */
+function collectPersonalFields(body: any): {
+  data?: { isPersonal: boolean; recipientUserId: string | null; recipientPhone: string | null; recipientEmail: string | null };
+  error?: string;
+} {
+  if (body.isPersonal === undefined && body.recipientUserId === undefined && body.recipientPhone === undefined && body.recipientEmail === undefined) {
+    return { data: undefined };
+  }
+  const recipientUserId = body.recipientUserId ? String(body.recipientUserId).trim() : null;
+  const recipientPhone = body.recipientPhone ? String(body.recipientPhone).trim() : null;
+  const recipientEmail = body.recipientEmail ? String(body.recipientEmail).trim().toLowerCase() : null;
+  const isPersonal = Boolean(
+    body.isPersonal ?? recipientUserId ?? recipientPhone ?? recipientEmail
+  );
+  if (isPersonal && !recipientUserId && !recipientPhone && !recipientEmail) {
+    return { error: 'Shaxsiy promo-kod uchun recipientUserId, recipientPhone yoki recipientEmail majburiy (IP qabul qilinmaydi)' };
+  }
+  return { data: { isPersonal, recipientUserId, recipientPhone, recipientEmail } };
 }
 
 // ============ GET /api/admin/promos — ADMIN: o'z promo-kodlari ============
@@ -57,6 +92,9 @@ export const createPromo = async (req: AuthRequest, res: Response, next: NextFun
     let minBooking = Number(minBookingAmount);
     if (!Number.isFinite(minBooking) || minBooking < 100_000) minBooking = 100_000;
 
+    const personal = collectPersonalFields(req.body);
+    if (personal.error) return badRequest(res, personal.error);
+
     const promo = await prisma.promoCode.create({
       data: {
         roomId: room ? room.id : null,
@@ -66,6 +104,8 @@ export const createPromo = async (req: AuthRequest, res: Response, next: NextFun
         minBookingAmount: minBooking,
         usageScope: normalizeScope(req.body.usageScope),
         maxUses: maxUses !== undefined && maxUses !== null ? Number(maxUses) : null,
+        usageLimitPerUser: normalizeLimitPerUser(req.body.usageLimitPerUser),
+        ...(personal.data || {}),
         startsAt: startsAt ? new Date(startsAt) : new Date(),
         expiresAt: new Date(expiresAt),
         createdBy: req.user!.userId,
@@ -102,6 +142,10 @@ export const updatePromo = async (req: AuthRequest, res: Response, next: NextFun
     }
     if (usageScope !== undefined) data.usageScope = normalizeScope(usageScope);
     if (maxUses !== undefined) data.maxUses = maxUses;
+    if (req.body.usageLimitPerUser !== undefined) data.usageLimitPerUser = normalizeLimitPerUser(req.body.usageLimitPerUser);
+    const personal = collectPersonalFields(req.body);
+    if (personal.error) return badRequest(res, personal.error);
+    if (personal.data !== undefined) Object.assign(data, personal.data);
     if (expiresAt !== undefined) data.expiresAt = new Date(expiresAt);
     if (isActive !== undefined) data.isActive = Boolean(isActive);
 
@@ -131,6 +175,80 @@ export const deletePromo = async (req: AuthRequest, res: Response, next: NextFun
 
     await prisma.promoCode.delete({ where: { id: req.params.id } });
     return ok(res, null, 'Promo-kod o\'chirildi');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ GET /api/promo/my — USER: shaxsiy va yaroqli promo-kodlar ============
+export const getMyPromosUser = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+      select: { id: true, phone: true, email: true },
+    });
+    const identityIds = await getPromoIdentityIds(prisma, req.user!.userId);
+    const now = new Date();
+
+    // Barcha aktiv, amal qiluvchi promo-kodlar; shaxsiy bo'lsa — faqat o'zim uchun.
+    const candidates = await prisma.promoCode.findMany({
+      where: {
+        isActive: true,
+        startsAt: { lte: now },
+        expiresAt: { gte: now },
+        OR: [
+          { isPersonal: false },
+          { isPersonal: true, recipientUserId: { in: identityIds } },
+          { isPersonal: true, recipientPhone: user?.phone || '' },
+          { isPersonal: true, recipientEmail: user?.email.toLowerCase() || '' },
+        ],
+        AND: [
+          {
+            OR: [
+              { maxUses: null },
+              { usageScope: 'MULTI_USE' },
+              { usedCount: { lt: prisma.promoCode.fields.maxUses } },
+            ],
+          },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Har bir kod uchun o'zim necha marta ishlatganimni hisoblaymiz
+    const promos = await Promise.all(
+      candidates
+        .filter((p) => {
+          if (!p.isPersonal) return true;
+          return isPromoRecipient(p, {
+            userId: req.user!.userId,
+            phone: user?.phone,
+            email: user?.email,
+            identityIds,
+          });
+        })
+        .map(async (p) => {
+          const usedByMe = await prisma.booking.count({
+            where: { userId: { in: identityIds }, promoCodeId: p.id, status: { not: 'CANCELLED' } },
+          });
+          const remaining = Math.max(0, (p.usageLimitPerUser ?? 1) - usedByMe);
+          return {
+            id: p.id,
+            code: p.code,
+            discountType: p.discountType,
+            discountValue: p.discountValue,
+            minBookingAmount: p.minBookingAmount,
+            usageLimitPerUser: p.usageLimitPerUser,
+            isPersonal: p.isPersonal,
+            expiresAt: p.expiresAt,
+            usedByMe,
+            remaining,
+            usable: remaining > 0,
+          };
+        })
+    );
+
+    return ok(res, promos.filter((x) => x.usable));
   } catch (err) {
     next(err);
   }
@@ -166,6 +284,8 @@ export const checkPromo = async (req: Request, res: Response, next: NextFunction
       discountValue: promo.discountValue,
       minBookingAmount: promo.minBookingAmount,
       usageScope: promo.usageScope,
+      usageLimitPerUser: promo.usageLimitPerUser,
+      isPersonal: promo.isPersonal,
       expiresAt: promo.expiresAt,
     }, 'Promo-kod yaroqli');
   } catch (err) {

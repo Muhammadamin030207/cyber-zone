@@ -295,6 +295,17 @@ model Booking {
   status           BookingStatus @default(PENDING)
   notes            String?
   idempotencyKey   String?       @map("idempotency_key") // takroriy so'rovlardan himoya (user bo'yicha unique)
+
+  // SESSIYA (check-in / check-out) — §2.5 real foydalanish hisobi.
+  // Bron ACTIVE bo'lganda sessionStartedAt server tomonidan yoziladi; check-out'da
+  // haqiqiy o'yin vaqti va narx hisoblanadi (min 1 soat billing, ortig'i/refund ballga).
+  sessionStartedAt     DateTime? @map("session_started_at")
+  sessionEndedAt       DateTime? @map("session_ended_at")
+  actualDurationMinutes Int?     @map("actual_duration_minutes") // haqiqiy o'yin daqiqalari
+  actualPrice          Decimal?  @map("actual_price") @db.Decimal(10, 2) // haqiqiy sessiya narxi (so'm)
+  billingAdjustment    Decimal?  @map("billing_adjustment") @db.Decimal(10, 2) // 0 yoki musbat: qo'shimcha to'lov; manfiy: qaytarilgan
+  minBillingMinutes    Int       @default(60) @map("min_billing_minutes") // minimal hisoblanadigan vaqt (1 soat)
+
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
 
@@ -321,6 +332,15 @@ model PromoCode {
   usageScope        PromoUsageScope @default(SINGLE_USE) @map("usage_scope")
   maxUses           Int?      @map("max_uses")
   usedCount         Int       @default(0) @map("used_count")
+  // Har bir foydalanuvchi necha marta ishlatishi mumkin (1|2|N). PromoRedemption
+  // qatorlari hisobiga tekshiriladi (identity: userId + bir xil telefon twin'lari).
+  usageLimitPerUser Int       @default(1) @map("usage_limit_per_user")
+  // SHAXSIY promo-kod: aniq foydalanuvchiga beriladi (identifikatsiya: userId /
+  // tasdiqlangan telefon / email — IP EMAS). Faqat mos shaxs ishlata oladi.
+  isPersonal        Boolean   @default(false) @map("is_personal")
+  recipientUserId   String?   @map("recipient_user_id")
+  recipientPhone    String?   @map("recipient_phone")
+  recipientEmail    String?   @map("recipient_email")
   startsAt          DateTime  @map("starts_at")
   expiresAt         DateTime  @map("expires_at")
   isActive          Boolean   @default(true) @map("is_active")
@@ -338,9 +358,11 @@ model PromoCode {
 
 // ============ PROMO-KOD QO'LLANISHLARI ============
 // Har bir muvaffaqiyatli promo qo'llanish alohida qayd etiladi.
-// (promoCodeId, userId) bo'yicha QAT'IY unique constraint — bitta kod bitta
-// foydalanuvchiga faqat 1 marta (anti-abuse, server imzosiz ham kafolat).
-// Bron bekor qilinganda redemption qatori o'chiriladi -> kod qayta ishlatilishi mumkin.
+// (promoCodeId, userId) bo'yicha indeks — har bir foydalanuvchi necha marta
+// ishlatganini sanash va identity tekshiruvlarini tezlashtirish uchun.
+// Bitta kod bitta foydalanuvchiga faqat usageLimitPerUser marta: bu chegara
+// ENDI DB unique-emas, server kodi (advisory lock + hisob) orqali kafolatlanadi —
+// konfiguratsiyalanuvchi (1|2|N) bo'lishi uchun.
 model PromoRedemption {
   id          String   @id @default(uuid())
   promoCodeId String   @map("promo_code_id")
@@ -352,7 +374,7 @@ model PromoRedemption {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   booking   Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
-  @@unique([promoCodeId, userId])
+  @@index([promoCodeId, userId])
   @@index([userId])
   @@index([bookingId])
   @@map("promo_redemptions")

@@ -5,6 +5,7 @@ import {
   updatePromo,
   deletePromo,
   checkPromo,
+  getMyPromosUser,
 } from '../controllers/promo.controller';
 import { authenticate, authorize } from '../middlewares/auth';
 
@@ -12,6 +13,9 @@ const router = Router();
 
 // Public: kodni tekshirish
 router.get('/check', checkPromo);
+
+// User: o'z shaxsiy/yaroqli promo-kodlari
+router.get('/me', authenticate, getMyPromosUser);
 
 // Admin boshqaruvi
 router.get('/', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), getMyPromos);
