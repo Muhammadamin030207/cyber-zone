@@ -5,7 +5,7 @@ import { UzumProvider } from './providers/uzum';
 import { PaynetProvider } from './providers/paynet';
 
 export type * from './types';
-export { ProviderNotConfiguredError, type ProviderId, type PaymentProvider, SANDBOX_CLICK, SANDBOX_PAYME } from './types';
+export { ProviderNotConfiguredError, type ProviderId, type PaymentProvider, SANDBOX_CLICK, SANDBOX_PAYME, SANDBOX_UZUM, SANDBOX_PAYNET } from './types';
 export { ProviderUnavailableError } from './providers/payme';
 
 const instances: Record<ProviderId, PaymentProvider> = {
@@ -35,12 +35,7 @@ export interface ProviderAvailability {
   reason?: 'not_configured' | 'not_implemented' | 'ok';
 }
 
-/**
- * UZUM va PAYNET adapterlari hali rasmiy spetsifikatsiya asosida to'ldirilmagan
- * (createPayment/webhook stub) — ularni "ulangan" deb ko'rsatish yolg'on.
- * Faqat to'liq ulangan provayderlar tanlanadigan bo'ladi, qolganlari "Tez orada".
- */
-const IMPLEMENTED: Record<ProviderId, boolean> = { CLICK: true, PAYME: true, UZUM: false, PAYNET: false };
+const IMPLEMENTED: Record<ProviderId, boolean> = { CLICK: true, PAYME: true, UZUM: true, PAYNET: true };
 
 /** Provayder haqiqatan ulangan va to'lov qabul qilishga tayyormi. */
 export function isProviderAvailable(id: string): boolean {

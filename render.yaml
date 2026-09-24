@@ -52,7 +52,12 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL
-        value: gemini-3.6-flash
+        value: gemini-2.5-flash
+      # Claude AI — ANTHROPIC_API_KEY o'rnatilsa Claude ustunlik bilan ishlatiladi
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-5
       # Parol tiklash email'i uchun SMTP (Brevo relay — secret, Render dashboard'da qo'lda).
       # Render free web service'lari 25/465/587 portlariga chiquvchi trafikni bloklaydi,
       # shuning uchun Brevo'ning 2525-porti ishlatiladi (STARTTLS).
@@ -76,9 +81,9 @@ services:
       # To'lov provayderlari callback/webhook bazaviy URL — mahalliy "localhost"ga tushmaslik
       - key: PROVIDER_CALLBACK_URL
         value: https://cyberzone-backend-api.onrender.com
-      # Login brute-force: progressiv bloklash (1-soat -> 2-soat -> 5-soat -> 24-soat, hisob bo'yicha)
+      # Login brute-force: 10-chi xato urinishdan keyin hisob 24-soatga bloklanadi (§4.2)
       - key: LOGIN_LOCK_MINUTES
-        value: "60,120,300,1440"
+        value: "1440"
       - key: LOGIN_MAX_ATTEMPTS
         value: "10"
       # WebAuthn: Frontend domeni (passkey bog'langan origin)

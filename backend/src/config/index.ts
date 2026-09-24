@@ -83,24 +83,27 @@ export const config = {
       apiEndpoint: process.env.PAYME_API_ENDPOINT || 'https://checkout.payme.uz',
     },
     uzum: {
-      merchantId: process.env.UZUM_MERCHANT_ID || '',
-      secretKey: process.env.UZUM_SECRET_KEY || '',
-      checkoutUrl: process.env.UZUM_CHECKOUT_URL || 'https://checkout.uzum.uz',
+      merchantId: process.env.UZUM_MERCHANT_ID || process.env.UZUM_TERMINAL_ID || '',
+      secretKey: process.env.UZUM_SECRET_KEY || process.env.UZUM_API_KEY || '',
+      checkoutUrl: process.env.UZUM_CHECKOUT_URL || 'https://www.uzumcheckout.uz',
+      apiEndpoint: process.env.UZUM_API_ENDPOINT || 'https://checkoutapi.uzumbank.uz',
     },
     paynet: {
-      merchantId: process.env.PAYNET_MERCHANT_ID || '',
+      merchantId: process.env.PAYNET_MERCHANT_ID || process.env.PAYNET_USERNAME || '',
       password: process.env.PAYNET_PASSWORD || '',
-      checkoutUrl: process.env.PAYNET_CHECKOUT_URL || '',
-      apiEndpoint: process.env.PAYNET_API_ENDPOINT || '',
+      serviceId: process.env.PAYNET_SERVICE_ID || '',
+      checkoutUrl: process.env.PAYNET_CHECKOUT_URL || 'https://app.paynet.uz',
+      apiEndpoint: process.env.PAYNET_API_ENDPOINT || 'https://api.paynet.uz/api',
     },
   },
   security: {
     // Login brute-force himoyasi: hisob bo'yicha ketma-ket xato urinishlar soni
-    // va progressiv blok muddatlari (daqiqa): 1-soat -> 2-soat -> 5-soat -> 24-soat.
-    // Oxirgi qiymat keyingi barcha bloklar uchun qoladi. Env orqali sozlanadi
-    // (hardcode emas). Bu GLOBAL emas — faqat shu hisobga tegishli.
+    // (10-xato = LOGIN_MAX_ATTEMPTS) paysaliga hisob 24-soatga bloklanadi
+    // (locked_until = now + 24h). Blok muddati daqiqada: LOGIN_LOCK_MINUTES.
+    // Spec §4.2 bo'yicha default 1440 = 24-soat (progressiv emas, doimiy).
+    // Env orqali sozlanadi (hardcode emas). Bu GLOBAL emas — faqat shu hisobga tegishli.
     loginMaxAttempts: Math.max(1, parseInt(process.env.LOGIN_MAX_ATTEMPTS || '10', 10)),
-    loginLockMinutes: (process.env.LOGIN_LOCK_MINUTES || '60,120,300,1440')
+    loginLockMinutes: (process.env.LOGIN_LOCK_MINUTES || '1440')
       .split(',')
       .map((v) => parseInt(v.trim(), 10))
       .filter((v) => Number.isFinite(v) && v > 0),
@@ -124,8 +127,14 @@ export const config = {
     tempPasswordMinutes: Math.max(10, parseInt(process.env.TEMP_PASSWORD_MINUTES || '30', 10)),
   },
   ai: {
+    // Claude (Anthropic) — server tomonida, kalit hech qachon frontendga chiqmaydi.
+    // ANTHROPIC_API_KEY o'rnatilgan bo'lsa — Claude ustunlik bilan ishlatiladi.
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+    anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5',
+    anthropicEndpoint: process.env.ANTHROPIC_ENDPOINT || 'https://api.anthropic.com',
+
     geminiApiKey: process.env.GEMINI_API_KEY || '',
-    model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
+    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
     fallbackModel: process.env.GEMINI_FALLBACK_MODEL || 'gemini-flash-lite-latest',
     temperature: parseFloat(process.env.AI_TEMPERATURE || '0.7'),
     maxTokens: parseInt(process.env.AI_MAX_TOKENS || '1000', 10),

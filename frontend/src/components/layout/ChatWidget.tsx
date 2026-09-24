@@ -30,7 +30,7 @@ import type { AIConversation, AIMessage, ConversationSummary } from '@/lib/webau
 
 // ============================================================================
 // CYBER-ZONE AI — yordamchi (redizayn):
-// - YANGI LOGO: maxsus SVG belgi (lucide Bot emas)
+// - LOGO: aniq AI belgisi (luside Sparkles — universal chatbot belgisi, §7.1)
 // - YANGI JOY: floating FAB (z-70) + mobil to'liq ekran (z-80)
 // - TARIX: conversations/yadro DB'dan (rename/delete/new, history drawer)
 // - STREAMING: SSE orqali real-time javob
@@ -48,7 +48,7 @@ const SUGGESTIONS = [
   { icon: Gift, label: 'Promo-kod', prompt: 'Faol promo-kodlar bormi?' },
 ];
 
-/** YANGI AI LOGO (SVG): neon aql / link belgisi — bot ikonkasidan farqli o'ziga xos shaxs */
+/** AI LOGO — "Sparkles" (AI belgisi, §7.1): markazda katta yulduz + kichik yulduz + nuqta. */
 export function AILogo({ size = 28, className }: { size?: number; className?: string }) {
   return (
     <svg
@@ -66,31 +66,19 @@ export function AILogo({ size = 28, className }: { size?: number; className?: st
           <stop offset="0.5" stopColor="var(--acc-b, #22d3ee)" />
           <stop offset="1" stopColor="var(--acc-c, #f59e0b)" />
         </linearGradient>
-        <linearGradient id="cz-ai-g-2" x1="14" y1="12" x2="34" y2="40" gradientUnits="userSpaceOnUse">
-          <stop stopColor="var(--acc-b, #22d3ee)" />
-          <stop offset="1" stopColor="var(--acc-a, #10b981)" />
-        </linearGradient>
       </defs>
-      {/* Halqa — aql, politika, doimiy bog'lanish */}
-      <circle cx="24" cy="24" r="18.5" stroke="url(#cz-ai-g-1)" strokeWidth="3.4" />
-      {/* Fayzalar — 3 ta neon yulduz (aql, reja, ijod) */}
-      <circle cx="33" cy="15" r="2.4" fill="var(--acc-c, #f59e0b)" />
-      <circle cx="15" cy="34" r="2.1" fill="var(--acc-a, #10b981)" />
-      <circle cx="15" cy="15" r="1.6" fill="var(--acc-b, #22d3ee)" />
-      {/* Ichki "C" — Cyber-ZONE + markazdagi "Z" */}
+      {/* Markazdagi katta 4-burchakli yulduz (spark) */}
       <path
-        d="M17 24c0-3.9 3.1-7 7-7 2.3 0 4.3 1.1 5.6 2.8"
-        stroke="url(#cz-ai-g-2)"
-        strokeWidth="3"
-        strokeLinecap="round"
+        d="M24 5 L27.6 20.4 L43 24 L27.6 27.6 L24 43 L20.4 27.6 L5 24 L20.4 20.4 Z"
+        fill="url(#cz-ai-g-1)"
       />
+      {/* Yuqori o'ngda kichik yulduz */}
       <path
-        d="M30.5 24c0 4-3.2 7-7.5 7-2 0-3.8-.8-5.2-2"
-        stroke="url(#cz-ai-g-2)"
-        strokeWidth="3"
-        strokeLinecap="round"
+        d="M40 5 L41.9 9.5 L46 11.5 L41.9 13.5 L40 18 L38.1 13.5 L34 11.5 L38.1 9.5 Z"
+        fill="var(--acc-b, #22d3ee)"
       />
-      <path d="M24 17v14" stroke="var(--acc-b, #22d3ee)" strokeWidth="1.8" strokeLinecap="round" opacity="0.0" />
+      {/* Pastki chapda nuqta (spark) */}
+      <circle cx="12" cy="35" r="3.4" fill="var(--acc-c, #f59e0b)" />
     </svg>
   );
 }
@@ -320,6 +308,7 @@ export default function ChatWidget() {
       const decoder = new TextDecoder();
       let buffer = '';
       let doneContent = '';
+      let streamed = '';
 
       if (!reader || !resp.ok) {
         setMessages((m) =>
@@ -341,7 +330,9 @@ export default function ChatWidget() {
           for (const line of lines) {
             try {
               const payload = JSON.parse(line.slice(6));
-              if (payload.type === 'assistant') {
+              if (payload.type === 'delta') {
+                streamed += payload.content || '';
+              } else if (payload.type === 'assistant') {
                 doneContent = payload.content || '';
               }
             } catch {
@@ -349,15 +340,14 @@ export default function ChatWidget() {
             }
           }
         }
-        // Streaming ko'rinish (progressiv) — server barcha boostunda keladi, ama
-        // amalga oshirishda "yozmoqda" indikator bilan silliq ko'rsatiladi.
-        setMessages((prev) =>
-          prev.map((mm) => {
-            if (!mm.streaming) return mm;
-            const shown = doneContent.slice(0, Math.min(doneContent.length, mm.text.length + 120));
-            return { ...mm, text: shown, pending: false, streaming: doneContent.length > shown.length };
-          })
-        );
+        // Real-time: server'ndan kelgan delta bo'laklarini darhol ko'rsatamiz.
+        // (Eski server bitta big-chunk `assistant` event yuborsa — doneContent)
+        const shown = doneContent || streamed;
+        if (shown) {
+          setMessages((prev) =>
+            prev.map((mm) => (mm.streaming ? { ...mm, text: shown, pending: false, streaming: true } : mm))
+          );
+        }
       }
     } catch (err: unknown) {
       const aborted = (err as { name?: string })?.name === 'AbortError';

@@ -19,10 +19,19 @@ process.env.EMAIL_USER = '';
 process.env.EMAIL_PASS = '';
 
 // To'lov webhook testlari uchun Payme kredensiallari (test qiymatlar).
+process.env.PAYMENTS_DEV_MODE = '1'; // E2E to'lov oqimi sandbox rejimida ishlaydi (imzo validatsiyasi saqlanadi).
 process.env.PAYME_MERCHANT_ID = 'e2e_payme_merchant';
 process.env.PAYME_MERCHANT_KEY = 'e2e_payme_key';
 process.env.PAYME_API_ENDPOINT = 'http://127.0.0.1:9/payme';
 process.env.PROVIDER_CALLBACK_URL = 'http://localhost:5000';
+
+// Uzum / Paynet webhook test kredensiallari (raw-body HMAC va Basic auth tekshiruvi uchun).
+process.env.UZUM_MERCHANT_ID = 'e2e_uzum_terminal';
+process.env.UZUM_SECRET_KEY = 'e2e_uzum_secret';
+process.env.UZUM_API_ENDPOINT = 'http://127.0.0.1:9/uzum';
+process.env.PAYNET_MERCHANT_ID = 'e2e_paynet_merchant';
+process.env.PAYNET_PASSWORD = 'e2e_paynet_secret';
+process.env.PAYNET_API_ENDPOINT = 'http://127.0.0.1:9/paynet';
 
 process.env.FRONTEND_URLS = 'http://localhost:3006';
 process.env.WEBAUTHN_RP_ID = 'localhost';

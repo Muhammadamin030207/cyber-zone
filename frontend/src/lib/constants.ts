@@ -41,6 +41,4 @@ export function roomCoords(room: { latitude?: number | null; longitude?: number 
   return TASHKENT_CENTER;
 }
 
-export const PAYMENT_METHODS = ['PAYME', 'CLICK', 'UZCARD', 'HUMO', 'CASH'] as const;
-
 export const REAL_TIME_BADGE = { free: 'Bo\u2019sh', busy: 'Ishladi' } as const;

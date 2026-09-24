@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import {
   createPayment,
   getPaymentStatus,
@@ -15,8 +16,19 @@ import { config } from '../config';
 
 const router = Router();
 
+// Webhook spam cheklovi — provider oqimi juda yuqori bo'lsa ham cheklangan
+// (imzo validatsiyasi asosiy himoya; bu faqat qo'shimcha qatlam).
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 600,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.ip || 'unknown',
+  message: { success: false, message: 'Juda ko\'p webhook so\'rov' },
+});
+
 // Provider webhook (provayder chaqiradi — authsiz, ammo provider-specific validatsiya)
-router.post('/webhook/:provider', webhookPayment);
+router.post('/webhook/:provider', webhookLimiter, webhookPayment);
 
 // SANDBOX mock gateway — faqat PAYMENTS_DEV_MODE yoqilganda mavjud.
 // Real "checkout" sahifasini simulyatsiya qilib, imzolangan webhook yuboradi.

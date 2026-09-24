@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../types';
 import { ok, badRequest, forbidden, notFoundMsg } from '../utils/response';
-import { generateAIReply, conversationToHistory } from './ai.controller';
+import { generateAIReply, streamAIReply, conversationToHistory } from './ai.controller';
 
 // ============================================================================
 // AI SUHBAT TARIXI (conversations / messages)
@@ -124,7 +124,7 @@ export async function deleteConversation(req: AuthRequest, res: Response, _next:
 }
 
 // ============ POST /api/ai/conversations/:id/messages (auth) — xabar yuborish ============
-// Accept: text/event-stream → SSE (real-time streaming). Oddiy JSON → to'liq javob.
+// Accept: text/event-stream → SSE (real-time token streaming). Oddiy JSON → to'liq javob.
 export async function sendMessage(req: AuthRequest, res: Response, _next: NextFunction) {
   try {
     const owns = await getOwnedConversation(req.user!.userId, req.params.id);
@@ -145,7 +145,69 @@ export async function sendMessage(req: AuthRequest, res: Response, _next: NextFu
 
     const wantsStream = String(req.headers.accept || '').includes('text/event-stream');
 
-    // 2) AI javobini olish
+    // SSE — streaming path: tokenlar kelishi bilan, javob tugamasidan earlier uzatiladi.
+    // Provider (Claude/Gemini) stream bo'ylab delta'lar keladi, oxirida assistant xabar
+    // DB'ga saqlanadi va `assistant` event bilan id/model qaytariladi.
+    if (wantsStream) {
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
+
+      const send = (payload: Record<string, unknown>) => res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      let streamedText = '';
+
+      try {
+        // 2) Haqiqiy token streaming — har bir bo'lak real vaqtda `delta` event sifatida.
+        const { text, model } = await streamAIReply(req.user!.userId, message, history, (delta) => {
+          streamedText += delta;
+          send({ type: 'delta', content: delta });
+        });
+
+        const reply = streamedText || text;
+
+        // 3) assistant javobini saqlash
+        const assistantMessage = await prisma.aIMessage.create({
+          data: { conversationId: conversation.id, role: 'assistant', content: reply.slice(0, 4000) },
+        });
+
+        // Auto-title: birinchi xabar bo'lsa suhbat nomini qisqa gapga o'zgartiramiz
+        if (conversation.title === 'Yangi suhbat') {
+          await prisma.aIConversation.update({
+            where: { id: conversation.id },
+            data: { title: message.slice(0, 40) || 'Yangi suhbat' },
+          });
+        }
+
+        await prisma.aIConversation.update({ where: { id: conversation.id }, data: {} }); // touch -> updatedAt
+
+        send({ type: 'assistant', id: assistantMessage.id, model, content: reply });
+        send({ type: 'done', model });
+        return res.end();
+      } catch (err) {
+        console.error('[AI] sendMessage stream xatoligi:', (err as Error).message);
+        try {
+          if (streamedText) {
+            // Yarim javob bo'lsa — saqlaymiz va shu holda yopamiz
+            const partial = streamedText.slice(0, 4000);
+            if (partial) {
+              const assistantMessage = await prisma.aIMessage.create({
+                data: { conversationId: conversation.id, role: 'assistant', content: partial },
+              });
+              send({ type: 'assistant', id: assistantMessage.id, model: 'fallback', content: partial });
+            }
+          }
+          send({ type: 'error', message: 'AI javob berishda xatolik yuz berdi' });
+          send({ type: 'done', model: 'fallback' });
+        } catch {
+          /* SSE allaqachon uzilgan bo'lishi mumkin */
+        }
+        return res.end();
+      }
+    }
+
+    // 2) AI javobini olish (oddiy JSON)
     const { reply, model } = await generateAIReply(req.user!.userId, message, history);
 
     // 3) assistant javobini saqlash
@@ -162,20 +224,6 @@ export async function sendMessage(req: AuthRequest, res: Response, _next: NextFu
     }
 
     await prisma.aIConversation.update({ where: { id: conversation.id }, data: {} }); // touch -> updatedAt
-
-    if (wantsStream) {
-      // SSE — faqat real-time (keyin o'chirishni to'xtatib qo'yish)
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.flushHeaders();
-      // Oddiy bo'lmagan chunk: assambleya qilish noqulay bo'lgani uchun, to'liq javobni
-      // bitta event sifatida, keyin end event. (Gemini streamga obuna bo'lish uchun
-      // alohida integration qilinadi — bu esa haqiqiy token tokken stream beradi.)
-      res.write(`data: ${JSON.stringify({ type: 'assistant', model, id: assistantMessage.id, content: reply })}\n\n`);
-      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
-      return res.end();
-    }
 
     return ok(
       res,

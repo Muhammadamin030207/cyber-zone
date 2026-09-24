@@ -19,10 +19,22 @@ function normalizeEmailKey(value: unknown): string {
 }
 
 function clientIpKey(req: any): string {
-  const xff = req.headers?.['x-forwarded-for'];
-  if (typeof xff === 'string' && xff.length) return xff.split(',')[0].trim();
+  // `trust proxy = 1` (server.ts) — req.ip XFF orqali haqiqiy mijoz IP'ni beradi.
   return req.ip || 'unknown';
 }
+
+/**
+ * Ro'yxatdan o'tish spam himoyasi: IP bo'yicha soatiga cheklangan son
+ * (shared NAT — shu sababli keng: 10/soat, kalit — IP).
+ */
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  keyGenerator: (req: any) => clientIpKey(req),
+  message: { success: false, message: 'Juda ko\'p ro\'yxatdan o\'tish. Birozdan so\'ng qayta urinib ko\'ring.' },
+});
 
 /**
  * Login brute-force: GLOBAL EMAS. Kalit — IP + email juftligi. Shu tufayli bitta
@@ -49,9 +61,10 @@ const loginIpLimiter = rateLimit({
 });
 
 // Forgot-password spam'i: IP + email juftligi (bir hisobning spam'i boshqalarga tegmaydi)
+// Spec §4.0 tavsiyasi: 15 daqiqada 1-2 so'rov/email. 3 tasiga ruxsat — qayta urinish uchun yetarli.
 const forgotLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 5,
+  limit: 3,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   keyGenerator: (req: any) => `${clientIpKey(req)}:${normalizeEmailKey(req.body?.email)}`,
@@ -64,7 +77,7 @@ const forgotLimiter = rateLimit({
  *   post:
  *     summary: Foydalanuvchi ro'yxatdan o'tish
  */
-router.post('/register', register);
+router.post('/register', registerLimiter, register);
 
 /**
  * POST /api/auth/login

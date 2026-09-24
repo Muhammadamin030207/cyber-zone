@@ -702,17 +702,15 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
                   <div className="h-px flex-1 bg-white/10" />
                 </div>
 
-                {biometricAvailable && (
-                  <button
-                    type="button"
-                    disabled={passkeyBusy}
-                    onClick={launchPasswordless}
-                    className="w-full mb-3 py-3 rounded-xl border border-neon-green/40 bg-neon-green/5 text-neon-green hover:bg-neon-green/10 flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-60 transition-colors"
-                  >
-                    {passkeyBusy ? <Loader2 size={18} className="animate-spin" /> : <BiometricIcon size={18} />}
-                    {bioInfo?.method === 'faceid' ? `${bioLabel} bilan kirish` : 'Passkey (Face ID / barmoq izi) bilan kirish'}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={passkeyBusy}
+                  onClick={launchPasswordless}
+                  className="w-full mb-3 py-3 rounded-xl border border-neon-green/40 bg-neon-green/5 text-neon-green hover:bg-neon-green/10 flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-60 transition-colors"
+                >
+                  {passkeyBusy ? <Loader2 size={18} className="animate-spin" /> : <BiometricIcon size={18} />}
+                  {bioInfo?.method === 'faceid' ? `${bioLabel} bilan kirish` : 'Passkey (Face ID / barmoq izi) bilan kirish'}
+                </button>
 
                 <GoogleButton mode="signin" />
 

@@ -75,9 +75,13 @@ const hasCameraDevice = (): Promise<boolean> => {
  */
 export async function detectBiometric(): Promise<BiometricInfo> {
   const s = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const maxTouch = typeof navigator !== 'undefined' ? navigator.maxTouchPoints : 0;
+
+  // Zamonaviy iPad'lar (desktop UA bilan "Macintosh" deb qaytaradi) — sensor orqali aniqlaymiz
+  const isIPad = /iPad/.test(s) || (/Macintosh/.test(s) && maxTouch > 1 && !/Windows/.test(s));
 
   if (/iPhone/.test(s)) return { method: 'faceid', label: 'Face ID' };
-  if (/iPad/.test(s)) return { method: 'faceid', label: 'Face ID' };
+  if (isIPad) return { method: 'faceid', label: 'Face ID' };
   if (/Mac/.test(s)) return { method: 'touchid', label: 'Touch ID' };
 
   if (s.includes('Android')) return { method: 'android', label: 'Android biometriya' };

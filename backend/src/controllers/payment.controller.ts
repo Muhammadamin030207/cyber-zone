@@ -5,8 +5,8 @@ import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/respon
 import { toNumber, round2, isValidAmount } from '../utils/money';
 import { io } from '../lib/socket';
 import { Prisma } from '@prisma/client';
-import { getProvider, getProviderAvailability, isProviderAvailable, ProviderNotConfiguredError, ProviderUnavailableError, SANDBOX_CLICK, SANDBOX_PAYME } from '../services/payments';
-import { md5hex } from '../services/payments/crypto';
+import { getProvider, getProviderAvailability, isProviderAvailable, ProviderNotConfiguredError, ProviderUnavailableError, SANDBOX_CLICK, SANDBOX_PAYME, SANDBOX_UZUM, SANDBOX_PAYNET } from '../services/payments';
+import { hmacSha256hex, md5hex } from '../services/payments/crypto';
 import { config } from '../config';
 
 type TxClient = Prisma.TransactionClient;
@@ -92,12 +92,17 @@ interface BookingInfo {
  */
 async function settleVerifiedPayment(
   tx: TxClient,
-  args: { id: string; actorId?: string | null; actorRole?: string | null; audit?: Record<string, any> }
+  args: { id: string; actorId?: string | null; actorRole?: string | null; audit?: Record<string, any>; providerTransactionId?: string | null; providerPaymentId?: string | null }
 ) {
   const now = new Date();
   const timed = await tx.payment.updateMany({
     where: { id: args.id, status: { notIn: [...PAID_STATUSES] } },
-    data: { status: 'PAID', paidAt: now },
+    data: {
+      status: 'PAID',
+      paidAt: now,
+      ...(args.providerTransactionId ? { providerTransactionId: args.providerTransactionId } : {}),
+      ...(args.providerPaymentId ? { providerPaymentId: args.providerPaymentId } : {}),
+    },
   });
   if (timed.count === 0) {
     const already = await tx.payment.findUnique({ where: { id: args.id } });
@@ -450,13 +455,15 @@ export const mockSandboxPayment = async (req: Request, res: Response, next: Next
     if (mockKey !== config.payments.devMockKey) return res.status(404).json({ error: 'not found' });
 
     const provider = String(req.params.provider || '').toLowerCase();
-    if (!['click', 'payme'].includes(provider)) return res.status(400).json({ error: 'unknown provider' });
+    if (!['click', 'payme', 'uzum', 'paynet'].includes(provider)) return res.status(400).json({ error: 'unknown provider' });
 
     const q = req.query as Record<string, string | undefined>;
-    const orderId = String(q.order_id || q.merchant_trans_id || q['ac.order_id'] || '');
+    const orderId = String(q.order_id || q.merchant_trans_id || q['ac.order_id'] || q.account || '');
     if (!orderId) return res.status(400).json({ error: 'order_id majburiy' });
 
-    const payment = await prisma.payment.findUnique({ where: { providerTransactionId: orderId } });
+    const payment = await prisma.payment.findFirst({
+      where: { OR: [{ id: orderId }, { providerTransactionId: orderId }, { providerPaymentId: orderId }] },
+    });
     if (!payment) return res.status(404).json({ error: 'To\'lov topilmadi' });
     if (!['CREATED', 'REDIRECT_REQUIRED', 'PROCESSING'].includes(payment.status)) {
       return res.status(409).json({ error: `To'lov holati ${payment.status} — yakunlangan` });
@@ -484,7 +491,7 @@ export const mockSandboxPayment = async (req: Request, res: Response, next: Next
       });
       params.set('sign_string', md5hex([clickTransId, creds.serviceId, creds.secretKey, orderId, String(Math.round(amount)), '1', signTime].join('')));
       hookRes = await fetch(`${webhookUrl}?${params.toString()}`, { method: 'POST', signal: AbortSignal.timeout(15000) });
-    } else {
+    } else if (provider === 'payme') {
       const p = config.payments.payme;
       const creds = p.merchantId && p.merchantKey ? { merchantId: p.merchantId, merchantKey: p.merchantKey } : SANDBOX_PAYME;
       const basic = Buffer.from(`${creds.merchantId}:${creds.merchantKey}`).toString('base64');
@@ -497,6 +504,50 @@ export const mockSandboxPayment = async (req: Request, res: Response, next: Next
         }),
         signal: AbortSignal.timeout(15000),
       });
+    } else if (provider === 'uzum') {
+      const u = config.payments.uzum;
+      const creds = u.merchantId && u.secretKey ? { merchantId: u.merchantId, secretKey: u.secretKey } : SANDBOX_UZUM;
+      const body = {
+        orderNumber: orderId,
+        orderId,
+        operationState: 'SUCCESS',
+        amount: Math.round(round2(amount) * 100), // tiyin
+      };
+      const bodyStr = JSON.stringify(body);
+      // Uzum imzosi aynan raw body ustidan — mock ham aynan o'sha baytlarni jo'natadi.
+      const sign = hmacSha256hex(creds.secretKey, bodyStr);
+      hookRes = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Sign': sign,
+          'X-Terminal-Id': creds.merchantId,
+        },
+        body: bodyStr,
+        signal: AbortSignal.timeout(15000),
+      });
+    } else if (provider === 'paynet') {
+      const pn = config.payments.paynet;
+      const creds = pn.merchantId && pn.password ? { merchantId: pn.merchantId, password: pn.password } : SANDBOX_PAYNET;
+      const basic = Buffer.from(`${creds.merchantId}:${creds.password}`).toString('base64');
+      hookRes = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Basic ${basic}` },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: Date.now(),
+          method: 'PerformTransaction',
+          params: {
+            transactionId: `dev-${Date.now()}`,
+            account: orderId,
+            amount: Math.round(round2(amount) * 100), // tiyin
+            fields: { id: orderId },
+          },
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+    } else {
+      return res.status(400).json({ error: 'unknown provider' });
     }
 
     const body = await hookRes.text();
@@ -613,6 +664,7 @@ export const webhookPayment = async (req: Request, res: Response, next: NextFunc
     const ctx = {
       provider: provider.id,
       body: (req as any).body || {},
+      rawBody: (req as any).rawBody,
       query: req.query as Record<string, string | undefined>,
       headers: req.headers as Record<string, string | string[] | undefined>,
       url: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
@@ -629,11 +681,16 @@ export const webhookPayment = async (req: Request, res: Response, next: NextFunc
       return res.status(400).json({ error: 'invalid webhook' });
     }
 
-    const merchantTransactionId = result.providerTransactionId;
+    const merchantTransactionId = result.providerTransactionId || result.providerPaymentId;
     if (merchantTransactionId) {
-      // Idempotency: transaction id bo'yicha payment'ni topamiz
-      const payment = await prisma.payment.findUnique({
-        where: { providerTransactionId: merchantTransactionId },
+      const payment = await prisma.payment.findFirst({
+        where: {
+          OR: [
+            { id: merchantTransactionId },
+            { providerTransactionId: merchantTransactionId },
+            { providerPaymentId: merchantTransactionId },
+          ],
+        },
         include: { booking: { include: { room: true } } },
       });
 
@@ -652,6 +709,8 @@ export const webhookPayment = async (req: Request, res: Response, next: NextFunc
               actorId: null,
               actorRole: `PROVIDER:${provider.id}`,
               audit: { source: 'webhook', action: result.action, webhookAmount: result.amount },
+              providerTransactionId: result.providerTransactionId ?? null,
+              providerPaymentId: result.providerPaymentId ?? null,
             });
             if (r.booking) {
               const info = bookingInfoOf(payment);

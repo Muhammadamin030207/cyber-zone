@@ -47,10 +47,8 @@ export default function PasskeySettings() {
   }, [user?.id]);
 
   async function handleAdd() {
-    if (!bioAvailable) {
-      toastError('Bu brauzer/qurilma passkey (Face ID / barmoq izi) qo\'llab-quvvatlamaydi');
-      return;
-    }
+    // platformAuthenticatorIsAvailable ichonchsiz bo'lishi mumkin (masalan ba'zi brauzerlar),
+    // shuning uchun har doim urinamiz — WebAuthn o'zi buni tasdiqlaydi (security key ham ishlaydi)
     setBusy(true);
     try {
       await addPasskey(deviceName.trim() || undefined);
@@ -143,8 +141,8 @@ export default function PasskeySettings() {
             {bioLabel}
           </span>
         ) : (
-          <span className="text-[10px] px-2 py-1 rounded-full bg-red-500/10 text-red-300 border border-red-500/25 font-bold uppercase tracking-wider">
-            Qo&apos;llab-quvvatlanmaydi
+          <span className="text-[10px] px-2 py-1 rounded-full bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/25 font-bold uppercase tracking-wider">
+            Security key / boshqa qurilma
           </span>
         )}
       </div>
@@ -291,7 +289,7 @@ export default function PasskeySettings() {
         <button
           type="button"
           onClick={handleAdd}
-          disabled={busy || !bioAvailable}
+          disabled={busy}
           className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl neon-btn font-bold text-sm disabled:opacity-50"
         >
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}

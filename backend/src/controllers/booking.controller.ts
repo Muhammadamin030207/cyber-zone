@@ -190,7 +190,7 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
       const now = new Date();
       if (now < promo.startsAt || now > promo.expiresAt) return badRequest(res, 'Promo-kod muddati tugagan');
 
-      if (promo.maxUses !== null && promo.usedCount >= promo.maxUses) {
+      if (promo.maxUses !== null && promo.usageScope !== 'MULTI_USE' && promo.usedCount >= promo.maxUses) {
         return badRequest(res, 'Promo-kod limiti tugagan');
       }
       if (promo.roomId && promo.roomId !== roomId) {
@@ -205,8 +205,31 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
 
         // Promo-kod bir foydalanuvchiga bir marta ishlatilishi mumkin (single-use per user)
         if (promo) {
+          // Race-safe (TOCTOU): bir xil (promo, shaxs) bo'yicha parallel bronlarni
+          // transaktsiya darajasida serialize qilamiz — ikki so'rov bir-birini "ko'rmay"
+          // qolib promo'ni qayta ishlata olmaydi. DB-dagi maxsus indeks bilan birga himoya.
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(concat('cyber-promo:', ${promo.id}, ':', ${req.user!.userId})))`;
+
+          // Identifikatsiya: shu user + AYNAN bir xil tasdiqlangan telefon raqamiga ega
+          // boshqa ACTIVE userlar. Bu "qayta ro'yxatdan o'tib promo stacking" hujumini
+          // kesadi. Email users.email UNIQUE — alohida tekshiruv shart emas.
+          const me = await tx.user.findUnique({ where: { id: req.user!.userId }, select: { phone: true } });
+          const identityIds = [req.user!.userId];
+          if (me?.phone) {
+            const twins = await tx.user.findMany({
+              where: { phone: me.phone, id: { not: req.user!.userId } },
+              select: { id: true },
+            });
+            if (twins.length) {
+              identityIds.push(...twins.map((t) => t.id));
+              for (const twin of twins) {
+                await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(concat('cyber-promo:', ${promo.id}, ':', ${twin.id})))`;
+              }
+            }
+          }
+
           const prevUse = await tx.booking.findFirst({
-            where: { userId: req.user!.userId, promoCodeId: promo.id, status: { not: 'CANCELLED' } },
+            where: { userId: { in: identityIds }, promoCodeId: promo.id, status: { not: 'CANCELLED' } },
             select: { id: true },
           });
           if (prevUse) throw new Error('PROMO_ALREADY_USED');
@@ -358,6 +381,18 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
           });
         }
 
+        // PromoRedemption: (promoCodeId, userId) unique — server kodi bitta
+        // foydalanuvchiga faqat 1 marta ishlatilishini DB darajasida qayd qiladi.
+        if (promo) {
+          await tx.promoRedemption.create({
+            data: {
+              promoCodeId: promo.id,
+              userId: req.user!.userId,
+              bookingId: newBooking.id,
+            },
+          });
+        }
+
         return newBooking;
       });
 
@@ -367,6 +402,12 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
       return created(res, booking, `Bron yaratildi. ${Number(booking.depositPercent) || 30}% oldindan to'lov kerak`);
     } catch (txErr: any) {
       const msg = txErr.message || '';
+      // PromoRedemption unique (promoCodeId, userId) buzilsa — bu P2000-P2002 xatosida
+      // avvalgi tekshiruv (advisory lock + prevUse) tufayli odatda bo'lmaydi, lekin
+      // har qanday holatda single-use kafolatni DB darajasida tartibga solamiz.
+      if (txErr?.code === 'P2002' && JSON.stringify(txErr?.meta?.target || []).includes('promo_redemptions')) {
+        return badRequest(res, 'Bu promo-kod siz allaqachon ishlatgansiz');
+      }
       // Idempotentlik: raqobatli (concurrent) takroriy so'rov bir xil kalit bilan
       // unique-constraint'ga tushsa — yangi bron yaratilmaydi, avvalgisini qaytaramiz.
       if (txErr?.code === 'P2002' && idemKey) {
@@ -390,7 +431,7 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
       if (msg === 'COMPUTER_BUSY') return badRequest(res, 'Bu kompyuter hozirda band');
       if (msg === 'NO_FREE_COMPUTER') return badRequest(res, 'Ushbu vaqt uchun bo\'sh kompyuter yo\'q', 'ROOM_FULL');
       if (msg === 'INSUFFICIENT_POINTS') return badRequest(res, 'Bonus ballaringiz yetarli emas');
-      if (msg === 'MIN_AMOUNT_NOT_REACHED') return badRequest(res, 'Promo-kod uchun minimal narx yetishmayapti');
+      if (msg === 'MIN_AMOUNT_NOT_REACHED') return badRequest(res, 'Bu promo koddan foydalanish uchun minimal to\u2019lov 100 000 so\u2019m.');
       if (msg === 'PROMO_ALREADY_USED') return badRequest(res, 'Bu promo-kod siz allaqachon ishlatgansiz');
       if (msg.startsWith('CONFLICT_')) {
         const [, s, e] = msg.split('_');
@@ -459,8 +500,10 @@ export const cancelBooking = async (req: AuthRequest, res: Response, next: NextF
     // Bron yaratishda sarflangan bonus ballar qaytariladi
     await prisma.$transaction(async (tx) => refundPoints(tx, booking));
 
-    // Promo-kod count'ni qaytarish
+    // Promo-kod count'ni qaytarish + redemption qatorini o'chirish
+    // (kod qayta ishlatilishi mumkin — e2e kontrakti)
     if (booking.promoCodeId) {
+      await prisma.promoRedemption.deleteMany({ where: { bookingId: booking.id } });
       await prisma.promoCode.update({
         where: { id: booking.promoCodeId },
         data: { usedCount: { decrement: 1 } },
@@ -561,8 +604,9 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response, next:
       });
       // Sarflangan bonus ballar ham qaytariladi
       await prisma.$transaction(async (tx) => refundPoints(tx, booking));
-      // Promo-kod count'ni qaytarish
+      // Promo-kod count'ni qaytarish + redemption qatorini o'chirish
       if (booking.promoCodeId) {
+        await prisma.promoRedemption.deleteMany({ where: { bookingId: booking.id } });
         await prisma.promoCode.update({
           where: { id: booking.promoCodeId },
           data: { usedCount: { decrement: 1 } },

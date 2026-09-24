@@ -114,15 +114,26 @@ export class PaymeProvider implements PaymentProvider {
         if (err instanceof ProviderUnavailableError) throw err;
       }
     }
-    const qs = new URLSearchParams({ m: a.merchantId, 'ac.order_id': input.paymentId });
     if (this.sandbox) {
-      // SANDBOX: qaytish manzilini mock gatewayga uzatamiz (browser qaytishi uchun).
+      const qs = new URLSearchParams({ m: a.merchantId, 'ac.order_id': input.paymentId, mock_key: config.payments.devMockKey });
       if (input.returnUrl) qs.set('return_url', input.returnUrl);
+      return {
+        providerPaymentId: providerTransactionId,
+        providerTransactionId: input.paymentId,
+        checkoutUrl: `${a.checkoutUrl}?${qs.toString()}`,
+        status: 'REDIRECT_REQUIRED',
+        raw: { order_id: input.paymentId, amount },
+      };
     }
+
+    // Rasmiy Payme Checkout: base64(m=...;ac.order_id=...;a=...;c=...)
+    const parts = [`m=${a.merchantId}`, `ac.order_id=${input.paymentId}`, `a=${amount}`];
+    if (input.returnUrl) parts.push(`c=${input.returnUrl}`);
+    const encoded = Buffer.from(parts.join(';'), 'utf8').toString('base64');
     return {
       providerPaymentId: providerTransactionId,
-      providerTransactionId,
-      checkoutUrl: `${a.checkoutUrl}?${qs.toString()}`,
+      providerTransactionId: input.paymentId,
+      checkoutUrl: `${a.checkoutUrl.replace(/\/$/, '')}/${encoded}`,
       status: 'REDIRECT_REQUIRED',
       raw: { order_id: input.paymentId, amount },
     };

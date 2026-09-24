@@ -16,6 +16,17 @@ export const SANDBOX_PAYME = {
   merchantKey: 'dev-payme-secret',
 } as const;
 
+export const SANDBOX_UZUM = {
+  merchantId: 'dev-uzum-terminal',
+  secretKey: 'dev-uzum-secret',
+} as const;
+
+export const SANDBOX_PAYNET = {
+  merchantId: 'dev-paynet-merchant',
+  password: 'dev-paynet-secret',
+  serviceId: 'dev-paynet-service',
+} as const;
+
 export type ProviderPaymentStatus =
   | 'CREATED'
   | 'PENDING'
@@ -86,6 +97,8 @@ export interface WebhookContext {
   provider: ProviderId;
   /** express raw → JSON parse qilingan body (Click uchun query params) */
   body: any;
+  /** Body kelgan paytdagi xom baytlar (Uzum kabi raw-body imzosini tekshirish uchun) */
+  rawBody?: Buffer | string;
   query: Record<string, string | undefined>;
   headers: Record<string, string | string[] | undefined>;
   /** Provider chaqiradigan mutlaq URL (Click callbacksida sign ishlatiladi) */

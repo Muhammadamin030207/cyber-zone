@@ -7,7 +7,7 @@ import { useRouter } from '@/i18n/navigation';
 import {
   Settings, Monitor, Cpu, CalendarDays, BadgePercent, Newspaper, BarChart3, MessageSquare,
   Plus, Pencil, Trash2, Loader2, AlertCircle, Check, ShieldCheck, Users, Zap,
-  Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy, MessagesSquare,
+  Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy, MessagesSquare, Info,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/toast';
@@ -19,11 +19,12 @@ import { useAuthStore } from '@/store/auth';
 import BarAdmin from '@/components/admin/BarAdmin';
 import ChatAdmin from '@/components/admin/ChatAdmin';
 import SupportChat from '@/components/support/SupportChat';
+import SiteSettingsTab from '@/components/admin/SiteSettingsTab';
 import Logo from '@/components/brand/Logo';
 
 const MapPicker = dynamic(() => import('@/components/rooms/MapPicker'), { ssr: false });
 
-type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'bar' | 'chat' | 'requests' | 'support' | 'promos' | 'news' | 'stats';
+type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'bar' | 'chat' | 'requests' | 'support' | 'promos' | 'news' | 'stats' | 'site';
 
 const TABS: { key: Tab; icon: any; label: string }[] = [
   { key: 'room', icon: Settings, label: 'Xona' },
@@ -34,6 +35,7 @@ const TABS: { key: Tab; icon: any; label: string }[] = [
   { key: 'chat', icon: MessageSquare, label: 'Chat' },
   { key: 'requests', icon: MessagesSquare, label: 'Murojaatlar' },
   { key: 'support', icon: LifeBuoy, label: 'Super Admin' },
+  { key: 'site', icon: Info, label: 'Sayt ma\'lumotlari' },
   { key: 'promos', icon: BadgePercent, label: 'Promo' },
   { key: 'news', icon: Newspaper, label: 'Yangiliklar' },
   { key: 'stats', icon: BarChart3, label: 'Statistika' },
@@ -115,7 +117,7 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
       </div>
 
       {/* Content */}
-      {!room && tab !== 'room' && tab !== 'bar' && tab !== 'chat' && tab !== 'requests' && tab !== 'support' ? (
+      {!room && tab !== 'room' && tab !== 'bar' && tab !== 'chat' && tab !== 'requests' && tab !== 'support' && tab !== 'site' ? (
         <div className="text-center py-20">
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center bg-[var(--acc-b)]/10 border border-[var(--acc-b)]/25">
             <Logo size={38} />
@@ -141,6 +143,8 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
         <SupportChat mode="admin" channel="admin" />
       ) : tab === 'support' ? (
         <SupportChat mode="admin" channel="superadmin" />
+      ) : tab === 'site' ? (
+        <SiteSettingsTab />
       ) : tab === 'promos' && room ? (
         <PromosTab room={room} />
       ) : tab === 'news' ? (

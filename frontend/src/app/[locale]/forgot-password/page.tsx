@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { Mail, Loader2, AlertCircle, CheckCircle2, KeyRound } from 'lucide-react';
+import { Mail, Loader2, AlertCircle, CheckCircle2, KeyRound, RefreshCw } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import Logo from '@/components/brand/Logo';
+
+const RESEND_COOLDOWN = 60;
 
 export default function ForgotPasswordPage({ params }: { params: Promise<{ locale: string }> }) {
   void params;
@@ -14,9 +16,17 @@ export default function ForgotPasswordPage({ params }: { params: Promise<{ local
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ message: string; devTempPassword?: string } | null>(null);
+  const [cooldown, setCooldown] = useState(0);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setInterval(() => setCooldown((c) => (c <= 1 ? 0 : c - 1)), 1000);
+    return () => clearInterval(id);
+  }, [cooldown]);
+
+  const submit = useCallback(async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (submitting || !email) return;
     setSubmitting(true);
     setError(null);
     setDone(null);
@@ -26,12 +36,13 @@ export default function ForgotPasswordPage({ params }: { params: Promise<{ local
         message: data?.message || 'Vaqtinchalik parol emailingizga yuborildi',
         devTempPassword: data?.data?.devTempPassword,
       });
+      setCooldown(RESEND_COOLDOWN);
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
-  }
+  }, [email, submitting]);
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 py-10">
@@ -69,16 +80,33 @@ export default function ForgotPasswordPage({ params }: { params: Promise<{ local
                 Kirishda so&apos;ralgan yangi parol oynasida xohlagan parolingizni o&apos;rnating.
                 Bitta parol faqat bitta kirishda ishlatiladi.
               </div>
+              <div className="mb-4 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-gray-300 leading-relaxed">
+                Xat 2-3 daqiqada kelishi kerak. <b>Kelmagan bo&apos;lsa — Spam / Junk</b> papkasini
+                tekshiring, yoki quyidagi tugma orqali qayta yuboring.
+              </div>
+              <button
+                type="button"
+                disabled={submitting || cooldown > 0}
+                onClick={() => submit()}
+                className="w-full mb-3 py-3 rounded-xl border border-neon-cyan/40 bg-neon-cyan/5 text-neon-cyan hover:bg-neon-cyan/10 flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              >
+                {submitting ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={18} />
+                )}
+                {cooldown > 0 ? `Qayta yuborish (${cooldown}s)` : 'Qayta yuborish'}
+              </button>
               <Link href="/login" className="block w-full text-center py-3 rounded-xl neon-btn text-sm font-bold">
                 Kirish sahifasiga qaytish
               </Link>
             </div>
           ) : (
-            <form onSubmit={submit} className="space-y-4">
+            <form onSubmit={(e) => submit(e)} className="space-y-4">
               {error && (
                 <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
                   <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                  {error}
+                  <span>{error}</span>
                 </div>
               )}
               <div>

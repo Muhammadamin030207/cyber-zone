@@ -304,9 +304,13 @@ export async function authVerify(req: Request, res: Response, next: NextFunction
 
     if (!verification.verified) return badRequest(res, 'Passkey tekshiruvidan o\'tmadi');
 
-    // Replay himoyasi: counter monotonik o'sishi shart
-    if (verification.authenticationInfo.newCounter <= Number(passkey.counter)) {
-      // Ba'zi authenticatorlar counterni 0 ushlaydi; egalik o'zgarganida bloklash
+// Replay himoyasi: counter monotonik o'sishi shart. Ayrim authenticatorlar
+    // (ayniqsa security key'lar) counterni qo'llamaydi — shunda newCounter 0 qaytadi
+    // va biz uni bloklamaymiz, aks holda egalik zaxirasida (clone) teng counter bo'ladi.
+    if (
+      verification.authenticationInfo.newCounter !== 0 &&
+      verification.authenticationInfo.newCounter <= Number(passkey.counter)
+    ) {
       return badRequest(res, 'Passkey qayta ishlatilgan. Yangi imkoniyat kun bosing.');
     }
 

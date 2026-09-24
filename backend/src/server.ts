@@ -21,6 +21,7 @@ import aiConversationsRoutes from './routes/aiConversations.routes';
 import webauthnRoutes from './routes/webauthn.routes';
 import supportRoutes from './routes/support.routes';
 import loyaltyRoutes from './routes/loyalty.routes';
+import settingsRoutes from './routes/settings.routes';
 import { errorHandler, notFound } from './middlewares/error';
 import prisma from './lib/prisma';
 import { verifyAccessToken } from './lib/jwt';
@@ -130,8 +131,13 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+// Webhook imzolari (Uzum X-Sign HMAC va h.k.) aynan kelgan raw baytlar ustidan
+// tekshirilishi uchun request body faylini req.rawBody sifatida saqlaymiz.
+const captureRawBody = (req: express.Request, _res: express.Response, buf: Buffer) => {
+  (req as any).rawBody = buf;
+};
+app.use(express.json({ limit: '10mb', verify: captureRawBody }));
+app.use(express.urlencoded({ extended: true, verify: captureRawBody }));
 
 // Yuklangan fayllar (avatar rasmlar) — /uploads osti orqali serv qilinadi
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), { maxAge: '7d', immutable: false }));
@@ -200,6 +206,7 @@ app.use('/api/ai', aiConversationsRoutes);
 app.use('/api/webauthn', webauthnRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/loyalty', loyaltyRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // 404 va error handler
 app.use(notFound);

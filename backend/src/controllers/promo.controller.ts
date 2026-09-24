@@ -13,6 +13,13 @@ async function getMyRoom(req: AuthRequest, res: Response) {
   return room;
 }
 
+/** usageScope validatsiyasi: SINGLE_USE | USER_LIMITED | MULTI_USE (default SINGLE_USE) */
+function normalizeScope(value: unknown): 'SINGLE_USE' | 'USER_LIMITED' | 'MULTI_USE' {
+  const v = String(value || '').trim().toUpperCase();
+  if (v === 'USER_LIMITED' || v === 'MULTI_USE') return v;
+  return 'SINGLE_USE';
+}
+
 // ============ GET /api/admin/promos — ADMIN: o'z promo-kodlari ============
 export const getMyPromos = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -45,13 +52,19 @@ export const createPromo = async (req: AuthRequest, res: Response, next: NextFun
     const exists = await prisma.promoCode.findUnique({ where: { code: String(code).toUpperCase() } });
     if (exists) return badRequest(res, 'Bunday kod allaqachon mavjud');
 
+    // Promo-kodlar kamida 100 000 so'mlik bronlarga qo'llanadi (abuse himoyasi).
+    // Admin pastroq qiymat bersa ham yoki umuman bermasa ham -> 100 000.
+    let minBooking = Number(minBookingAmount);
+    if (!Number.isFinite(minBooking) || minBooking < 100_000) minBooking = 100_000;
+
     const promo = await prisma.promoCode.create({
       data: {
         roomId: room ? room.id : null,
         code: String(code).toUpperCase(),
         discountType: String(discountType).toUpperCase() === 'FIXED' ? 'FIXED' : 'PERCENTAGE',
         discountValue,
-        minBookingAmount: minBookingAmount || null,
+        minBookingAmount: minBooking,
+        usageScope: normalizeScope(req.body.usageScope),
         maxUses: maxUses !== undefined && maxUses !== null ? Number(maxUses) : null,
         startsAt: startsAt ? new Date(startsAt) : new Date(),
         expiresAt: new Date(expiresAt),
@@ -78,12 +91,16 @@ export const updatePromo = async (req: AuthRequest, res: Response, next: NextFun
     const isPlatformWide = !promo.room && req.user!.role === 'SUPER_ADMIN';
     if (!isOwnerAdmin && !isPlatformWide) return forbidden(res);
 
-    const { discountType, discountValue, minBookingAmount, maxUses, startTime, expiresAt, isActive } = req.body;
+    const { discountType, discountValue, minBookingAmount, usageScope, maxUses, startTime, expiresAt, isActive } = req.body;
 
     const data: any = {};
     if (discountType !== undefined) data.discountType = discountType.toUpperCase();
     if (discountValue !== undefined) data.discountValue = discountValue;
-    if (minBookingAmount !== undefined) data.minBookingAmount = minBookingAmount;
+    if (minBookingAmount !== undefined) {
+      const min = Number(minBookingAmount);
+      data.minBookingAmount = Number.isFinite(min) && min >= 100_000 ? min : 100_000;
+    }
+    if (usageScope !== undefined) data.usageScope = normalizeScope(usageScope);
     if (maxUses !== undefined) data.maxUses = maxUses;
     if (expiresAt !== undefined) data.expiresAt = new Date(expiresAt);
     if (isActive !== undefined) data.isActive = Boolean(isActive);
@@ -132,7 +149,11 @@ export const checkPromo = async (req: Request, res: Response, next: NextFunction
 
     const now = new Date();
     if (now < promo.startsAt || now > promo.expiresAt) return badRequest(res, 'Promo-kod muddati tugagan');
-    if (promo.maxUses !== null && promo.usedCount >= promo.maxUses) return badRequest(res, 'Promo-kod limiti tugagan');
+    // MULTI_USE: jami limit yo'q (faqat per-user unique constraint). Boshqa scope'da
+    // maxUses hali jami sifatida cheklanadi.
+    if (promo.usageScope !== 'MULTI_USE' && promo.maxUses !== null && promo.usedCount >= promo.maxUses) {
+      return badRequest(res, 'Promo-kod limiti tugagan');
+    }
 
     if (room_id && promo.roomId && promo.roomId !== room_id) {
       return badRequest(res, 'Bu promo-kod boshqa xona uchun');
@@ -144,6 +165,7 @@ export const checkPromo = async (req: Request, res: Response, next: NextFunction
       discountType: promo.discountType,
       discountValue: promo.discountValue,
       minBookingAmount: promo.minBookingAmount,
+      usageScope: promo.usageScope,
       expiresAt: promo.expiresAt,
     }, 'Promo-kod yaroqli');
   } catch (err) {

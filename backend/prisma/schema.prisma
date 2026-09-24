@@ -88,6 +88,12 @@ enum PaymentStatus {
   REFUNDED          // qaytarilgan
 }
 
+enum PromoUsageScope {
+  SINGLE_USE    // promo-kod butun platformada faqat 1 marta ishlatilishi mumkin
+  USER_LIMITED  // kod har bir foydalanuvchiga 1 marta (platformada cheksiz)
+  MULTI_USE     // cheklovsiz (har bir user baribir faqat 1 marta — unique constraint)
+}
+
 enum BarItemCategory {
   DRINK
   FOOD
@@ -136,7 +142,7 @@ loyaltyBalance Int @default(0) @map("loyalty_balance") // bonus ballar (1 ball =
 
   // Brute-force himoyasi: ketma-ket xato urinishlar va vaqtincha bloklash
   failedLoginAttempts  Int      @default(0) @map("failed_login_attempts")
-  loginLockStage       Int      @default(0) @map("login_lock_stage") // progressiv blok bosqichi (0,1,2...)
+  loginLockStage       Int      @default(0) @map("login_lock_stage") // blok bosqichi (spec §4.2: doimiy 24h)
   loginLockedUntil     DateTime? @map("login_locked_until")
 
   // Server-side session invalidation: har bir JWT shu versiyani olib yuradi.
@@ -172,6 +178,7 @@ loyaltyBalance Int @default(0) @map("loyalty_balance") // bonus ballar (1 ball =
   chatMessages ChatMessage[]
   passkeys     Passkey[]
   conversations AIConversation[]
+  promoRedemptions PromoRedemption[]
   supportThread SupportMessage[] @relation("SupportThread")
   supportSent   SupportMessage[] @relation("SupportSender")
   loyaltyTransactions LoyaltyTransaction[]
@@ -296,6 +303,7 @@ model Booking {
   zone     Zone          @relation(fields: [zoneId], references: [id])
   computer Computer?     @relation(fields: [computerId], references: [id])
   promoCode PromoCode?   @relation(fields: [promoCodeId], references: [id])
+  redemption PromoRedemption?
   payments Payment[]
   barOrder BarOrder?
 
@@ -310,6 +318,7 @@ model PromoCode {
   discountType      String    @map("discount_type") // PERCENTAGE | FIXED
   discountValue     Decimal   @map("discount_value") @db.Decimal(10, 2)
   minBookingAmount  Decimal?  @map("min_booking_amount") @db.Decimal(10, 2)
+  usageScope        PromoUsageScope @default(SINGLE_USE) @map("usage_scope")
   maxUses           Int?      @map("max_uses")
   usedCount         Int       @default(0) @map("used_count")
   startsAt          DateTime  @map("starts_at")
@@ -322,8 +331,31 @@ model PromoCode {
   room      ComputerRoom? @relation(fields: [roomId], references: [id], onDelete: Cascade)
   creator   User          @relation(fields: [createdBy], references: [id])
   bookings  Booking[]
+  redemptions PromoRedemption[]
 
   @@map("promo_codes")
+}
+
+// ============ PROMO-KOD QO'LLANISHLARI ============
+// Har bir muvaffaqiyatli promo qo'llanish alohida qayd etiladi.
+// (promoCodeId, userId) bo'yicha QAT'IY unique constraint — bitta kod bitta
+// foydalanuvchiga faqat 1 marta (anti-abuse, server imzosiz ham kafolat).
+// Bron bekor qilinganda redemption qatori o'chiriladi -> kod qayta ishlatilishi mumkin.
+model PromoRedemption {
+  id          String   @id @default(uuid())
+  promoCodeId String   @map("promo_code_id")
+  userId      String   @map("user_id")
+  bookingId   String   @unique @map("booking_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  promoCode PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  booking   Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@unique([promoCodeId, userId])
+  @@index([userId])
+  @@index([bookingId])
+  @@map("promo_redemptions")
 }
 
 model Payment {
@@ -568,4 +600,17 @@ model AIMessage {
 
   @@index([conversationId, createdAt])
   @@map("ai_messages")
+}
+
+// ============ SAYT BILIMLARI (admin boshqaradigan) ============
+// AI yordamchisi faqat shu yerdan o'qigan FAQ/aloqa/to'lov/bekor qilish ma'lumotlarini
+// ishlatadi (§6.16 — hardcoded kontekst YO'Q). Faqat ADMIN/SUPER_ADMIN yozadi.
+model SiteSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique // faqat ALLOWED_KEYS ruxsat etiladi
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by") // qaysi admin yangilagan
+
+  @@map("site_settings")
 }

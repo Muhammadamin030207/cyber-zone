@@ -71,6 +71,33 @@ describe('E2E: AI assistant — ownership, history, edit/delete/regenerate, stre
     expect(res.text).toContain('"type":"done"');
   });
 
+  it('chat/stream: SSE delta + done event (server-side provider)', async () => {
+    const noAuth = await api().post('/api/ai/chat/stream').send({ message: 'salom' });
+    expect(noAuth.status).toBe(401);
+
+    const res = await api()
+      .post('/api/ai/chat/stream')
+      .set('Authorization', auth(tokenA))
+      .set('Accept', 'text/event-stream')
+      .send({ message: 'Bron qanday amalga oshiriladi?' });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/event-stream');
+    expect(res.text).toContain('data: ');
+    expect(res.text).toContain('"done":true');
+    expect(res.text).toContain('"model"');
+  });
+
+  it('chat/stream: bo\'sh xabar — intro javob yuboriladi', async () => {
+    const res = await api()
+      .post('/api/ai/chat/stream')
+      .set('Authorization', auth(tokenA))
+      .set('Accept', 'text/event-stream')
+      .send({ message: '   ' });
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('"model":"intro"');
+    expect(res.text).toContain('"done":true');
+  });
+
   it('OWNERSHIP: B A ning suhbatini o\'qiy/tahrirlay/o\'chira olmaydi (403)', async () => {
     const get = await api().get(`/api/ai/conversations/${convId}`).set('Authorization', auth(tokenB));
     expect(get.status).toBe(403);

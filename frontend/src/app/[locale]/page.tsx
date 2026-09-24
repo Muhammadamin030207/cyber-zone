@@ -88,9 +88,9 @@ export default function HomePage() {
         </form>
 
         {/* Trust row */}
-        <div className="mt-10 flex items-center justify-center gap-0">
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-y-3">
           {stats.map((s, i) => (
-            <div key={i} className="flex items-center gap-6 px-6">
+            <div key={i} className="flex items-center gap-6 sm:gap-7 px-4 sm:px-6">
               <div className="text-center">
                 <div className="text-lg sm:text-xl font-bold text-white">{s.value}</div>
                 <div className="text-[11px] text-gray-500 mt-0.5">{s.label}</div>

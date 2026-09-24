@@ -65,6 +65,7 @@ export class ClickProvider implements PaymentProvider {
     if (this.sandbox) {
       // SANDBOX: qaytish manzilini mock gatewayga uzatamiz (browser qaytishi uchun).
       if (input.returnUrl) qs.set('return_url', input.returnUrl);
+      qs.set('mock_key', config.payments.devMockKey);
     }
     return {
       providerPaymentId: input.paymentId,

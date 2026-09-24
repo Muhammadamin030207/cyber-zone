@@ -8,6 +8,7 @@ import aiRoutes from '../../routes/ai.routes';
 import aiConversationsRoutes from '../../routes/aiConversations.routes';
 import webauthnRoutes from '../../routes/webauthn.routes';
 import userRoutes from '../../routes/user.routes';
+import settingsRoutes from '../../routes/settings.routes';
 import { errorHandler, notFound } from '../../middlewares/error';
 
 /**
@@ -32,6 +33,7 @@ export function buildTestApp() {
   app.use('/api/ai', aiConversationsRoutes);
   app.use('/api/webauthn', webauthnRoutes);
   app.use('/api/users', userRoutes);
+  app.use('/api/settings', settingsRoutes);
 
   app.use(notFound);
   app.use(errorHandler);

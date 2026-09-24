@@ -32,23 +32,22 @@ describe('E2E: Login lockout — individual, escalation, persistence', () => {
     expect(u!.failedLoginAttempts).toBe(MAX - 1);
   });
 
-  it('MAX xato: hisob bloklanadi (stage 0 -> 1-soat) va lockedUntil DB\'da saqlanadi', async () => {
+  it('MAX xato: hisob 24-soatga bloklanadi va lockedUntil DB\'da saqlanadi', async () => {
     const ip = nextIp();
     const before = Date.now();
     const last = await failLoginTimes('lock-a@e2e.test', ip, 1);
     expect(last.status).toBe(429);
     expect(last.body.code).toBe('ACCOUNT_LOCKED');
-    // 1-bosqich: 60 daqiqa = 3600 sekund
-    expect(last.body.retryAfterSeconds).toBeGreaterThan(3590);
-    expect(last.body.retryAfterSeconds).toBeLessThanOrEqual(3600);
+    // §4.2: 10-chi xato -> locked_until = now + 24 soat (1440 daqiqa)
+    expect(last.body.retryAfterSeconds).toBeGreaterThan(24 * 3600 - 10);
+    expect(last.body.retryAfterSeconds).toBeLessThanOrEqual(24 * 3600);
 
     const u = await prisma.user.findUnique({ where: { email: 'lock-a@e2e.test' } });
     expect(u!.loginLockedUntil).not.toBeNull();
-    expect(u!.loginLockStage).toBe(1);
     expect(u!.failedLoginAttempts).toBe(0);
     const deltaMin = (u!.loginLockedUntil!.getTime() - before) / 60000;
-    expect(deltaMin).toBeGreaterThan(59.5);
-    expect(deltaMin).toBeLessThan(61);
+    expect(deltaMin).toBeGreaterThan(1439);
+    expect(deltaMin).toBeLessThan(1441);
   });
 
   it('IZOLYATSIYA: A bloklanganda B va C bemalol kiradi', async () => {
@@ -77,19 +76,11 @@ describe('E2E: Login lockout — individual, escalation, persistence', () => {
     expect(res.body.lockedUntil).toBeTruthy();
   });
 
-  it('ESKALATSIYA: 1h -> 2h -> 5h -> 24h -> 24h (stage bo\'yicha)', async () => {
+  it('DOIMIY 24h: har blok qayta-qayta 24 soat (progressiv emas, §4.2)', async () => {
     const email = 'lock-esc@e2e.test';
     await createUserDirect({ email, password: 'esc-pass' });
 
-    const expected = [
-      { stage: 0, minutes: 60 },
-      { stage: 1, minutes: 120 },
-      { stage: 2, minutes: 300 },
-      { stage: 3, minutes: 1440 },
-      { stage: 4, minutes: 1440 },
-    ];
-
-    for (const { stage, minutes } of expected) {
+    for (let round = 0; round < 3; round += 1) {
       // Oldingi blok tugagan deb simulyatsiya qilamiz (stage saqlanadi)
       await prisma.user.update({ where: { email }, data: { loginLockedUntil: new Date(Date.now() - 1000) } });
 
@@ -97,13 +88,10 @@ describe('E2E: Login lockout — individual, escalation, persistence', () => {
       const res = await failLoginTimes(email, ip, MAX);
       expect(res.status).toBe(429);
       expect(res.body.code).toBe('ACCOUNT_LOCKED');
-      // retryAfterSeconds daqiqaga yaqin bo'lishi kerak
+      // Har safar 24 soat (1440 daqiqa)
       const gotMinutes = res.body.retryAfterSeconds / 60;
-      expect(gotMinutes).toBeGreaterThan(minutes - 1);
-      expect(gotMinutes).toBeLessThanOrEqual(minutes);
-
-      const u = await prisma.user.findUnique({ where: { email } });
-      expect(u!.loginLockStage).toBe(Math.min(stage + 1, 4));
+      expect(gotMinutes).toBeGreaterThan(1439);
+      expect(gotMinutes).toBeLessThanOrEqual(1440);
     }
   });
 

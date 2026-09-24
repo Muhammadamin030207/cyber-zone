@@ -3,9 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
-  Loader2, CheckCircle2, CreditCard, Wallet, Banknote, Smartphone, AlertCircle,
-  ArrowRight, BadgePercent, Clock, MapPin, Monitor, ChevronLeft, RefreshCw, Zap,
-  type LucideIcon,
+  Loader2, CheckCircle2, Wallet, Banknote, AlertCircle,
+  ArrowRight, BadgePercent, Clock, MapPin, Monitor, ChevronLeft, RefreshCw,
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -14,15 +13,16 @@ import { formatPrice, formatDate, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
 import TicketQR from '@/components/booking/TicketQR';
 import SplashLoader from '@/components/ui/SplashLoader';
+import ProviderLogo from '@/components/payments/ProviderLogo';
 
 type PayMethod = 'PAYME' | 'CLICK' | 'UZUM' | 'PAYNET' | 'CASH';
 
-const PROVIDER_UI: Record<string, { label: string; sub: string; icon: LucideIcon; color: string }> = {
-  PAYME: { label: 'Payme', sub: 'Telefon ilovasi', icon: Smartphone, color: 'bg-[#00C7F0]/10 text-[#22d3ee] border-[#00C7F0]/30' },
-  CLICK: { label: 'Click', sub: 'Tez va oson', icon: Zap, color: 'bg-[#ED1C24]/10 text-[#ff5a60] border-[#ED1C24]/30' },
-  UZUM: { label: 'Uzum', sub: 'Raqamli bank', icon: Wallet, color: 'bg-[#7000FF]/15 text-[#a86bff] border-[#7000FF]/40' },
-  PAYNET: { label: 'Paynet', sub: 'To\'lov terminali', icon: CreditCard, color: 'bg-[#0E9F6E]/10 text-[#34d399] border-[#0E9F6E]/30' },
-  CASH: { label: 'Kassada', sub: 'Naqd pulda to\'lash', icon: Banknote, color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+const PROVIDER_UI: Record<string, { label: string; sub: string }> = {
+  PAYME: { label: 'Payme', sub: 'Telefon ilovasi' },
+  CLICK: { label: 'Click', sub: 'Tez va oson' },
+  UZUM: { label: 'Uzum', sub: 'Raqamli bank' },
+  PAYNET: { label: 'Paynet', sub: 'To\'lov terminali' },
+  CASH: { label: 'Kassada', sub: 'Naqd pulda to\'lash' },
 };
 
 const SETTLED_BOOKING_STATUSES = ['PARTIALLY_PAID', 'PAID', 'CONFIRMED', 'ACTIVE', 'COMPLETED'];
@@ -283,7 +283,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-5">
             {[...onlineMethods, { method: 'CASH', label: 'Kassada', available: true }].map((p) => {
               const ui = PROVIDER_UI[p.method];
-              const Icon = ui?.icon;
               const disabled = !p.available;
               return (
                 <button
@@ -298,7 +297,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
                     disabled && 'opacity-40 pointer-events-none'
                   )}
                 >
-                  {Icon && <span className={cn('p-2 rounded-lg border', ui?.color)}><Icon size={18} /></span>}
+                  <ProviderLogo method={p.method} size={34} />
                   <span className="text-sm font-semibold">{ui?.label || p.label}</span>
                   <span className="text-[10px] text-gray-500">
                     {p.available ? ui?.sub : 'Tez orada'}
@@ -310,9 +309,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
 
           {method !== 'CASH' ? (
             <div className="neo-card rounded-2xl p-5 mb-5 flex items-center gap-4">
-              <span className={cn('p-3 rounded-xl border shrink-0', methodUi?.color)}>
-                {methodUi?.icon && <methodUi.icon size={22} />}
-              </span>
+              <span className="p-1.5 shrink-0"><ProviderLogo method={method} size={36} /></span>
               <div className="flex-1">
                 <h3 className="font-semibold text-sm">{methodUi?.label} orqali to'lash</h3>
                 <p className="text-xs text-gray-400 mt-0.5">
