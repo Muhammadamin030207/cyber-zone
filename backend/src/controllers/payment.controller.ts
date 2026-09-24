@@ -8,6 +8,7 @@ import { Prisma } from '@prisma/client';
 import { getProvider, getProviderAvailability, isProviderAvailable, ProviderNotConfiguredError, ProviderUnavailableError, SANDBOX_CLICK, SANDBOX_PAYME, SANDBOX_UZUM, SANDBOX_PAYNET } from '../services/payments';
 import { hmacSha256hex, md5hex } from '../services/payments/crypto';
 import { config } from '../config';
+import { paymentsSandbox, sandboxOrigin, setSandboxForced } from '../config/paymentsRuntime';
 
 type TxClient = Prisma.TransactionClient;
 
@@ -272,6 +273,7 @@ amount: Number(active.amount),
               callbackUrl: providerCallbackUrl(providerId),
               returnUrl: `${config.frontendUrls[0] || ''}/checkout/${booking.id}/pay?pid=${active.id}`,
               userId: req.user!.userId,
+              sandboxBaseUrl: sandboxOrigin(req),
             });
             checkoutUrl = prepared.checkoutUrl;
             await prisma.payment.update({
@@ -360,6 +362,7 @@ amount: Number(active.amount),
           callbackUrl: providerCallbackUrl(providerId),
           returnUrl: `${config.frontendUrls[0] || ''}/checkout/${booking.id}/pay?pid=${payment.id}`,
           userId: req.user!.userId,
+          sandboxBaseUrl: sandboxOrigin(req),
         });
 
         await prisma.$transaction(async (tx) => {
@@ -440,17 +443,47 @@ export const getProviders = async (_req: Request, res: Response) => {
   return ok(res, {
     providers: getProviderAvailability(),
     minDepositPercent: config.payments.minDepositPercent,
+    sandbox: paymentsSandbox(),
   });
 };
 
+// ============ GET/PUT /api/payments/admin/sandbox — SUPER_ADMIN: test rejimi ============
+export const getSandboxState = async (_req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const row = await prisma.siteSetting.findUnique({ where: { key: 'payments.sandbox' } });
+    return ok(res, {
+      enabled: paymentsSandbox(),
+      stored: row?.value === 'on',
+      devModeEnv: config.payments.devMode,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const setSandboxState = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const enabled = Boolean(req.body?.enabled);
+    await prisma.siteSetting.upsert({
+      where: { key: 'payments.sandbox' },
+      update: { value: enabled ? 'on' : 'off', updatedBy: req.user?.userId },
+      create: { key: 'payments.sandbox', value: enabled ? 'on' : 'off', updatedBy: req.user?.userId },
+    });
+    setSandboxForced(enabled);
+    return ok(res, { enabled: paymentsSandbox() }, enabled ? 'To\'lov test rejimi yoqildi' : 'To\'lov test rejimi o\'chirildi');
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ============ GET /api/payments/mock/:provider — SANDBOX mock gateway ============
-// Faqat PAYMENTS_DEV_MODE yoqilganida ochiladi. Provayder "checkout"ini
-// simulyatsiya qiladi: to'lovni yakunlab, IMZOLANGAN webhook orqali yuboradi.
-// Webhook validatsiyasi (Click sign_string yoki Payme Basic auth) HAMON majburiy —
-// shuning uchun "soxta PAID" texnik jihatdan imkonsiz. Haqiqiy pul olinmaydi.
+// Runtime sandbox holatida ochiladi. Provayder "checkout"ini simulyatsiya qiladi:
+// to'lovni yakunlab, IMZOLANGAN webhook orqali yuboradi. Webhook validatsiyasi
+// (Click sign_string yoki Payme Basic auth) HAMON majburiy — shuning uchun
+// "soxta PAID" texnik jihatdan imkonsiz. Haqiqiy pul olinmaydi.
 export const mockSandboxPayment = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    if (!config.payments.devMode) return res.status(404).json({ error: 'not found' });
+    if (!paymentsSandbox()) return res.status(404).json({ error: 'not found' });
     const mockKey = String(req.query.mock_key || '');
     if (mockKey !== config.payments.devMockKey) return res.status(404).json({ error: 'not found' });
 

@@ -7,7 +7,7 @@ import {
   Crown, Users, Building2, CalendarDays, CircleDollarSign, Activity,
   Search, Plus, Trash2, Loader2, Check, ShieldOff, ShieldCheck,
   KeyRound, MapPin, X, PlusCircle, Wallet, Banknote, MessageSquare, MessagesSquare, Inbox,
-  ImageUp, Upload,
+  ImageUp, Upload, FlaskConical,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/toast';
@@ -651,6 +651,8 @@ function PaymentsTab() {
   const [total, setTotal] = useState(0);
   const [revenue, setRevenue] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [sandbox, setSandbox] = useState<boolean | null>(null);
+  const [sandboxBusy, setSandboxBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -665,6 +667,25 @@ function PaymentsTab() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    api.get('/api/payments/admin/sandbox')
+      .then(({ data }) => setSandbox(Boolean(data.data?.enabled)))
+      .catch(() => setSandbox(null));
+  }, []);
+
+  async function toggleSandbox() {
+    const next = !sandbox;
+    setSandboxBusy(true);
+    try {
+      await api.put('/api/payments/admin/sandbox', { enabled: next });
+      setSandbox(next);
+      toastSuccess(next ? 'To\'lov test rejimi yoqildi' : 'To\'lov test rejimi o\'chirildi');
+    } catch (err) {
+      toastError(getApiErrorMessage(err));
+    }
+    setSandboxBusy(false);
+  }
+
   const statusStyle: Record<string, string> = {
     PENDING: 'bg-yellow-500/15 text-yellow-400',
     COMPLETED: 'bg-neon-green/15 text-neon-green',
@@ -674,6 +695,26 @@ function PaymentsTab() {
 
   return (
     <div className="space-y-4">
+      {sandbox !== null && (
+        <div className="neo-card rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+          <div>
+            <p className="font-bold flex items-center gap-2"><FlaskConical size={16} className="text-yellow-400" /> To'lov test rejimi</p>
+            <p className="text-xs text-gray-400 mt-1">
+              {sandbox
+                ? 'Click, Payme, Uzum va Paynet sinov tariqasida ishlaydi (haqiqiy pul olinmaydi). Haqiqiy to\'lovlar — provayder kalitlari ulanganda.'
+                : 'Onlayn to\'lovlar o\'chirilgan. Test rejimini yoqish bilan barcha usullar sinovda ishlaydi.'}
+            </p>
+          </div>
+          <button
+            onClick={toggleSandbox}
+            disabled={sandboxBusy}
+            className={`relative w-14 h-8 rounded-full transition-colors shrink-0 ${sandbox ? 'bg-yellow-400/60' : 'bg-gray-700'}`}
+            aria-label="To'lov test rejimi"
+          >
+            <span className={`absolute top-1 w-6 h-6 rounded-full bg-white transition-all ${sandbox ? 'left-7' : 'left-1'}`} />
+          </button>
+        </div>
+      )}
       <div className="grid sm:grid-cols-3 gap-3">
         <div className="neo-card rounded-2xl p-4">
           <p className="text-xs text-gray-500 flex items-center gap-1"><Banknote size={13} /> Jami (COMPLETED)</p>

@@ -66,7 +66,7 @@ export default function ThemeSwitcher() {
         aria-label="Mavzu tanlash"
         data-tip="Mavzu"
         data-tip-top
-        className="p-2 rounded-lg text-gray-300 hover:text-neon-cyan hover:bg-white/5 transition-colors"
+        className="inline-flex items-center justify-center h-9 w-9 rounded-xl border border-white/15 bg-white/[0.06] text-gray-300 shadow-[0_1px_2px_rgba(0,0,0,0.3)] transition-colors hover:text-neon-cyan hover:border-neon-cyan/40 hover:bg-white/10"
       >
         <Palette size={16} />
       </button>

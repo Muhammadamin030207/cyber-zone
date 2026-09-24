@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Loader2, CheckCircle2, Wallet, Banknote, AlertCircle,
-  ArrowRight, BadgePercent, Clock, MapPin, Monitor, ChevronLeft, RefreshCw,
+  ArrowRight, BadgePercent, Clock, MapPin, Monitor, ChevronLeft, RefreshCw, FlaskConical,
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -45,6 +45,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   const [error, setError] = useState<string | null>(null);
 
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [sandbox, setSandbox] = useState(false);
   const [method, setMethod] = useState<PayMethod>('CASH');
 
   const [paying, setPaying] = useState(false);
@@ -60,6 +61,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
       .then(({ data }) => {
         const d = data.data;
         setProviders((d?.providers as ProviderInfo[]) || []);
+        setSandbox(Boolean(d?.sandbox));
       })
       .catch(() => setProviders([]));
   }, []);
@@ -279,29 +281,42 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
 
       {isPending && !settled ? (
         <>
+          {sandbox && (
+            <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-3 text-sm text-yellow-200 mb-4">
+              <FlaskConical size={15} className="inline mr-1.5 -mt-0.5" />
+              <span className="font-semibold">Test rejimi:</span> to'lovlar sinov tariqasida mustaqil o'tadi, haqiqiy pul olinmaydi. Real to'lovlar provayder kalitlari ulangach yoqiladi.
+            </div>
+          )}
+
           {/* To'lov usulini tanlash */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 mb-5">
             {[...onlineMethods, { method: 'CASH', label: 'Kassada', available: true }].map((p) => {
               const ui = PROVIDER_UI[p.method];
               const disabled = !p.available;
+              const selected = method === p.method;
               return (
                 <button
                   key={p.method}
                   onClick={() => setMethod(p.method as PayMethod)}
                   disabled={disabled}
                   className={cn(
-                    'flex flex-col items-center gap-1 px-3 py-3.5 rounded-xl border text-center transition-colors',
-                    method === p.method
+                    'flex items-center gap-3 px-3.5 py-3.5 rounded-xl border text-left transition-colors',
+                    selected
                       ? 'border-neon-cyan/50 bg-neon-cyan/10'
                       : 'border-white/10 surface hover:border-white/25',
-                    disabled && 'opacity-40 pointer-events-none'
+                    disabled && 'opacity-45'
                   )}
                 >
-                  <ProviderLogo method={p.method} size={34} />
-                  <span className="text-sm font-semibold">{ui?.label || p.label}</span>
-                  <span className="text-[10px] text-gray-500">
-                    {p.available ? ui?.sub : 'Hozircha sozlanmagan'}
+                  <span className="shrink-0 grid place-items-center w-10 h-10 rounded-lg bg-white/5 border border-white/10">
+                    <ProviderLogo method={p.method} size={24} />
                   </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-semibold truncate">{ui?.label || p.label}</span>
+                    <span className="block text-[11px] text-gray-500 truncate">
+                      {p.available ? (ui?.sub || '') : 'Hozircha sozlanmagan'}
+                    </span>
+                  </span>
+                  <span className={cn('shrink-0 w-4 h-4 rounded-full border transition-colors', selected ? 'border-neon-cyan bg-neon-cyan/30' : 'border-white/20')} />
                 </button>
               );
             })}

@@ -4,6 +4,7 @@ import { SANDBOX_PAYNET } from '../types';
 import { md5hex, safeEqual } from '../crypto';
 import { round2 } from '../../../utils/money';
 import { ProviderUnavailableError } from './payme';
+import { paymentsSandbox } from '../../../config/paymentsRuntime';
 
 /**
  * PAYNET — merchant JSON-RPC (GetInformation / PerformTransaction) + checkout.
@@ -22,7 +23,7 @@ export class PaynetProvider implements PaymentProvider {
   }
 
   private get sandbox() {
-    return config.payments.devMode;
+    return paymentsSandbox();
   }
 
   private get active() {
@@ -70,10 +71,13 @@ export class PaynetProvider implements PaymentProvider {
     if (input.returnUrl) qs.set('return_url', input.returnUrl);
     if (this.sandbox) qs.set('mock_key', config.payments.devMockKey);
 
+    const checkoutUrl = this.sandbox && input.sandboxBaseUrl
+      ? `${input.sandboxBaseUrl}/api/payments/mock/paynet`
+      : a.checkoutUrl;
     return {
       providerPaymentId: input.paymentId,
       providerTransactionId: input.paymentId,
-      checkoutUrl: `${a.checkoutUrl}${a.checkoutUrl.includes('?') ? '&' : '?'}${qs.toString()}`,
+      checkoutUrl: `${checkoutUrl}${checkoutUrl.includes('?') ? '&' : '?'}${qs.toString()}`,
       status: 'REDIRECT_REQUIRED',
       raw: { amount, signTime },
     };

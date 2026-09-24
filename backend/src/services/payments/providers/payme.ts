@@ -3,6 +3,7 @@ import { config } from '../../../config';
 import { round2 } from '../../../utils/money';
 import { safeEqual } from '../crypto';
 import { SANDBOX_PAYME } from '../types';
+import { paymentsSandbox } from '../../../config/paymentsRuntime';
 
 /** Provayder bilan bog'lanishda xato — foydalanuvchiga "vaqtincha ishlamayapti" ko'rsatiladi. */
 export class ProviderUnavailableError extends Error {
@@ -47,7 +48,7 @@ export class PaymeProvider implements PaymentProvider {
   }
 
   private get sandbox() {
-    return config.payments.devMode;
+    return paymentsSandbox();
   }
 
   /** Real kredensiallar bo'lsa ularni, aks holda SANDBOX dev kredensiallarini qaytaradi. */
@@ -115,12 +116,13 @@ export class PaymeProvider implements PaymentProvider {
       }
     }
     if (this.sandbox) {
+      const checkoutUrl = input.sandboxBaseUrl ? `${input.sandboxBaseUrl}/api/payments/mock/payme` : a.checkoutUrl;
       const qs = new URLSearchParams({ m: a.merchantId, 'ac.order_id': input.paymentId, mock_key: config.payments.devMockKey });
       if (input.returnUrl) qs.set('return_url', input.returnUrl);
       return {
         providerPaymentId: providerTransactionId,
         providerTransactionId: input.paymentId,
-        checkoutUrl: `${a.checkoutUrl}?${qs.toString()}`,
+        checkoutUrl: `${checkoutUrl}?${qs.toString()}`,
         status: 'REDIRECT_REQUIRED',
         raw: { order_id: input.paymentId, amount },
       };

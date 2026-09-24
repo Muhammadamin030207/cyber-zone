@@ -62,6 +62,8 @@ export interface CreatePaymentInput {
   userId?: string;
   /** Provider'ga xos account parametrlari (order_id va h.k.) */
   account?: Record<string, string | number>;
+  /** SANDBOX: mock gateway origin (so'rov kirgan host) — localhost bo'lmasligi uchun */
+  sandboxBaseUrl?: string;
 }
 
 export interface CreatePaymentResult {

@@ -45,9 +45,9 @@ export default function BottomTabBar() {
   return (
     <nav
       aria-label="Asosiy navigatsiya"
-      className="fixed bottom-3 inset-x-0 z-50 md:hidden pointer-events-none px-3 pb-[env(safe-area-inset-bottom,0px)]"
+      className="fixed bottom-2 inset-x-0 z-50 lg:hidden pointer-events-none px-3 pb-[env(safe-area-inset-bottom,0px)]"
     >
-      <div className="pointer-events-auto mx-auto flex items-center justify-around gap-1 w-fit max-w-full rounded-full border border-white/10 bg-[color-mix(in_srgb,var(--bg-1)_92%,transparent)] backdrop-blur-xl shadow-[0_10px_30px_rgba(0,0,0,0.45)] px-1.5 py-1.5">
+      <div className="pointer-events-auto mx-auto flex items-center gap-0.5 w-full max-w-md rounded-2xl border border-white/10 bg-[color-mix(in_srgb,var(--bg-1)_92%,transparent)] backdrop-blur-xl shadow-[0_10px_30px_rgba(0,0,0,0.45)] px-1.5 py-1.5">
         {tabs.map((tab) => {
           const active = isTab(tab.href);
           return (
@@ -57,19 +57,19 @@ export default function BottomTabBar() {
               aria-label={tab.aria}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex flex-col items-center justify-center gap-0.5 px-3.5 min-w-0 text-[10px] font-medium rounded-full transition-all',
+                'flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-1 text-[10px] font-medium rounded-xl transition-colors',
                 active ? 'text-neon-cyan' : 'text-gray-400 active:text-gray-200'
               )}
             >
               <span
                 className={cn(
-                  'flex items-center justify-center w-9 h-7 rounded-full transition-all',
+                  'flex items-center justify-center w-9 h-6 rounded-full transition-all',
                   active && 'bg-neon-cyan/15 shadow-[0_0_14px_-4px_var(--acc-a)]'
                 )}
               >
-                <tab.icon size={19} strokeWidth={active ? 2.4 : 1.9} />
+                <tab.icon size={18} strokeWidth={active ? 2.4 : 1.9} />
               </span>
-              <span className="max-w-full truncate px-1 transition-colors">{tab.label}</span>
+              <span className="max-w-full truncate px-1 leading-none">{tab.label}</span>
             </Link>
           );
         })}

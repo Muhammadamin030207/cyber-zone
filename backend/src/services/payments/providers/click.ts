@@ -2,6 +2,7 @@ import type { PaymentProvider, CreatePaymentInput, CreatePaymentResult, VerifyPa
 import { config } from '../../../config';
 import { md5hex, safeEqual } from '../crypto';
 import { SANDBOX_CLICK } from '../types';
+import { paymentsSandbox } from '../../../config/paymentsRuntime';
 
 /**
  * CLICK provider — klassik merchant (2 fazali) integratsoiya.
@@ -25,7 +26,7 @@ export class ClickProvider implements PaymentProvider {
   }
 
   private get sandbox() {
-    return config.payments.devMode;
+    return paymentsSandbox();
   }
 
   /** Real kredensiallar bo'lsa ularni, aks holda SANDBOX dev kredensiallarini qaytaradi. */
@@ -67,10 +68,13 @@ export class ClickProvider implements PaymentProvider {
       if (input.returnUrl) qs.set('return_url', input.returnUrl);
       qs.set('mock_key', config.payments.devMockKey);
     }
+    const endpoint = this.sandbox && input.sandboxBaseUrl
+      ? `${input.sandboxBaseUrl}/api/payments/mock/click`
+      : a.endpoint;
     return {
       providerPaymentId: input.paymentId,
       providerTransactionId: input.paymentId,
-      checkoutUrl: `${a.endpoint}?${qs.toString()}`,
+      checkoutUrl: `${endpoint}?${qs.toString()}`,
       status: 'REDIRECT_REQUIRED',
       raw: { sign_time: signTime, amount },
     };

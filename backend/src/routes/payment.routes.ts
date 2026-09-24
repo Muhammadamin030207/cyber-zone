@@ -10,9 +10,10 @@ import {
   webhookPayment,
   getPaymentHistory,
   mockSandboxPayment,
+  getSandboxState,
+  setSandboxState,
 } from '../controllers/payment.controller';
 import { authenticate, authorize } from '../middlewares/auth';
-import { config } from '../config';
 
 const router = Router();
 
@@ -30,11 +31,14 @@ const webhookLimiter = rateLimit({
 // Provider webhook (provayder chaqiradi — authsiz, ammo provider-specific validatsiya)
 router.post('/webhook/:provider', webhookLimiter, webhookPayment);
 
-// SANDBOX mock gateway — faqat PAYMENTS_DEV_MODE yoqilganda mavjud.
-// Real "checkout" sahifasini simulyatsiya qilib, imzolangan webhook yuboradi.
-if (config.payments.devMode) {
-  router.get('/mock/:provider', mockSandboxPayment);
-}
+// SANDBOX mock gateway — doim mavjud, lekin ishlashi runtime sandbox holatiga
+// bog'liq (chaqirilganda tekshiriladi). Real "checkout" sahifasini simulyatsiya
+// qilib, imzolangan webhook yuboradi — "soxta PAID" yo'q.
+router.get('/mock/:provider', mockSandboxPayment);
+
+// SUPER_ADMIN: to'lov test (sandbox) rejimi boshqaruvi
+router.get('/admin/sandbox', authenticate, authorize('SUPER_ADMIN'), getSandboxState);
+router.put('/admin/sandbox', authenticate, authorize('SUPER_ADMIN'), setSandboxState);
 
 router.post('/create', authenticate, authorize('USER', 'ADMIN', 'SUPER_ADMIN'), createPayment);
 router.get('/providers', getProviders);

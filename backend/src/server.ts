@@ -28,6 +28,7 @@ import { verifyAccessToken } from './lib/jwt';
 import { io } from './lib/socket';
 import { redisClient } from './lib/redis';
 import { scheduleBookingExpiry } from './utils/bookingExpiry';
+import { setSandboxForced } from './config/paymentsRuntime';
 
 const app = express();
 const httpServer = createServer(app);
@@ -218,3 +219,13 @@ httpServer.listen(config.port, () => {
   // Muddati o'tgan to'lanmagan bronlarni davriy tozalash
   scheduleBookingExpiry();
 });
+
+// SUPER_ADMIN panel orqali yoqilgan to'lov test rejimini qayta ishga tushirishda tiklaymiz
+prisma.siteSetting
+  .findUnique({ where: { key: 'payments.sandbox' } })
+  .then((row) => {
+    setSandboxForced(row?.value === 'on');
+  })
+  .catch((err) => {
+    console.warn('[PAYMENTS] sandbox holatini o\'qib bo\'lmadi:', (err as Error).message);
+  });

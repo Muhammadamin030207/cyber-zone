@@ -4,6 +4,7 @@ import { SANDBOX_UZUM } from '../types';
 import { hmacSha256hex, safeEqual } from '../crypto';
 import { round2 } from '../../../utils/money';
 import { ProviderUnavailableError } from './payme';
+import { paymentsSandbox } from '../../../config/paymentsRuntime';
 
 /**
  * UZUM Checkout — rasmiy acquiring (X-Terminal-Id + X-API-Key).
@@ -22,7 +23,7 @@ export class UzumProvider implements PaymentProvider {
   }
 
   private get sandbox() {
-    return config.payments.devMode;
+    return paymentsSandbox();
   }
 
   private get active() {
@@ -63,6 +64,7 @@ export class UzumProvider implements PaymentProvider {
     const amount = this.toTiyin(input.amount);
 
     if (this.sandbox) {
+      const checkoutUrl = input.sandboxBaseUrl ? `${input.sandboxBaseUrl}/api/payments/mock/uzum` : a.checkoutUrl;
       const qs = new URLSearchParams({
         order_id: input.paymentId,
         amount: String(amount),
@@ -72,7 +74,7 @@ export class UzumProvider implements PaymentProvider {
       return {
         providerPaymentId: input.paymentId,
         providerTransactionId: input.paymentId,
-        checkoutUrl: `${a.checkoutUrl}?${qs.toString()}`,
+        checkoutUrl: `${checkoutUrl}?${qs.toString()}`,
         status: 'REDIRECT_REQUIRED',
         raw: { orderNumber: input.paymentId, amount },
       };
