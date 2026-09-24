@@ -2,16 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Bebas_Neue, Share_Tech_Mono } from 'next/font/google';
-import {
-  ArrowRight,
-  CalendarCheck,
-  Home,
-  Trophy,
-  UserRound,
-  Wallet,
-  type LucideIcon,
-} from 'lucide-react';
-import { Link, usePathname } from '@/i18n/navigation';
+import { ArrowRight } from 'lucide-react';
+import { Link } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
 const bebas = Bebas_Neue({ weight: '400', subsets: ['latin'], variable: '--font-bebas' });
@@ -24,10 +16,10 @@ export interface HeroCountdownCardProps {
   eventLabel: string;
   /** Event title rendered as the display heading. */
   eventTitle: string;
-  /** Free station count (mock for now). */
-  stationsFree: number;
+  /** Free station count (optional — faqat real ma'lumot bo'lsa ko'rsatiladi). */
+  stationsFree?: number;
   /** Total station count. */
-  stationsTotal: number;
+  stationsTotal?: number;
   /** Booking page href for the hex CTA. */
   ctaHref: string;
   className?: string;
@@ -61,7 +53,6 @@ export default function HeroCountdownCard({
   ctaHref,
   className,
 }: HeroCountdownCardProps) {
-  const pathname = usePathname();
   const [remaining, setRemaining] = useState<number | null>(null);
 
   useEffect(() => {
@@ -93,8 +84,9 @@ export default function HeroCountdownCard({
     [targetDate]
   );
 
-  const total = Math.max(1, stationsTotal);
-  const freePct = Math.min(100, Math.round((Math.max(0, stationsFree) / total) * 100));
+  const total = Math.max(1, stationsTotal ?? 0);
+  const hasLiveStats = typeof stationsFree === 'number' && typeof stationsTotal === 'number' && total > 0;
+  const freePct = hasLiveStats ? Math.min(100, Math.round((Math.max(0, stationsFree!) / total) * 100)) : 0;
 
   const units: Array<{ key: string; value: string; label: string }> = [
     {
@@ -118,17 +110,6 @@ export default function HeroCountdownCard({
       label: 'Secs',
     },
   ];
-
-  const navItems: Array<{ href: string; icon: LucideIcon; label: string }> = [
-    { href: '/', icon: Home, label: 'Home' },
-    { href: '/rooms', icon: CalendarCheck, label: 'Bookings' },
-    { href: '/news', icon: Trophy, label: 'Leaderboard' },
-    { href: '/dashboard', icon: Wallet, label: 'Wallet' },
-    { href: '/profile', icon: UserRound, label: 'Profile' },
-  ];
-
-  const isActive = (href: string) =>
-    href === '/' ? pathname === '/' || pathname === '' : pathname.startsWith(href);
 
   return (
     <div className={cn('relative w-full', bebas.variable, techMono.variable, className)}>
@@ -158,7 +139,7 @@ export default function HeroCountdownCard({
         <div aria-hidden className="scan-overlay z-[1]" />
 
         {/* Content */}
-        <div className="relative z-10 mx-auto flex min-h-[55vh] w-full max-w-xl flex-col items-center justify-center px-4 pb-32 pt-14 text-center sm:px-6 sm:pb-36">
+        <div className="relative z-10 mx-auto flex min-h-[55vh] w-full max-w-xl flex-col items-center justify-center px-4 pb-16 pt-14 text-center sm:px-6 sm:pb-20">
           <p className="font-tech text-neon-cyan mb-3 text-[11px] font-normal uppercase tracking-[0.35em] sm:text-xs">
             {eventLabel}
           </p>
@@ -198,35 +179,61 @@ export default function HeroCountdownCard({
         <div className="mx-auto max-w-xl rounded-2xl border border-[color-mix(in_srgb,var(--acc-a)_40%,transparent)] bg-[color-mix(in_srgb,var(--bg-1)_80%,transparent)] p-4 backdrop-blur-xl shadow-[inset_0_1px_0_color-mix(in_srgb,#fff_6%,transparent),0_24px_50px_-32px_rgba(0,0,0,0.9)] sm:p-5">
           <div className="flex items-center gap-4">
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span
-                  aria-hidden
-                  className="animate-pulse-glow h-2 w-2 shrink-0 rounded-full bg-[var(--acc-a)] shadow-[0_0_8px_var(--acc-a)]"
-                />
-                <span className="font-tech text-[var(--fg-mut)] text-[10px] uppercase tracking-[0.3em] sm:text-[11px]">
-                  Live Status
-                </span>
-              </div>
+              {hasLiveStats ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span
+                      aria-hidden
+                      className="animate-pulse-glow h-2 w-2 shrink-0 rounded-full bg-[var(--acc-a)] shadow-[0_0_8px_var(--acc-a)]"
+                    />
+                    <span className="font-tech text-[var(--fg-mut)] text-[10px] uppercase tracking-[0.3em] sm:text-[11px]">
+                      Live Status
+                    </span>
+                  </div>
 
-              <p className="font-tech mt-2 text-[var(--fg)] text-sm sm:text-base">
-                <span className="font-bebas text-3xl leading-none tracking-wide sm:text-4xl">
-                  {Math.max(0, stationsFree)}
-                  <span className="text-[var(--fg-dim)]">/{total}</span>
-                </span>
-                <span className="ml-2 align-middle text-[var(--fg-mut)]">stations free</span>
-              </p>
+                  <p className="font-tech mt-2 text-[var(--fg)] text-sm sm:text-base">
+                    <span className="font-bebas text-3xl leading-none tracking-wide sm:text-4xl">
+                      {Math.max(0, stationsFree!)}
+                      <span className="text-[var(--fg-dim)]">/{total}</span>
+                    </span>
+                    <span className="ml-2 align-middle text-[var(--fg-mut)]">stations free</span>
+                  </p>
 
-              <div className="clip-angle-sm mt-3 h-2 w-full overflow-hidden bg-[color-mix(in_srgb,var(--acc-a)_14%,transparent)]">
-                <div
-                  className="clip-angle-sm h-full bg-gradient-to-r from-[var(--acc-a)] to-[var(--acc-b)] shadow-[0_0_10px_color-mix(in_srgb,var(--acc-a)_60%,transparent)] transition-[width] duration-700 ease-out"
-                  style={{ width: `${freePct}%` }}
-                  role="progressbar"
-                  aria-valuenow={Math.max(0, stationsFree)}
-                  aria-valuemin={0}
-                  aria-valuemax={total}
-                  aria-label="Station availability"
-                />
-              </div>
+                  <div className="clip-angle-sm mt-3 h-2 w-full overflow-hidden bg-[color-mix(in_srgb,var(--acc-a)_14%,transparent)]">
+                    <div
+                      className="clip-angle-sm h-full bg-gradient-to-r from-[var(--acc-a)] to-[var(--acc-b)] shadow-[0_0_10px_color-mix(in_srgb,var(--acc-a)_60%,transparent)] transition-[width] duration-700 ease-out"
+                      style={{ width: `${freePct}%` }}
+                      role="progressbar"
+                      aria-valuenow={Math.max(0, stationsFree!)}
+                      aria-valuemin={0}
+                      aria-valuemax={total}
+                      aria-label="Station availability"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span
+                      aria-hidden
+                      className="animate-pulse-glow h-2 w-2 shrink-0 rounded-full bg-[var(--acc-a)] shadow-[0_0_8px_var(--acc-a)]"
+                    />
+                    <span className="font-tech text-[var(--fg-mut)] text-[10px] uppercase tracking-[0.3em] sm:text-[11px]">
+                      Countdown
+                    </span>
+                  </div>
+
+                  <p className="font-tech mt-2 text-[var(--fg)] text-sm sm:text-base">
+                    <span className="font-bebas text-3xl leading-none tracking-wide sm:text-4xl">
+                      {live ? pad(days) : '--'}
+                      <span className="text-[var(--fg-dim)]">d</span>
+                    </span>
+                    <span className="ml-2 align-middle text-[var(--fg-mut)]">
+                      until {eventTitle}
+                    </span>
+                  </p>
+                </>
+              )}
             </div>
 
             <Link
@@ -239,36 +246,6 @@ export default function HeroCountdownCard({
           </div>
         </div>
       </div>
-
-      {/* ===== FLOATING BOTTOM PILL NAV ===== */}
-      <nav
-        aria-label="Quick navigation"
-        className="fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] left-1/2 z-50 -translate-x-1/2 rounded-full border border-white/10 bg-[color-mix(in_srgb,var(--bg-1)_86%,transparent)] px-2 py-1.5 shadow-[0_14px_36px_-18px_rgba(0,0,0,0.95)] backdrop-blur-xl"
-      >
-        <ul className="flex items-center gap-1">
-          {navItems.map((item) => {
-            const active = isActive(item.href);
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  aria-label={item.label}
-                  aria-current={active ? 'page' : undefined}
-                  title={item.label}
-                  className={cn(
-                    'flex h-11 w-11 items-center justify-center rounded-full transition-all sm:h-12 sm:w-12',
-                    active
-                      ? 'drop-shadow-[0_0_9px_color-mix(in_srgb,var(--acc-a)_75%,transparent)] bg-[color-mix(in_srgb,var(--acc-a)_15%,transparent)] text-neon-cyan'
-                      : 'text-[var(--fg-mut)] hover:bg-white/5 hover:text-[var(--fg)]'
-                  )}
-                >
-                  <item.icon size={20} strokeWidth={active ? 2.4 : 1.9} />
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
     </div>
   );
 }

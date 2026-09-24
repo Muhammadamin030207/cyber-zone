@@ -53,8 +53,6 @@ export default function HomePage() {
         targetDate="2026-11-30T20:00:00.000Z"
         eventLabel="Cyber Tournament"
         eventTitle="NEXUS CUP"
-        stationsFree={12}
-        stationsTotal={20}
         ctaHref="/rooms"
       />
 
