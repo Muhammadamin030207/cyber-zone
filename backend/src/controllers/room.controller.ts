@@ -3,6 +3,8 @@ import prisma from '../lib/prisma';
 import { cacheGet, cacheSet, cacheDel } from '../lib/redis';
 import { AuthRequest } from '../types';
 import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/response';
+import path from 'path';
+import fs from 'fs';
 
 const ROOM_INCLUDE = {
   zones: {
@@ -445,6 +447,56 @@ export const updateRoom = async (req: AuthRequest, res: Response, next: NextFunc
 
     await invalidateRoomCaches(updated.id);
     return ok(res, updated, 'Kompyuter xona yangilandi');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ POST /api/rooms/:roomId/images — ADMIN/SUPER_ADMIN: rasm yuklash ============
+// multer tomonidan validatsiya qilingan (MIME + 5MB) fayl uploads/rooms ga saqlanadi.
+export const uploadRoomCoverImage = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const room = await prisma.computerRoom.findUnique({ where: { id: req.params.roomId } });
+    if (!room) return notFoundMsg(res, 'Kompyuter xona topilmadi');
+    if (room.ownerId !== req.user!.userId && req.user!.role !== 'SUPER_ADMIN') {
+      return forbidden(res, 'Faqat o\'z xonangizga rasm qo\'shishingiz mumkin');
+    }
+    const file = (req as any).file;
+    if (!file) return badRequest(res, 'Rasm fayli yuborilmadi');
+    const url = `/uploads/rooms/${file.filename}`;
+    const images = Array.isArray(room.images) ? room.images : [];
+    const updated = await prisma.computerRoom.update({
+      where: { id: room.id },
+      data: { images: [...images, url] },
+    });
+    await invalidateRoomCaches(room.id);
+    return ok(res, { url, images: updated.images }, 'Rasm yuklandi');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ DELETE /api/rooms/:roomId/images — ADMIN/SUPER_ADMIN: rasmni o'chirish ============
+export const removeRoomImage = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { url } = req.body || {};
+    if (!url || typeof url !== 'string') return badRequest(res, 'Rasm URL yuborilmadi');
+    const room = await prisma.computerRoom.findUnique({ where: { id: req.params.roomId } });
+    if (!room) return notFoundMsg(res, 'Kompyuter xona topilmadi');
+    if (room.ownerId !== req.user!.userId && req.user!.role !== 'SUPER_ADMIN') {
+      return forbidden(res, 'Faqat o\'z xonangiz rasmini o\'chirishingiz mumkin');
+    }
+    const images = (Array.isArray(room.images) ? room.images : []).filter((i) => i !== url);
+    await prisma.computerRoom.update({ where: { id: room.id }, data: { images } });
+    if (url.startsWith('/uploads/rooms/')) {
+      const filename = url.split('/').pop();
+      if (filename) {
+        const fullPath = path.join(process.cwd(), 'uploads', 'rooms', filename);
+        fs.unlink(fullPath, () => {});
+      }
+    }
+    await invalidateRoomCaches(room.id);
+    return ok(res, { images }, 'Rasm o\'chirildi');
   } catch (err) {
     next(err);
   }

@@ -13,6 +13,17 @@ export function errorHandler(err: any, req: Request, res: Response, next: NextFu
     return res.status(400).json({ success: false, message: 'Bog\'liq ma\'lumot topilmadi yoki noto\'g\'ri' });
   }
 
+  // Fayl yuklash (multer) xatolari — 400
+  if (err.name === 'MulterError') {
+    const msg = err.code === 'LIMIT_FILE_SIZE'
+      ? 'Fayl hajmi 5MB dan oshmasligi kerak'
+      : 'Fayl yuklashda xatolik yuz berdi';
+    return res.status(400).json({ success: false, message: msg });
+  }
+  if (err.message && /yuklash mumkin|rasm/.test(err.message)) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+
   const status = err.status || 500;
   // Ichki tafsilotlar (SMTP xato matni, SQL, stack) foydalanuvchiga chiqarilmaydi —
   // faqat logda qoladi. Foydalanuvchiga tushunarli umumiy xabar.

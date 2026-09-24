@@ -32,3 +32,37 @@ export const uploadAvatar = multer({
     else cb(new Error('Faqat rasm yuklash mumkin (JPG/PNG/WEBP/GIF)'));
   },
 });
+
+// Xona rasmlari (cover/gallery) — uploads/rooms papkasiga.
+// MIME-dan kengaytma olinadi (path traversal / XSS himoyasi).
+const roomsRoot = path.join(process.cwd(), 'uploads', 'rooms');
+fs.mkdirSync(roomsRoot, { recursive: true });
+
+const roomsStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, roomsRoot),
+  filename: (_req, file, cb) => {
+    const ext =
+      file.mimetype === 'image/jpeg'
+        ? '.jpg'
+        : file.mimetype === 'image/png'
+        ? '.png'
+        : file.mimetype === 'image/webp'
+        ? '.webp'
+        : file.mimetype === 'image/avif'
+        ? '.avif'
+        : file.mimetype === 'image/gif'
+        ? '.gif'
+        : '.jpg';
+    cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`);
+  },
+});
+
+export const uploadRoomImage = multer({
+  storage: roomsStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif'];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Faqat rasm yuklash mumkin (JPG/PNG/WEBP/AVIF/GIF)'));
+  },
+});

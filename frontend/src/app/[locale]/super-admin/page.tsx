@@ -7,9 +7,10 @@ import {
   Crown, Users, Building2, CalendarDays, CircleDollarSign, Activity,
   Search, Plus, Trash2, Loader2, Check, ShieldOff, ShieldCheck,
   KeyRound, MapPin, X, PlusCircle, Wallet, Banknote, MessageSquare, MessagesSquare, Inbox,
+  ImageUp, Upload,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
-import { toastError } from '@/lib/toast';
+import { toastError, toastSuccess } from '@/lib/toast';
 import { confirmDialog } from '@/lib/confirm';
 import type { User, Room } from '@/lib/types';
 import { formatPrice, formatDate, cn } from '@/lib/utils';
@@ -383,6 +384,52 @@ function RoomsTab() {
     longitude: null as number | null,
   });
   const [zones, setZones] = useState([{ name: 'Umumiy zal', type: 'GENERAL_HALL', pricePerHour: '', computerCount: '20' }]);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);
+
+  const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif'];
+  const MAX_COVER_SIZE = 5 * 1024 * 1024;
+
+  function pickCover(file: File | undefined) {
+    if (!file) return;
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+      setCoverError('Fayl formati qo\'llanmaydi (JPG/PNG/WEBP/AVIF/GIF)');
+      return;
+    }
+    if (file.size > MAX_COVER_SIZE) {
+      setCoverError('Rasm hajmi 5MB dan oshmasligi kerak');
+      return;
+    }
+    setCoverError(null);
+    setCoverFile(file);
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
+    setCoverPreview(URL.createObjectURL(file));
+  }
+
+  function clearCover() {
+    setCoverFile(null);
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
+    setCoverPreview(null);
+  }
+
+  async function uploadCover(roomId: string) {
+    if (!coverFile) return;
+    setCoverUploading(true);
+    setCoverError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', coverFile);
+      await api.post(`/api/rooms/${roomId}/images`, fd);
+      toastSuccess('Cover rasm yuklandi');
+      clearCover();
+    } catch (e) {
+      setCoverError(getApiErrorMessage(e, 'Rasm yuklanmadi'));
+    } finally {
+      setCoverUploading(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -405,7 +452,7 @@ function RoomsTab() {
     setCreating(true);
     setMsg(null);
     try {
-      await api.post('/api/rooms/super-admin', {
+      const { data } = await api.post('/api/rooms/super-admin', {
         ...form,
         status: form.status,
         zones: zones.map((z) => ({
@@ -415,10 +462,13 @@ function RoomsTab() {
           computerCount: Number(z.computerCount) || 0,
         })),
       });
-      setMsg('Xona yaratildi va adminda tayinlandi!');
+      const newRoomId = data?.data?.id;
+      if (newRoomId && coverFile) await uploadCover(newRoomId);
+      setMsg('Xona yaratildi va admindan tayinlandi!');
       setShowCreate(false);
       setForm({ name: '', address: '', district: '', ownerId: '', status: 'PENDING', latitude: null, longitude: null });
       setZones([{ name: 'Umumiy zal', type: 'GENERAL_HALL', pricePerHour: '', computerCount: '20' }]);
+      clearCover();
       load();
     } catch (err) { setMsg(getApiErrorMessage(err)); }
     setCreating(false);
@@ -510,6 +560,38 @@ async function remove(room: Room) {
             <button onClick={() => setZones((zs) => [...zs, { name: '', type: 'GENERAL_HALL', pricePerHour: '', computerCount: '10' }])} className="px-3 py-1.5 rounded-lg border border-neon-cyan/30 text-neon-cyan text-xs font-bold hover:bg-neon-cyan/10 flex items-center gap-1">
               <Plus size={13} /> Zona qo'shish
             </button>
+          </div>
+
+          {/* Cover rasm */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Cover rasm (ixtiyoriy)</p>
+            <div className="flex items-center gap-3">
+              {coverPreview ? (
+                <div className="relative h-24 w-40 rounded-xl overflow-hidden border border-white/10 group">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={coverPreview} alt="Cover preview" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <label className="cursor-pointer p-1.5 rounded-lg bg-white/10 hover:bg-white/20">
+                      <ImageUp size={14} />
+                      <input type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif" className="hidden" disabled={coverUploading}
+                        onChange={(e) => { pickCover(e.target.files?.[0]); e.target.value = ''; }} />
+                    </label>
+                    <button type="button" onClick={clearCover} disabled={coverUploading} className="p-1.5 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-neon-cyan/30 text-neon-cyan text-sm font-semibold cursor-pointer hover:bg-neon-cyan/5">
+                  <Upload size={15} /> Rasm tanlash
+                  <input type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif" className="hidden" disabled={coverUploading}
+                    onChange={(e) => { pickCover(e.target.files?.[0]); e.target.value = ''; }} />
+                </label>
+              )}
+              {coverUploading && <Loader2 size={18} className="animate-spin text-neon-cyan" />}
+            </div>
+            {coverError && <p className="text-xs text-red-400">{coverError}</p>}
+            <p className="text-[11px] text-gray-500">JPG/PNG/WEBP/AVIF/GIF, 5MB gacha. Bron yaratilgandan so'ng xona sahifasi va kartada ko'rinadi.</p>
           </div>
 
           <div className="flex gap-2">

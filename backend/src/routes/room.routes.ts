@@ -14,6 +14,8 @@ import {
 import { getZones, createZone, updateZone, deleteZone } from '../controllers/zone.controller';
 import { createComputer, updateComputer, updateComputerStatus, deleteComputer, getComputersByZone } from '../controllers/computer.controller';
 import { authenticate, authorize } from '../middlewares/auth';
+import { uploadRoomImage } from '../middlewares/upload';
+import { uploadRoomCoverImage, removeRoomImage } from '../controllers/room.controller';
 
 const router = Router();
 
@@ -35,6 +37,10 @@ router.post('/super-admin', authenticate, authorize('SUPER_ADMIN'), createRoomBy
 router.post('/', authenticate, authorize('SUPER_ADMIN'), createRoom);
 router.put('/:id', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), updateRoom);
 router.delete('/:id', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), deleteRoom);
+
+// ============ XONA RASMLARI ============
+router.post('/:roomId/images', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), uploadRoomImage.single('file'), uploadRoomCoverImage);
+router.delete('/:roomId/images', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), removeRoomImage);
 
 // ============ ZONALAR ============
 router.get('/:roomId/zones', getZones);

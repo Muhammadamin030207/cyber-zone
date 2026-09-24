@@ -300,7 +300,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
                   <ProviderLogo method={p.method} size={34} />
                   <span className="text-sm font-semibold">{ui?.label || p.label}</span>
                   <span className="text-[10px] text-gray-500">
-                    {p.available ? ui?.sub : 'Tez orada'}
+                    {p.available ? ui?.sub : 'Hozircha sozlanmagan'}
                   </span>
                 </button>
               );
