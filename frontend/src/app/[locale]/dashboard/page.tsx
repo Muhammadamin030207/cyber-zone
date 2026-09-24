@@ -15,6 +15,7 @@ import { formatPrice, formatDate, formatDateTime, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
 import { getSocket } from '@/lib/socket';
 import Logo from '@/components/brand/Logo';
+import SessionController from '@/components/booking/SessionController';
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
@@ -294,6 +295,10 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
                   >
                     <Ticket size={15} /> QR Chipta
                   </Link>
+                )}
+
+                {['CONFIRMED', 'PARTIALLY_PAID', 'PAID', 'ACTIVE'].includes(b.status) && (
+                  <SessionController booking={b} refresh={() => fetchBookings({ silent: true })} />
                 )}
 
                 <p className="text-[11px] text-gray-600 mt-3">Yaratilgan: {formatDateTime(b.createdAt)}</p>

@@ -58,6 +58,8 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // §13: moslashuvchan (custom) davomiylik — 0.5 soat qadamida, chips + qo'lda kiritish
+  const [customH, setCustomH] = useState('');
 
   const selectedZone = availability.find((z) => z.id === zoneId) || availability[0];
 
@@ -138,6 +140,22 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
     const next = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
     setEndTime(next);
     setTimeError(null);
+  }
+
+  function applyCustomDuration() {
+    const h = Number(String(customH).replace(',', '.'));
+    if (!Number.isFinite(h) || h <= 0 || h > 24) {
+      setTimeError('Davomiylik 0.5 dan 24 soatgacha bo\u2018lishi kerak.');
+      return false;
+    }
+    const [sh, sm] = startTime.split(':').map(Number);
+    const total = sh * 60 + sm + h * 60;
+    if (total > 24 * 60) {
+      setTimeError('Bron 24:00 dan oshib ketyapti.');
+      return false;
+    }
+    applyDuration(h);
+    return true;
   }
 
   const DURATIONS = [1, 2, 3, 4, 6];
@@ -429,6 +447,32 @@ async function submit() {
                 {h} soat
               </button>
             ))}
+          </div>
+          <div className="flex items-center gap-2 mb-3">
+            <input
+              type="number"
+              min={0.5}
+              max={24}
+              step={0.5}
+              value={customH}
+              onChange={(e) => setCustomH(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyCustomDuration(); } }}
+              placeholder="0.5"
+              aria-label="Custom davomiylik (soat)"
+              className="glass-input w-24 rounded-xl px-3 py-1.5 text-sm outline-none text-center"
+            />
+            <button
+              type="button"
+              onClick={() => applyCustomDuration()}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                Math.abs(durationHours - Number(String(customH).replace(',', '.'))) < 0.01
+                  ? 'border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan'
+                  : 'border-neon-cyan/15 text-gray-400 hover:border-neon-cyan/40 hover:text-neon-cyan'
+              }`}
+            >
+              Custom soat
+            </button>
+            <span className="text-[11px] text-gray-500">0.5–24 soat</span>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

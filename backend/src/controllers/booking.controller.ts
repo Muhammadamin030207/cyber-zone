@@ -410,7 +410,7 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
 
       return created(res, booking, `Bron yaratildi. ${Number(booking.depositPercent) || 30}% oldindan to'lov kerak`);
     } catch (txErr: any) {
-      const msg = txErr.message || '';
+      const msg = txErr?.message || '';
       // Idempotentlik: raqobatli (concurrent) takroriy so'rov bir xil kalit bilan
       // unique-constraint'ga tushsa — yangi bron yaratilmaydi, avvalgisini qaytaramiz.
       if (txErr?.code === 'P2002' && idemKey) {
@@ -435,7 +435,7 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
       if (msg === 'NO_FREE_COMPUTER') return badRequest(res, 'Ushbu vaqt uchun bo\'sh kompyuter yo\'q', 'ROOM_FULL');
       if (msg === 'INSUFFICIENT_POINTS') return badRequest(res, 'Bonus ballaringiz yetarli emas');
       if (msg === 'MIN_AMOUNT_NOT_REACHED') return badRequest(res, 'Bu promo koddan foydalanish uchun minimal to\u2019lov 100 000 so\u2019m.');
-      if (msg === 'PROMO_LIMIT_REACHED') return badRequest(res, 'Bu promo-kod siz allaqachon ishlatgansiz');
+      if (msg === 'PROMO_LIMIT_REACHED') return badRequest(res, 'Bu promo-kod uchun ishlatish limiti tugagan');
       if (msg === 'PERSONAL_PROMO_NOT_FOR_USER') return badRequest(res, 'Bu promo-kod shaxsiy va siz uchun emas');
       if (msg === 'PERSONAL_PROMO_LIMIT_REACHED') return badRequest(res, 'Shaxsiy promo-kodingiz ishlatish limiti tugagan');
       if (msg.startsWith('CONFLICT_')) {

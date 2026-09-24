@@ -655,7 +655,7 @@ function BookingsTab({ room }: { room: Room }) {
 function PromosTab({ room }: { room: Room }) {
   const [promos, setPromos] = useState<PromoCode[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ code: '', discountType: 'PERCENTAGE', discountValue: 10, minBookingAmount: 0, maxUses: 100, startsAt: todayISO(), expiresAt: '' });
+  const [form, setForm] = useState({ code: '', discountType: 'PERCENTAGE', discountValue: 10, minBookingAmount: 0, maxUses: 100, startsAt: todayISO(), expiresAt: '', usageLimitPerUser: 1, isPersonal: false, recipientPhone: '', recipientEmail: '' });
   const [editId, setEditId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -674,11 +674,16 @@ function PromosTab({ room }: { room: Room }) {
         code: form.code.toUpperCase(), discountType: form.discountType,
         discountValue: Number(form.discountValue), minBookingAmount: Number(form.minBookingAmount),
         maxUses: Number(form.maxUses), startsAt: form.startsAt, expiresAt: form.expiresAt,
-        roomId: room.id,
+        usageLimitPerUser: Number(form.usageLimitPerUser) || 1,
       };
+      if (form.isPersonal) {
+        payload.isPersonal = true;
+        if (form.recipientPhone.trim()) payload.recipientPhone = form.recipientPhone.trim();
+        if (form.recipientEmail.trim()) payload.recipientEmail = form.recipientEmail.trim().toLowerCase();
+      }
       if (editId) { await api.patch(`/api/promo/${editId}`, payload); }
       else { await api.post('/api/promo', payload); }
-      setForm({ code: '', discountType: 'PERCENTAGE', discountValue: 10, minBookingAmount: 0, maxUses: 100, startsAt: todayISO(), expiresAt: '' });
+      setForm({ code: '', discountType: 'PERCENTAGE', discountValue: 10, minBookingAmount: 0, maxUses: 100, startsAt: todayISO(), expiresAt: '', usageLimitPerUser: 1, isPersonal: false, recipientPhone: '', recipientEmail: '' });
       setEditId(null);
       load();
     } catch (err) { toastError(getApiErrorMessage(err)); }
@@ -687,7 +692,7 @@ function PromosTab({ room }: { room: Room }) {
 
   function edit(p: PromoCode) {
     setEditId(p.id);
-    setForm({ code: p.code, discountType: p.discountType, discountValue: Number(p.discountValue), minBookingAmount: Number(p.minBookingAmount || 0), maxUses: p.maxUses || 100, startsAt: p.startsAt.slice(0, 10), expiresAt: p.expiresAt.slice(0, 10) });
+    setForm({ code: p.code, discountType: p.discountType, discountValue: Number(p.discountValue), minBookingAmount: Number(p.minBookingAmount || 0), maxUses: p.maxUses || 100, startsAt: p.startsAt.slice(0, 10), expiresAt: p.expiresAt.slice(0, 10), usageLimitPerUser: p.usageLimitPerUser || 1, isPersonal: !!p.isPersonal, recipientPhone: p.recipientPhone || '', recipientEmail: p.recipientEmail || '' });
   }
 
   async function remove(id: string) {
@@ -716,6 +721,25 @@ function PromosTab({ room }: { room: Room }) {
             <Input label="Maks ishlatish" type="number" value={String(form.maxUses)} onChange={(v) => setForm((f) => ({ ...f, maxUses: Number(v) }))} />
           </div>
           <div className="grid grid-cols-2 gap-3">
+            <Input label="1 foydalanuvchiga necha marta (1-20)" type="number" value={String(form.usageLimitPerUser)} onChange={(v) => setForm((f) => ({ ...f, usageLimitPerUser: Number(v) }))} />
+            <label className="flex items-end gap-2 pb-2">
+              <input
+                type="checkbox"
+                checked={form.isPersonal}
+                onChange={(e) => setForm((f) => ({ ...f, isPersonal: e.target.checked }))}
+                className="accent-neon-cyan w-4 h-4"
+              />
+              <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Shaxsiy</span>
+            </label>
+          </div>
+          {form.isPersonal && (
+            <div className="space-y-3 rounded-xl border border-neon-green/20 bg-neon-green/5 p-3">
+              <p className="text-[11px] text-gray-400">Shaxsiy kod faqat aniq foydalanuvchiga beriladi (telefon yoki email orqali identifikatsiya, IP emas).</p>
+              <Input label="Qabul qiluvchi telefon" value={form.recipientPhone} onChange={(v) => setForm((f) => ({ ...f, recipientPhone: v }))} placeholder="+998901234567" />
+              <Input label="Qabul qiluvchi email" value={form.recipientEmail} onChange={(v) => setForm((f) => ({ ...f, recipientEmail: v }))} placeholder="user@example.com" />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
             <Input label="Boshlanish" type="date" value={form.startsAt} onChange={(v) => setForm((f) => ({ ...f, startsAt: v }))} />
             <Input label="Tugash" type="date" value={form.expiresAt} onChange={(v) => setForm((f) => ({ ...f, expiresAt: v }))} />
           </div>
@@ -723,7 +747,7 @@ function PromosTab({ room }: { room: Room }) {
             <button onClick={save} disabled={saving} className="px-5 py-2.5 rounded-xl neon-btn text-sm font-bold flex items-center gap-2 disabled:opacity-50">
               {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} {editId ? 'Yangilash' : 'Saqlash'}
             </button>
-            {editId && <button onClick={() => { setEditId(null); setForm({ code: '', discountType: 'PERCENTAGE', discountValue: 10, minBookingAmount: 0, maxUses: 100, startsAt: todayISO(), expiresAt: '' }); }} className="px-4 py-2.5 rounded-xl border border-gray-500/30 text-gray-400 text-sm"><X size={15} /></button>}
+            {editId && <button onClick={() => { setEditId(null); setForm({ code: '', discountType: 'PERCENTAGE', discountValue: 10, minBookingAmount: 0, maxUses: 100, startsAt: todayISO(), expiresAt: '', usageLimitPerUser: 1, isPersonal: false, recipientPhone: '', recipientEmail: '' }); }} className="px-4 py-2.5 rounded-xl border border-gray-500/30 text-gray-400 text-sm"><X size={15} /></button>}
           </div>
         </div>
       </div>
@@ -739,6 +763,12 @@ function PromosTab({ room }: { room: Room }) {
                   <span className="font-bold text-neon-green">{p.code}</span>
                   <span className="text-xs text-gray-500 ml-2">{p.discountType === 'PERCENTAGE' ? `${p.discountValue}%` : `${formatPrice(p.discountValue)} so'm`}</span>
                   <span className="text-xs text-gray-600 ml-2">Ishlatildi: {p.usedCount}/{p.maxUses || '∞'}</span>
+                  {p.usageLimitPerUser !== undefined && p.usageLimitPerUser !== 1 && (
+                    <span className="text-[10px] text-gray-500 ml-2">1 user: {p.usageLimitPerUser}×</span>
+                  )}
+                  {(p as any).isPersonal && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-neon-green/15 text-neon-green border border-neon-green/25 ml-2 uppercase tracking-wider">Shaxsiy</span>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => edit(p)} className="p-1.5 rounded-lg text-neon-cyan hover:bg-neon-cyan/10"><Pencil size={14} /></button>

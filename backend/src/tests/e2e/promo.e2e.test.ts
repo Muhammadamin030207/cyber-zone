@@ -93,13 +93,13 @@ describe('E2E: Promo-kod — min 100k, single-use per identity, censellikda qayt
     // Boshqa vaqtda ikkinchi urinish — single-use per user
     const again = await makeBooking(userAToken, { hours: 5, key: 'promo-use-2', start: '10:00' });
     expect(again.status).toBe(400);
-    expect((again.body.message || '') as string).toContain('allaqachon ishlatgansiz');
+    expect((again.body.message || '') as string).toContain('limiti tugagan');
   });
 
   it('identity: AYNAN bir xil telefon raqamli boshqa user ham promo\'ni ishlata olmaydi', async () => {
     const res = await makeBooking(userBToken, { hours: 5, key: 'promo-twin-1', start: '11:00' });
     expect(res.status).toBe(400);
-    expect((res.body.message || '') as string).toContain('allaqachon ishlatgansiz');
+    expect((res.body.message || '') as string).toContain('limiti tugagan');
   });
 
   it('bron bekor qilingach promo qayta ishlatilishi mumkin', async () => {
@@ -188,7 +188,7 @@ describe('E2E: Promo-kod — min 100k, single-use per identity, censellikda qayt
 
     const loser = r1.status === 201 ? r2 : r1;
     expect(loser.status).toBe(400);
-    expect((loser.body.message || '') as string).toContain('allaqachon ishlatgansiz');
+    expect((loser.body.message || '') as string).toContain('limiti tugagan');
 
     // DB darajasida: userD uchun faqat 1 ta PromoRedemption qatori mavjud
     const userD = (await prisma.user.findUnique({ where: { email: 'promo-d@e2e.test' } }))!;

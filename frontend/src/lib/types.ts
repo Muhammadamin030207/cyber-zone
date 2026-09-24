@@ -84,6 +84,10 @@ export interface PromoCode {
   minBookingAmount?: number | string | null;
   maxUses?: number | null;
   usedCount: number;
+  usageLimitPerUser?: number;
+  isPersonal?: boolean;
+  recipientPhone?: string | null;
+  recipientEmail?: string | null;
   startsAt: string;
   expiresAt: string;
   isActive: boolean;
@@ -118,6 +122,12 @@ export interface Booking {
   depositPercent?: number | string;
   status: BookingStatus;
   notes?: string | null;
+  sessionStartedAt?: string | null;
+  sessionEndedAt?: string | null;
+  actualDurationMinutes?: number | null;
+  actualPrice?: number | string | null;
+  billingAdjustment?: number | string | null;
+  minBillingMinutes?: number;
   createdAt: string;
   room?: Pick<Room, 'id' | 'name' | 'address'>;
   zone?: Pick<Zone, 'id' | 'name' | 'type' | 'pricePerHour'>;
@@ -125,6 +135,21 @@ export interface Booking {
   promoCode?: Pick<PromoCode, 'id' | 'code' | 'discountType' | 'discountValue'>;
   user?: Pick<User, 'id' | 'fullName' | 'email' | 'phone'>;
   payments?: Payment[];
+}
+
+export interface BookingSessionState {
+  state: 'active' | 'ended' | 'idle';
+  serverTime: string;
+  bookedStart: string;
+  bookedEnd: string;
+  elapsedMinutes: number;
+  billedMinutes: number;
+  remainingMs: number;
+  overdueMs: number;
+  actualPrice: number | null;
+  prepaidValue: number;
+  totalPaid: number;
+  pointsUsed: number;
 }
 
 export interface Payment {
