@@ -123,19 +123,21 @@ export default function Header() {
                     </span>
                   )}
                 </Link>
-                <Link
-                  href="/dashboard"
-                  data-tip={t('dashboard')}
-                  data-tip-top
-                  aria-label={t('dashboard')}
-                  className={`w-9 h-9 rounded-lg border flex items-center justify-center font-bold text-sm transition-colors ${
-                    isActive('/dashboard')
-                      ? 'text-neon-cyan bg-neon-cyan/15 border-neon-cyan/30'
-                      : 'text-gray-200 bg-cyber-800 border-white/10 hover:border-neon-cyan/40'
-                  }`}
-                >
-                  {userInitial}
-                </Link>
+                {user.role === 'USER' && (
+                  <Link
+                    href="/dashboard"
+                    data-tip={t('dashboard')}
+                    data-tip-top
+                    aria-label={t('dashboard')}
+                    className={`w-9 h-9 rounded-lg border flex items-center justify-center font-bold text-sm transition-colors ${
+                      isActive('/dashboard')
+                        ? 'text-neon-cyan bg-neon-cyan/15 border-neon-cyan/30'
+                        : 'text-gray-200 bg-cyber-800 border-white/10 hover:border-neon-cyan/40'
+                    }`}
+                  >
+                    {userInitial}
+                  </Link>
+                )}
                 <button
                   onClick={handleLogout}
                   className="inline-flex items-center h-9 px-3 text-sm font-medium rounded-lg text-red-400 hover:bg-red-500/10"
@@ -177,18 +179,20 @@ export default function Header() {
                     <LayoutDashboard size={16} />
                   </Link>
                 )}
-                <Link
-                  href="/dashboard"
-                  data-tip={t('dashboard')}
-                  aria-label={t('dashboard')}
-                  className={`inline-flex items-center justify-center w-9 h-9 rounded-xl border font-bold text-sm transition-colors ${
-                    isActive('/dashboard')
-                      ? 'text-neon-cyan bg-neon-cyan/15 border-neon-cyan/40'
-                      : 'text-gray-200 bg-white/[0.06] border-white/15 hover:border-neon-cyan/40'
-                  }`}
-                >
-                  {userInitial}
-                </Link>
+                {user.role === 'USER' && (
+                  <Link
+                    href="/dashboard"
+                    data-tip={t('dashboard')}
+                    aria-label={t('dashboard')}
+                    className={`inline-flex items-center justify-center w-9 h-9 rounded-xl border font-bold text-sm transition-colors ${
+                      isActive('/dashboard')
+                        ? 'text-neon-cyan bg-neon-cyan/15 border-neon-cyan/30'
+                        : 'text-gray-200 bg-white/[0.06] border-white/15 hover:border-neon-cyan/40'
+                    }`}
+                  >
+                    {userInitial}
+                  </Link>
+                )}
               </>
             ) : (
               <Link
