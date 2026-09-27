@@ -13,12 +13,13 @@ import type {
 import { config } from '../config';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../types';
-import { generateTokens } from '../lib/jwt';
+import { generateTokens, generatePendingLoginToken, verifyPendingToken } from '../lib/jwt';
 import { ok, badRequest, forbidden, notFoundMsg, serverError } from '../utils/response';
 import bcrypt from 'bcryptjs';
 import { verifyTotp } from '../utils/totp';
 import { sendSecurityAlert, clientIp, describeUserAgent, recordSecurityEvent } from '../lib/securityAlerts';
 import { setAuthChallenge, consumeAuthChallenge, type AuthChallengeEntry } from '../lib/redis';
+import { sendPendingChallenge, clearThrottleIfNeeded } from '../utils/factorPolicy';
 
 // ============ SERVER-SIDE CHALLENGE STORAGE ============
 // Challenge faqat serverda saqlanadi — client mustaqil yaratmaydi, signature
@@ -270,15 +271,9 @@ export async function authVerify(req: Request, res: Response, next: NextFunction
     // yo'l bilan token berish mumkin emas.
     if (twoFactorMode) {
       try {
-        const decoded = jwt.verify(pendingLoginToken, config.jwt.secret as Secret) as {
-          type?: string;
-          userId?: string;
-          exp?: number;
-        };
-        const okType = decoded.type === 'pending-passkey';
-        const okUser = decoded.userId === userId;
-        const notExpired = typeof decoded.exp === 'number' && decoded.exp * 1000 > Date.now();
-        if (!okType || !okUser || !notExpired) {
+        // Faqat 'pending-passkey' tokeni + shu userga bog'langan bo'lishi shart.
+        const decoded = verifyPendingToken(pendingLoginToken, 'pending-passkey');
+        if (decoded.userId !== userId) {
           return badRequest(res, 'Sessiya muddati o\'tgan. Qaytadan parol bilan kiring.');
         }
       } catch {
@@ -357,6 +352,23 @@ export async function authVerify(req: Request, res: Response, next: NextFunction
         lastUsedAt: new Date(),
       },
     });
+
+    // ============ FAKTOR ZANJIRI: passkey -> 2FA ============
+    // Passkey muvaffaqiyatli bo'ldi, lekin bu HALI to'liq kirish emas: hisobda
+    // 2FA yoqilgan bo'lsa, avval u ham tasdiqlanishi kerak. (Eski kod shu
+    // qadamni yo'q qoldirgan edi — passkey yoqilishi 2FA'ni birdan
+    // bekor qilib qo'yardi.)
+    //
+    // `pending`-bo'lmagan (discoverable / email'siz) kirishda `requirePasskey`
+    // allaqachon ushbu passkey orqali qoniqarli tasdiqlandi, shuning uchun
+    // qolgan yagona faktor — 2FA.
+    if (twoFactorMode) {
+      await clearThrottleIfNeeded(user);
+    }
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      await clearThrottleIfNeeded(user);
+      return sendPendingChallenge(res, { pending: 'pending-2fa', token: generatePendingLoginToken(user.id, 'pending-2fa') }, user.id);
+    }
 
     const tokens = generateTokens({ userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion });
 

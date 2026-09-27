@@ -17,7 +17,8 @@
     "seed": "tsx prisma/seed.ts",
     "test": "vitest run",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
-    "test:mail": "tsx src/scripts/test-mail.ts"
+    "test:mail": "tsx src/scripts/test-mail.ts",
+    "test:migrations": "tsx src/scripts/checkMigrations.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

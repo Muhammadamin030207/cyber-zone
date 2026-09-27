@@ -207,6 +207,10 @@ model User {
   loyaltyTransactions LoyaltyTransaction[]
 
   @@map("users")
+  @@index([role])
+  @@index([status])
+  @@index([createdAt])
+
 }
 
 // ============ XAVFSIZLIK VOQEALARI (AUDIT) ============
@@ -262,6 +266,8 @@ model ComputerRoom {
   supportMessages SupportMessage[]
 
   @@map("computer_rooms")
+  @@index([status, createdAt])
+
 }
 
 model Zone {
@@ -280,6 +286,8 @@ model Zone {
   bookings  Booking[]
 
   @@map("zones")
+  @@index([roomId])
+
 }
 
 model Computer {
@@ -295,6 +303,8 @@ model Computer {
   bookings Booking[]
 
   @@map("computers")
+  @@index([zoneId])
+
 }
 
 model Booking {
@@ -532,6 +542,8 @@ model BarItem {
   room ComputerRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@map("bar_items")
+  @@index([roomId, isAvailable])
+
 }
 
 model BarOrder {
@@ -551,6 +563,8 @@ model BarOrder {
   user    User         @relation(fields: [userId], references: [id])
 
   @@map("bar_orders")
+  @@index([userId, createdAt])
+
 }
 
 // ============ JONLI SUHBAT (Chat) ============
@@ -567,6 +581,9 @@ model ChatMessage {
   user User         @relation(fields: [userId], references: [id])
 
   @@map("chat_messages")
+  @@index([roomId, createdAt])
+  @@index([userId, isRead])
+
 }
 
 // ===================== SUPPORT / MUROJAATLAR =====================
@@ -626,6 +643,9 @@ model Review {
   room ComputerRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@map("reviews")
+  @@index([roomId])
+  @@index([userId, roomId])
+
 }
 
 model Notification {
@@ -640,6 +660,8 @@ model Notification {
   user User @relation(fields: [userId], references: [id])
 
   @@map("notifications")
+  @@index([userId, createdAt])
+
 }
 
 // ============ LOYALTY (Bonus ballar) ============

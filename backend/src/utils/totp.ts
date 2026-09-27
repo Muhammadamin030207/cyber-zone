@@ -51,11 +51,6 @@ function totpAtRestKey(info: string): Buffer {
   return crypto.createHmac('sha256', raw).update(info).digest();
 }
 
-/** Kalit konfiguratsiyasini oldindan tekshiradi (server boot'ida chaqirish uchun). */
-export function assertTotpAtRestKey(): void {
-  totpAtRestKey(TOTP_ENC_VERSIONS[TOTP_ENC_PREFIX]);
-}
-
 /** Secret'ni at-rest shifrlab qaytaradi (DB'da mana shu saqlanadi). */
 export function encryptTotpSecret(secretBase32: string): string {
   const iv = crypto.randomBytes(12);

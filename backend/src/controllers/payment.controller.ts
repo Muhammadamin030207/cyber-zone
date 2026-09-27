@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { isProduction } from '../config/runtime';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../types';
 import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/response';
@@ -519,7 +520,7 @@ export const setSandboxState = async (req: AuthRequest, res: Response, next: Nex
     // PRODUCTION'DA TO'LOV TEST REJIMI YOQILMAYDI (spec §3). DB'ga ham
     // yozilmaydi — aks holda keyingi boot'da "on" qiymatini o'qib, holat
     // chalkash bo'lardi (barchaqli no-op).
-    if (process.env.NODE_ENV === 'production' && enabled) {
+    if (isProduction() && enabled) {
       return res.status(403).json({
         success: false,
         error: 'Production muhitda to\'lov test rejimini yoqib bo\'lmaydi',

@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { isProduction } from './runtime';
 dotenv.config();
 
 export const config = {
@@ -73,7 +74,7 @@ export const config = {
       // chetlab o'tishga imkon berardi. Endi ikki qatlam bir-birini tekshiradi:
       //   1) config.payments.devMode  -> production'da doim false
       //   2) paymentsSandbox()        -> production'da qat'iy false
-      if (process.env.NODE_ENV === 'production') {
+      if (isProduction()) {
         console.error('[PAYMENTS] ⚠️ PAYMENTS_DEV_MODE production\'da butunlay taqiqlangan — sandbox o\'chirildi.');
         return false;
       }

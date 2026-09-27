@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import { isNonProduction } from '../config/runtime';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
 const url = process.env.REDIS_URL || 'redis://localhost:6380';
@@ -10,7 +11,7 @@ export const redis = new Redis(url, {
 });
 
 redis.on('error', (err) => {
-  if (process.env.NODE_ENV !== 'production') {
+  if (isNonProduction()) {
     console.warn('[REDIS] ulanish xatosi (caching o\'chirilgan):', err.message);
   }
 });

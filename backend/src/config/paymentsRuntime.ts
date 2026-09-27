@@ -1,4 +1,5 @@
 import { config } from '../config';
+import { isNonProduction } from './runtime';
 
 /**
  * To'lovlar sandbox (test) rejimi — runtime holati.
@@ -25,7 +26,11 @@ let sandboxForced = false;
  * `false` qaytaradi va toggle so'rovi rad etiladi.
  */
 function sandboxAllowed(): boolean {
-  return process.env.NODE_ENV !== 'production';
+  // `isNonProduction()` — fail-safe: NODE_ENV belgilanmagan/bo'sh/noto'g'ri
+  // bo'lsa bu `false` qaytaradi, ya'ni sandbox production'da YOQILMAYDI.
+  // (Eski `NODE_ENV !== 'production'` ifodasi belgilanmagan muhitda `true`
+  // qaytarib, "haqiqiy to'lovni soxta qilish" yo'lini ochib qo'yardi.)
+  return isNonProduction();
 }
 
 export function setSandboxForced(on: boolean): void {

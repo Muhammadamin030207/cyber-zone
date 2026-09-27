@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
+import { createRedisRateLimiter } from '../lib/redis';
 import {
   createPayment,
   getPaymentStatus,
@@ -36,15 +37,41 @@ router.post('/webhook/:provider', webhookLimiter, webhookPayment);
 // qilib, imzolangan webhook yuboradi — "soxta PAID" yo'q.
 router.get('/mock/:provider', mockSandboxPayment);
 
+/**
+ * To'lov yaratish (spec §4.0): moliyaviy amal. Global limit (120/min) yetarli
+ * emas — authenticated foydalanuvchi bir necha sekundda yuzlab "create"
+ * yuborib booking/DB yukini oshirishi mumkin. Kalit — IP + foydalanuvchi.
+ */
+const paymentCreateLimiter = createRedisRateLimiter({
+  windowMs: 60 * 1000,
+  limit: 10,
+  keyPrefix: 'rl:payment:create',
+  keyGenerator: (req: any) => `${req.ip || 'unknown'}:${req.user?.userId || 'anon'}`,
+  message: { success: false, message: "Juda ko'p to'lov so'rovi. Birozdan so'ng qayta urinib ko'ring." },
+});
+
+/**
+ * To'lovni tasdiqlash — eng zaif nuqta: noto'g'ri holatni "PAID"ga o'tkazish
+ * mumkin bo'lgan endpoint. ADMIN/SUPER_ADMIN uchun ham keng limit kerak
+ * (legit admin tez-tez ishlaydi), lekin himoyalangan.
+ */
+const paymentConfirmLimiter = createRedisRateLimiter({
+  windowMs: 60 * 1000,
+  limit: 30,
+  keyPrefix: 'rl:payment:confirm',
+  keyGenerator: (req: any) => `${req.ip || 'unknown'}:${req.user?.userId || 'anon'}`,
+  message: { success: false, message: "Juda ko'p tasdiqlash so'rovi. Birozdan so'ng qayta urinib ko'ring." },
+});
+
 // SUPER_ADMIN: to'lov test (sandbox) rejimi boshqaruvi
 router.get('/admin/sandbox', authenticate, authorize('SUPER_ADMIN'), getSandboxState);
 router.put('/admin/sandbox', authenticate, authorize('SUPER_ADMIN'), setSandboxState);
 
-router.post('/create', authenticate, authorize('USER', 'ADMIN', 'SUPER_ADMIN'), createPayment);
+router.post('/create', authenticate, authorize('USER', 'ADMIN', 'SUPER_ADMIN'), paymentCreateLimiter, createPayment);
 router.get('/providers', getProviders);
 router.get('/history', authenticate, getPaymentHistory);
 router.get('/:id/status', authenticate, getPaymentByIdStatus);
-router.post('/:id/confirm', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), confirmPayment);
+router.post('/:id/confirm', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), paymentConfirmLimiter, confirmPayment);
 router.get('/:bookingId', authenticate, getPaymentStatus);
 
 // Super admin barcha to'lovlar

@@ -20,11 +20,12 @@
 #   holatiga bog'liq `need_payment_info` ni ko'rsatadi (Render hisobida
 #   to'lov usuli bo'lishi kerak — bu YAML masalasi emas).
 #
-#   ESDA: `SKIP_MIGRATE_ON_BOOT` + `preDeployCommand` juftligi bir-birini
-#   to'ldiradi (migratsiya faqat bir marta bajariladi). Ikkalasini ham
-#   olib tashlasangiz (masalan free'da preDeployCommand'ni o'chirib qo'ysangiz)
-#   migratsiya umuman BAJARILMAYDI — chunki server.ts `SKIP_MIGRATE_ON_BOOT`
-#   bo'lishi faqat bo'lishiga qaraydi ("false" ham qiymat deb hisoblanadi).
+#   ESDA: migratsiya ikki yo'l bilan bajarilishi mumkin —
+#     1) Starter+ -> `preDeployCommand` (deploy'dan OLDIN)
+#     2) Free     -> `MIGRATE_ON_BOOT=true` (ilova o'sha zahotiyoq)
+#   `migrate deploy` idempotent, shu sabab ikkalasi birga ishlasa ham xatosiz.
+#   HECh qachon ikkalasini ham O'CHIRMA — aks holda yangi release eski sxema
+#   bilan ishlaydi (yangi ustun va indekslar joriy etilmaydi).
 # ============================================================================
 
 databases:
@@ -78,9 +79,8 @@ services:
     runtime: node
     rootDir: backend
     buildCommand: npm ci --include=dev && npx prisma generate && npm run build
-    # Migratsiya deploy'da bir marta bajariladi (build'da emas) —
-    # SKIP_MIGRATE_ON_BOOT=true tufayli server.ts ham migratsiyani
-    # qayta ishga tushirmaydi (ikki marta emas).
+    # Migratsiya deploy'da (Starter+ preDeployCommand) yoki, Free rejada,
+    # MIGRATE_ON_BOOT=true orqali ilova boot'ida bajariladi.
     preDeployCommand: npx prisma migrate deploy
     startCommand: npm start
     healthCheckPath: /api/health
@@ -100,9 +100,18 @@ services:
         value: production
       - key: PORT
         value: 5000
-      # `true` — migratsiyalar faqat preDeployCommand'da; app boot'da
-      # `prisma migrate deploy` QAYTARMASIN (ikki marta ishga tushmasin).
-      - key: SKIP_MIGRATE_ON_BOOT
+      # ---------- DB migratsiya strategiyasi ----------
+      # `preDeployCommand: npx prisma migrate deploy` FAQAT Starter+ rejada
+      # ishlaydi. Free planda u SIZGA xato beradi va migratsiya HECH QACHON
+      # bajarilmaydi -> yangi release eski sxema bilan ishlaydi.
+      # Shu sabab `MIGRATE_ON_BOOT=true`: ilova o'sha zahotiyoq migratsiyani
+      # bajaradi. Bu idempotent (ikki marta ishga tushsa ham xatosiz), shu
+      # sabab Starter rejada preDeploy + boot ikkalasi ham xavfsiz.
+      #
+      # ⚠️ eslatma: `migrate deploy` o'z-o'zidan HECH QANDAY o'zgarishni
+      # bekor qilmaydi — faqat prisma/migrations/ ichidagi yangi fayllarni
+      # qo'llaydi. Data o'zgartiruvchi migratsiya YOZILISHI KERAK.
+      - key: MIGRATE_ON_BOOT
         value: "true"
 
       # ---------- JWT (Render generatsiya qiladi; qiymatni hech qayerda

@@ -59,6 +59,33 @@ const loginIpLimiter = createRedisRateLimiter({
 
 // Forgot-password spam'i: IP + email juftligi (bir hisobning spam'i boshqalarga tegmaydi)
 // Spec §4.0 tavsiyasi: 15 daqiqada 1-2 so'rov/email. 3 tasiga ruxsat — qayta urinish uchun yetarli.
+/**
+ * Token refresh (spec §4.0): refresh token — uzun muddatli. Uni cheklamasak,
+ * (a) invalid/expired tokenlarni mass-brute qilish mumkin, (b) bitta IP
+ * refresh flood qilib boshqa foydalanuvchilarni (parallel so'rovlar orqali)
+ * charchatishi mumkin. Kalit — IP.
+ */
+const refreshLimiter = createRedisRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  keyPrefix: 'rl:refresh',
+  keyGenerator: (req: any) => clientIpKey(req),
+  message: { success: false, message: "Juda ko'p token yangilash so'rovi. Birozdan so'ng qayta urinib ko'ring." },
+});
+
+/**
+ * Parolni tiklash (reset-password): token asosida ishlaydi, lekin token
+ * tasodifiy bo'lsa ham urinishlar sonini cheklash kerak. Kalit — IP
+ * (bir necha urinishga ruxsat: foydalanuvchi tokenni yo'rg'otib kelishi mumkin).
+ */
+const resetPasswordLimiter = createRedisRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  keyPrefix: 'rl:reset-password',
+  keyGenerator: (req: any) => clientIpKey(req),
+  message: { success: false, message: "Juda ko'p urinish. Birozdan so'ng qayta so'rang." },
+});
+
 const forgotLimiter = createRedisRateLimiter({
   windowMs: 15 * 60 * 1000,
   limit: 3,
@@ -129,7 +156,7 @@ router.post('/2fa/backup-codes', authenticate, regenerateBackupCodes);
 /**
  * POST /api/auth/refresh
  */
-router.post('/refresh', refreshToken);
+router.post('/refresh', refreshLimiter, refreshToken);
 
 /**
  * GET /api/auth/me
@@ -169,6 +196,6 @@ router.post('/forgot-password', forgotLimiter, forgotPassword);
 /**
  * POST /api/auth/reset-password
  */
-router.post('/reset-password', resetPassword);
+router.post('/reset-password', resetPasswordLimiter, resetPassword);
 
 export default router;

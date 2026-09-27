@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { isProduction } from '../config/runtime';
 import { requestIdOf } from './requestContext';
 
 /**
@@ -11,10 +12,6 @@ import { requestIdOf } from './requestContext';
  *   path, provider, exception nomi va xabari, timestamp.
  * - maxBodySize/type validator xatolari ham foydalanuvchiga tushunarli qaytadi.
  */
-
-function isProd(): boolean {
-  return process.env.NODE_ENV === 'production';
-}
 
 export function errorHandler(err: any, req: Request, res: Response, next: NextFunction) {
   if (res.headersSent) return next(err);
@@ -35,7 +32,7 @@ export function errorHandler(err: any, req: Request, res: Response, next: NextFu
       prismaCode: err?.code || null,
       errName: err?.name || null,
       message: err?.message || String(err),
-      stack: isProd() ? undefined : err?.stack,
+      stack: isProduction() ? undefined : err?.stack,
       timestamp: new Date().toISOString(),
     })
   );
@@ -103,3 +100,4 @@ export function notFound(req: Request, res: Response) {
     requestId: requestIdOf(req),
   });
 }
+

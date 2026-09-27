@@ -6,7 +6,7 @@ import prisma from '../lib/prisma';
 import { config } from '../config';
 import { AuthRequest } from '../types';
 import { ok, badRequest, unauthorized, notFoundMsg } from '../utils/response';
-import { generateTokens } from '../lib/jwt';
+import { generateTokens, verifyPendingToken } from '../lib/jwt';
 import {
   generateTotpSecret,
   verifyTotp,
@@ -35,7 +35,24 @@ function safeArray(value: unknown): string[] {
 async function verifyStoredTotp(user: { id: string; twoFactorSecret: string | null }, code: string): Promise<boolean> {
   const stored = user.twoFactorSecret;
   if (!stored) return false;
-  const { secret, needsReencrypt } = readTotpSecret(stored);
+
+  let secret: string;
+  let needsReencrypt = false;
+  try {
+    ({ secret, needsReencrypt } = readTotpSecret(stored));
+  } catch (err) {
+    // TOTP_AT_REST_KEY sozlanmagan/almashgan bo'lsa shifrlashni ochib bo'lmaydi.
+    // ESKI kod bu yerda `throw` qilib 500 qaytarardi -> foydalanuvchi login
+    // ekranida qamalab qolardi va backup kod ham ishlashga ulurmasdi
+    // (backup kodlar bcrypt bilan saqlanadi, kalitga bog'liq EMAS).
+    // Endi: jimgina loglaymiz, `false` qaytaramiz -> backup kod ishlayveradi.
+    console.error(
+      `[2FA] TOTP secretni ochib bo'lmadi (user=${user.id}): ${(err as Error).message}. ` +
+        'TOTP_AT_REST_KEY ni Render da tekshiring.',
+    );
+    return false;
+  }
+
   if (!verifyTotp(secret, code)) return false;
   if (needsReencrypt) {
     try {
@@ -232,17 +249,16 @@ export const verifyTwoFactor = async (req: Request, res: Response, next: NextFun
     const code = String(req.body?.code || '');
     if (!pending || !code) return badRequest(res, 'Token va kod talab qilinadi');
 
-    let decoded: any;
+    // Faqat 'pending-2fa' turidagi token qabul qilinadi — access/refresh/
+    // pending-passkey tokenlari bu bosqichda ishlatilmaydi.
+    let pendingUserId: string;
     try {
-      decoded = jwt.verify(pending, config.jwt.secret as Secret);
+      pendingUserId = verifyPendingToken(pending, 'pending-2fa').userId;
     } catch {
       return unauthorized(res, 'Sessiya muddati tugagan. Iltimos, qaytadan kiring.');
     }
-    if (decoded?.type !== 'pending-2fa' || !decoded?.userId) {
-      return unauthorized(res, 'Token yaroqsiz');
-    }
 
-    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+    const user = await prisma.user.findUnique({ where: { id: pendingUserId } });
     if (!user) return notFoundMsg(res, 'Foydalanuvchi topilmadi');
     if (user.status !== 'ACTIVE') return unauthorized(res, 'Akkauntingiz bloklangan');
     if (!user.twoFactorEnabled || !user.twoFactorSecret) {

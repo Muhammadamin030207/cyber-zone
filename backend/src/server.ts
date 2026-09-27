@@ -24,26 +24,52 @@ import loyaltyRoutes from './routes/loyalty.routes';
 import settingsRoutes from './routes/settings.routes';
 import { errorHandler, notFound } from './middlewares/error';
 import { requestContext } from './middlewares/requestContext';
-import prisma from './lib/prisma';
+import prisma, { disconnectPrisma } from './lib/prisma';
 import { verifyAccessToken } from './lib/jwt';
 import { io, configureSocketAdapter } from './lib/socket';
 import { redisClient } from './lib/redis';
 import { scheduleBookingWorker } from './utils/bookingWorker';
 import { setSandboxForced } from './config/paymentsRuntime';
+import { totpKeyHealthy, isJwtSecretHealthy } from './config/securityCheck';
+import { isProduction, isNonProduction } from './config/runtime';
 
 const app = express();
 const httpServer = createServer(app);
 
-// ============ DB MIGRATIONS (prod auto-sync) ============
-// Render'da DB sxemani yangi kod bilan sinxronlash — idempotent va xavfsiz.
-// SKIP_MIGRATE_ON_BOOT=1 bilan o'chirib qo'yish mumkin.
-if (process.env.NODE_ENV === 'production' && !process.env.SKIP_MIGRATE_ON_BOOT) {
+// ============ DB MIGRATIONS ============
+// MUHIM: migratsiya — DEPLOY QADAMI, ilova boot'ining yon ta'siri EMAS.
+// Ilova ishga tushganda `DROP`/`ALTER` ishga tushirish xavfli: agar migratsiya
+// muvaffaqiyatsiz bo'lsa, yangi release'ga DB mos kelmaydi.
+//
+// Oldingi kod: `isProduction() && !SKIP_MIGRATE_ON_BOOT` — ya'ni migratsiya
+// "NODE_ENV yo'q" bo'lsa ham production hisoblanib ICHKI ochilardi. Bu
+// bejiz xavf edi (Render'da preDeployCommand faqat PAID planda ishlaydi).
+//
+// Endi migratsiya faqat ANIQ so'raladi:
+//   MIGRATE_ON_BOOT=true            -> shu renderda boot'da bajariladi
+//   SKIP_MIGRATE_ON_BOOT=true       -> hech qachon bajarilmaydi
+//   (ikkalasi ham yo'q)             -> bajarilMAYDI, lekin ogohlantiriladi
+// Tavsiya: Render -> Starter reja + `preDeployCommand: npx prisma migrate deploy`.
+// Free planda esa `MIGRATE_ON_BOOT=true` qo'yish kerak.
+const MIGRATE_ON_BOOT = process.env.MIGRATE_ON_BOOT === 'true';
+const SKIP_MIGRATE_ON_BOOT = process.env.SKIP_MIGRATE_ON_BOOT === 'true';
+
+if (MIGRATE_ON_BOOT && !SKIP_MIGRATE_ON_BOOT) {
   try {
     execSync('npm run prisma:migrate:deploy', { stdio: 'inherit', cwd: process.cwd() });
-    console.log('[DB] Migrations applied.');
+    console.log('[DB] Migratsiyalar qo\'llandi.');
   } catch (err) {
-    console.warn('[DB] Migrate deploy muammosi:', (err as Error).message);
+    // Xato o'ldirmaydi: ilova eski sxema bilan ishlashda davom etadi, lekin
+    // jimgina qolmasligi uchun JUDA baland ogohlantirish beriladi.
+    console.error('[DB] ⚠️ `prisma migrate deploy` muvaffaqiyatsiz:', (err as Error).message);
+    console.error('[DB] ⚠️ Bu release sxemadan qoldi bo\'lishi mumkin — yangi ustun/indexlar ishlamaydi.');
   }
+} else if (isProduction()) {
+  console.warn(
+    '[DB] ⚠️ Boot\'da migratsiya bajarilmaydi (MIGRATE_ON_BOOT/SKIP_MIGRATE_ON_BOOT belgilanmagan). ' +
+      'Render Starter rejada `preDeployCommand: npx prisma migrate deploy` ishlaydi; ' +
+      'Free rejada esa MIGRATE_ON_BOOT=true qo\'ying.',
+  );
 }
 
 // Socket.io — http serverga biriktirish
@@ -161,7 +187,7 @@ app.use(
 );
 
 // Request log (dev)
-if (process.env.NODE_ENV !== 'production') {
+if (isNonProduction()) {
   app.use((req, _res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     next();
@@ -176,6 +202,28 @@ app.get('/', (_req, res) => {
     status: 'running',
   });
 });
+
+// ============ BOOT DIAGNOSTIKA ============
+// Xavfsizlik kalitlari yo'q bo'lsa butun serverni o'ldirmaymiz (booking/payment
+// ishlashda davom etadi), lekin JARRADOR ogohlantiramiz va /api/ready da
+// ko'rinadigan qilamiz — aks holda bu xato "jimgina" qolib, 2FA yoqilgan
+// foydalanuvchilarni login ekranida qoldirib ketardi (oldingi xato shu edi).
+if (!totpKeyHealthy()) {
+  console.error(
+    '[SECURITY] ⚠️ TOTP_AT_REST_KEY sozlanmagan yoki 32+ belgidan kam. ' +
+      '2FA yoqish va TOTP bilan kod tekshirish vaqtinchalik ishlamaydi ' +
+      '(backup kodlar ishlaydi). Render -> Environment da `generateValue: true` ' +
+      'bilan TOTP_AT_REST_KEY qo\'ying. DIQQAT: mavjud qiymatni ALMASHTIRISH ' +
+      'DB dagi shifrlangan 2FA secretlarini buzadi.',
+  );
+}
+
+if (!isJwtSecretHealthy()) {
+  console.error(
+    '[SECURITY] ⚠️ JWT_SECRET/JWT_REFRESH_SECRET juda qisqa yoki default qiymatda. ' +
+      'Render da generateValue: true bilan almashtiring.',
+  );
+}
 
 // ============ HEALTH CHECK (spec §45) ============
 // `/api/health` — liveness: jarayon javob bermoqda (Render healthCheckPath).
@@ -204,6 +252,13 @@ app.get('/api/ready', async (_req, res) => {
   } catch {
     checks.redis = 'unavailable';
   }
+
+  // Xavfsizlik konfiguratsiyasi holati (kalit QIMMATI EMAS — faqat sog'lom/yo'q).
+  // WebAuthn Redis'siz butunlay ishlamaydi, shuning uchun bu holat
+  // observability uchun alohida ko'rsatiladi.
+  checks.webauthn = checks.redis === 'ok' ? 'ok' : 'unavailable';
+  checks.totpEncryption = totpKeyHealthy() ? 'ok' : 'misconfigured';
+  checks.jwt = isJwtSecretHealthy() ? 'ok' : 'weak';
 
   res.status(ready ? 200 : 503).json({
     status: ready ? 'ready' : 'not_ready',
@@ -257,3 +312,53 @@ prisma.siteSetting
   .catch((err) => {
     console.warn('[PAYMENTS] sandbox holatini o\'qib bo\'lmadi:', (err as Error).message);
   });
+
+// ============ GRACEFUL SHUTDOWN (Render deploy / SIGTERM) ============
+// Render yangi versiyani deploy qilganda eski instansiyaga SIGTERM yuboradi.
+// Agar DB connectionlarni yopmasak, ular Postgres connection limitini
+// band qilib, yangi instansiya "too many clients" bilan chiqmay qoladi
+// (Render'da bu klassik deploy muammosi). Shu sabab quyidagi ketma-ketlik:
+//   1) yangi request'ni qabul qilishni to'xtatamiz
+//   2) socketlar uziladi
+//   3) DB va Redis connectionlari yopiladi
+//   4) jarayon chiqadi
+let shuttingDown = false;
+async function gracefulShutdown(signal: string): Promise<void> {
+  if (shuttingDown) return; // takroriy signalda (SIGTERM + SIGINT) bir marta
+  shuttingDown = true;
+  console.log(`[shutdown] ${signal} olindi — server to'g'latilmoqda...`);
+
+  // 1) yangi so'rovlarni rad etamiz (health check 503 qaytaradi ->
+  //    Render trafficni boshqa instansiyaga ko'chiradi)
+  httpServer.close(() => console.log('[shutdown] HTTP server yopildi'));
+
+  // 2) socketlar: mijozlarga "server restart bo'lyapti" deb aytamiz
+  try {
+    io.emit('server:restarting');
+    io.close();
+  } catch (err) {
+    console.warn('[shutdown] Socket.IO yopilmadi:', (err as Error).message);
+  }
+
+  // 3) DB connectionlari
+  await disconnectPrisma();
+
+  // 4) qisqa kutish beramiz (Render 10s beradi), keyin chiqamiz
+  const timer = setTimeout(() => {
+    console.warn('[shutdown] Vaqt tugadi — majburiy chiqilmoqda');
+    process.exit(0);
+  }, 8000);
+  timer.unref();
+}
+
+process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => void gracefulShutdown('SIGINT'));
+
+// Render'ga xatolik bo'lsa ham, kutilmagan xatolar jarayonni darhal
+// o'ldirmasin (health check o'zi hal qiladi) — lekin har doim LOG'lanadi.
+process.on('unhandledRejection', (reason) => {
+  console.error('[fatal] Tuzatilmagan promise rad etildi:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[fatal] Tuzatilmagan exception:', err);
+});

@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { isProduction } from '../config/runtime';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import jwt, { Secret } from 'jsonwebtoken';
@@ -11,6 +12,7 @@ import { ok, badRequest, unauthorized, notFoundMsg, serverError, forbidden } fro
 import { sendEmail, buildResetEmail, buildResetText, buildTempPasswordEmail, buildTempPasswordText } from '../lib/mailer';
 import { sendSecurityAlert, clientIp, describeUserAgent, recordSecurityEvent } from '../lib/securityAlerts';
 import { getLockState, computeAfterFailure, resetData } from '../utils/loginThrottle';
+import { evaluateRemainingFactors, clearThrottleIfNeeded, sendPendingChallenge } from '../utils/factorPolicy';
 
 const googleClient = new OAuth2Client(config.google.clientId);
 
@@ -246,50 +248,16 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
     if (user.status !== 'ACTIVE') return unauthorized(res, 'Akkauntingiz bloklangan');
 
-    // ============ PASSKEY SECOND FACTOR (server enforcement) ============
-    // Shaxsiy passkey talab qiladigan hisoblar: parol to'g'ri bo'lsa ham,
-    // passkey verificationdan o'tmasdan TOKEN BERILMAYDI. Server qaror qiladi.
-    if (user.requirePasskey) {
-      const hasPasskeys = await prisma.passkey.count({ where: { userId: user.id } });
-      if (hasPasskeys > 0) {
-        // Muvaffaqiyatli parol — hisoblagichlarni tozalash
-        if (user.failedLoginAttempts || user.loginLockStage || user.loginLockedUntil) {
-          await prisma.user.update({ where: { id: user.id }, data: resetData() });
-        }
-        // Faqat 5 daqiqa amal qiladigan "pending" token — keyingi passkey bosqichi uchun
-        const pendingLoginToken = jwt.sign(
-          { type: 'pending-passkey', userId: user.id },
-          config.jwt.secret as Secret,
-          { expiresIn: '5m' }
-        );
-        return res.status(202).json({
-          success: false,
-          code: 'PASSKEY_REQUIRED',
-          message: 'Xavfsizlik uchun passkey bilan tasdiqlash talab qilinadi.',
-          data: { requirePasskeyVerified: false, pendingLoginToken, userId: user.id },
-        });
-      }
-      // passkey bo'lmasa — parol yetarli (user keyin qo'shishi mumkin)
-    }
-
-    // ============ IKKI FAKTORLI AUTENTIFIKATSIYA (TOTP) ============
-    // Parol to'g'ri, ammo hisobda 2FA yoqilgan — token berilmaydi, faqat 5 daqiqalik
-    // "pending" token qaytariladi. Kod /two-factor/verify da tasdiqlanadi.
-    if (user.twoFactorEnabled && user.twoFactorSecret) {
-      if (user.failedLoginAttempts || user.loginLockStage || user.loginLockedUntil) {
-        await prisma.user.update({ where: { id: user.id }, data: resetData() });
-      }
-      const pendingLoginToken = jwt.sign(
-        { type: 'pending-2fa', userId: user.id },
-        config.jwt.secret as Secret,
-        { expiresIn: '5m' }
-      );
-      return res.status(202).json({
-        success: false,
-        code: 'TWO_FACTOR_REQUIRED',
-        message: 'Ikki faktorli himoya yoqilgan. Autentifikator kodini kiriting.',
-        data: { requiresTwoFactor: true, pendingLoginToken, userId: user.id },
-      });
+    // ============ IKKINCHI FAKTORLAR (passkey -> 2FA zanjiri) ============
+    // Parol to'g'ri bo'lsa ham, talab qilingan faktorlar tasdiqlanmaguncha
+    // HAQIQIY TOKEN BERILMAYDI — faqat 5 daqiqalik oraliq "pending" token.
+    // Siyosat yagona yordamchida (utils/factorPolicy.ts) — parol, Google va
+    // passkey kirish yo'llari bir xil qoidaga bo'ysunadi.
+    const gate = await evaluateRemainingFactors(user);
+    if (gate.pending) {
+      // Parol to'g'ri — brute-force hisoblagichlarini tozalash
+      await clearThrottleIfNeeded(user);
+      return sendPendingChallenge(res, gate, user.id);
     }
 
     // ============ MUVAFIQQIYATLI LOGIN ============
@@ -468,6 +436,17 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
 
     // Bloklangan yoki faol bo'lmagan foydalanuvchi Google orqali ham kira olmaydi
     if (user.status !== 'ACTIVE') return unauthorized(res, 'Akkauntingiz bloklangan');
+
+    // ============ IKKINCHI FAKTORLAR (passkey -> 2FA) ============
+    // XAVFSIZLIK: Google orqali kirish ham parol kabi xavfsiz — hisobda 2FA
+    // yoki passkey talabi bo'lsa, ular O'TKAZILMAYDI. (Eski kod bu qadamni
+    // butunlay yo'q qoldirgan edi: Google — universal 2FA bypass bo'lib
+    // qolgan edi.)
+    const gate = await evaluateRemainingFactors(user);
+    if (gate.pending) {
+      await clearThrottleIfNeeded(user);
+      return sendPendingChallenge(res, gate, user.id);
+    }
 
     const tokens = generateTokens({
       userId: user.id,
@@ -695,6 +674,12 @@ function resetBaseUrl(req: Request): string {
 // P3: Server xavfsiz tasodifiy VAQTINCHALIK parol yaratadi -> hash qiladi ->
 // expiring saqlaydi -> emailga yuboradi. User shu parol bilan kiradi -> majburiy
 // yangi parol o'rnatadi (mustChangePassword).
+/**
+ * Barcha forgot-password holatlarida (topilmadi / bloklangan / SMTP xato /
+ * muvaffaqiyat) BIR XIL javob. Bu — user enumeration'ning asosiy manbai edi.
+ */
+export const FORGOT_PASSWORD_NEUTRAL_MESSAGE = 'Parolni tiklash havolasi emailingizga yuborildi';
+
 export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const email = normalizeEmail(req.body.email);
@@ -703,12 +688,11 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      // Xavfsizlik: user topilmasa ham "yuborildi" deb javob beramiz (enumeration oldini olish)
-      return ok(res, null, 'Parolni tiklash havolasi emailingizga yuborildi');
-    }
-    if (user.status !== 'ACTIVE') {
-      return ok(res, null, 'Parolni tiklash havolasi emailingizga yuborildi');
+    // Xavfsizlik: user topilmasa, bloklanan bo'lsa YOKI email yuborilmagan bo'lsa —
+    // BITTA XIL javob qaytariladi. Aks holda status kodi yoki xabar farqi
+    // foydalanuvchilar ro'yxatini ochib beradi (user enumeration).
+    if (!user || user.status !== 'ACTIVE') {
+      return ok(res, null, FORGOT_PASSWORD_NEUTRAL_MESSAGE);
     }
 
     // Xavfsiz tasodifiy VAQTINCHALIK parol (12-16 belgi, alfanumerik + belgilar)
@@ -737,21 +721,28 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
     } catch (sendErr) {
       console.error(`[forgot-password] Email yuborilmadi -> user=${user.id} email=${user.email}`);
       console.error(`[forgot-password] Sabab: ${(sendErr as Error).stack || (sendErr as Error).message}`);
-      // Token bekor qilinadi (qayta urinish mumkin)
+      // BARCHA o'zgarishlarni qaytarish: temp hash, muddat va `mustChangePassword`.
+      // Eski kod faqat birinchi ikkisini tozalagan — `mustChangePassword: true`
+      // qolgan edi, bu esa keyingi parol o'zgartirishda ESKI parol talabini
+      // bekor qilardi (login sessiyasi bilan current parolsiz o'tib ketardi).
       await prisma.user
-        .update({ where: { id: user.id }, data: { tempPasswordHash: null, tempPasswordExpiresAt: null } })
+        .update({
+          where: { id: user.id },
+          data: { tempPasswordHash: null, tempPasswordExpiresAt: null, mustChangePassword: false },
+        })
         .catch(() => undefined);
-      if (process.env.NODE_ENV === 'production') {
-        return serverError(res, 'Vaqtinchalik parolni yuborishda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko\'ring.');
-      }
+      // XAVFSIZLIK: SMTP xatosi ham 200 qaytaradi — aks holda "mavjud email = 500,
+      // yo'q email = 200" farqi foydalanuvchilar ro'yxatini ochib beradi
+      // (user enumeration). Sabab faqat logda qoladi.
+      return ok(res, null, FORGOT_PASSWORD_NEUTRAL_MESSAGE);
     }
 
     return ok(
       res,
-      process.env.NODE_ENV === 'production'
+      isProduction()
         ? null
         : { devTempPassword: tempPassword }, // faqat dev/test uchun (haqiqiy SMTP bo'lmasa)
-      'Vaqtinchalik parol emailingizga yuborildi'
+      FORGOT_PASSWORD_NEUTRAL_MESSAGE
     );
   } catch (err) {
     next(err);

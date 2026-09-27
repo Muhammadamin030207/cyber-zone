@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { isProduction } from '../config/runtime';
 import { config } from '../config';
 
 export class MailerNotConfiguredError extends Error {
@@ -9,10 +10,6 @@ export class MailerNotConfiguredError extends Error {
 }
 
 const transporters = new Map<number, nodemailer.Transporter>();
-
-function isProduction(): boolean {
-  return process.env.NODE_ENV === 'production';
-}
 
 function buildTransporter(port: number): nodemailer.Transporter {
   const e = config.email;

@@ -78,15 +78,57 @@ ALTER TABLE "payment_evidence" ADD CONSTRAINT "payment_evidence_uploaded_by_id_f
 ALTER TABLE "payment_evidence" ADD CONSTRAINT "payment_evidence_reviewed_by_id_fkey" FOREIGN KEY ("reviewed_by_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 
--- ============ BACKFILL (mavjud ma'lumotlarni buzmaslik uchun) ============
--- Avval allaqachon tasdiqlangan/pul to'langan bronlar "tasdiqlangan" deb
--- belgilanadi — aks holda eski foydalanuvchilar "Boshlash"ni bosolmasdi.
-UPDATE "bookings"
-SET "approval_status" = 'APPROVED',
-    "approved_at" = COALESCE("session_started_at", "created_at")
-WHERE "status" IN ('PARTIALLY_PAID', 'PAID', 'CONFIRMED', 'ACTIVE', 'COMPLETED');
+-- ============================================================================
+-- ============ BACKFILL (mavjud ma'lumotlarni buzmaslik uchun) ================
+-- ============================================================================
+-- MUAMMO (2026-09-27 da topildi): bu migratsiya "session_started_at" va
+-- "session_ended_at" ustunlariga murojaat qiladi, lekin ularni QO'SHADIGAN
+-- migratsiya ("20260925_booking_session_promo_limits") nomi bo'yicha SHUNDAN
+-- KEYIN turadi (20260925143000_ < 20260925_ ASCII bo'yicha).
+-- Natija: BO'SH (fresh) bazada `prisma migrate deploy` shu yerda
+-- "column session_started_at does not exist" bilan FAIL bo'lardi — ya'ni
+-- yangi Render Postgres / staging / DR nusxasini migratsiyalar orqali
+-- qayta qurib bo'lmasdi.
+--
+-- YECHIM: backfill'ni "ustun mavjudmi?" tekshiruviga bog'laymiz.
+--   * Ustunlar mavjud DB (joriy production) -> o'zgarish YO'Q, avvalgi
+--     UPDATE'lar ANIQ XIL bajariladi.
+--   * Ustunlar yo'q DB (fresh) -> bookings jadvali BO'SH bo'lgani uchun
+--     backfill o'z-o'zidan no-op; shuning uchun xavfsiz ravishda
+--     "approved_at = created_at" ga tushib ketamiz yoki skip qilamiz.
+-- ============================================================================
 
--- Rad etilgan bronlar: tasdiqlanish so'ramagan bo'lsa REJECTED
+-- 1) Allaqachon tasdiqlangan/pul to'langan bronlar "tasdiqlangan" deb belgilanadi
+--    (aks holda eski foydalanuvchilar "Boshlash"ni bosolmasdi).
+DO $$
+BEGIN
+  -- DIQQAT: `table_schema`ni QAT'IY 'public' deb YOZMAYMIZ. `?schema=` bilan
+  -- skemani almashtirilganda (staging/CI tekshiruvi) jadval 'public'da emas,
+  -- shu skemada bo'ladi — qattiq yozilgan tekshiruv BOSHQA jadvalni tekshirib,
+  -- keyin NOTO'G'RI qaror qabul qilib, xato berardi. `'bookings'::regclass`
+  -- esa jadvalni aynan `search_path` orqali topadi — ya'ni biz UPDATE qilayotgan
+  -- jadvalni tekshiradi.
+  IF EXISTS (
+    SELECT 1 FROM pg_attribute
+    WHERE attrelid = 'bookings'::regclass
+      AND attname = 'session_started_at'
+      AND attnum > 0 AND NOT attisdropped
+  ) THEN
+    UPDATE "bookings"
+    SET "approval_status" = 'APPROVED',
+        "approved_at" = COALESCE("session_started_at", "created_at")
+    WHERE "status" IN ('PARTIALLY_PAID', 'PAID', 'CONFIRMED', 'ACTIVE', 'COMPLETED');
+  ELSE
+    -- Fresh DB: bookings bo'sh, lekin semantik saqlanadi.
+    UPDATE "bookings"
+    SET "approval_status" = 'APPROVED',
+        "approved_at" = COALESCE("created_at")
+    WHERE "status" IN ('PARTIALLY_PAID', 'PAID', 'CONFIRMED', 'ACTIVE', 'COMPLETED');
+  END IF;
+END
+$$;
+
+-- 2) Rad etilgan bronlar: tasdiqlanish so'ramagan bo'lsa REJECTED
 UPDATE "bookings" b
 SET "approval_status" = 'REJECTED'
 WHERE b."status" = 'CANCELLED'
@@ -95,15 +137,27 @@ WHERE b."status" = 'CANCELLED'
     WHERE p."booking_id" = b."id" AND p."status" IN ('PAID', 'COMPLETED')
   );
 
--- Faol (ACTIVE) sessiyalar uchun taymer chegarasi: sana + end_time
--- (Toshkent UTC+5). end_time 00:00 bo'lsa keyingi kun 00:00.
-UPDATE "bookings" b
-SET "session_ends_at" = (b."date"::timestamp + ((split_part(b."end_time", ':', 1)::int * 60 + split_part(b."end_time", ':', 2)::int) - 300) * interval '1 minute')
-WHERE b."status" = 'ACTIVE'
-  AND b."session_ended_at" IS NULL
-  AND b."session_ends_at" IS NULL;
+-- 3) Faol (ACTIVE) sessiyalar uchun taymer chegarasi: sana + end_time
+--    (Toshkent UTC+5). end_time 00:00 bo'lsa keyingi kun 00:00.
+--    "session_ended_at" keyingi migratsiyada qo'shiladi -> yo'q bo'lsa skip.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_attribute
+    WHERE attrelid = 'bookings'::regclass
+      AND attname = 'session_ended_at'
+      AND attnum > 0 AND NOT attisdropped
+  ) THEN
+    UPDATE "bookings" b
+    SET "session_ends_at" = (b."date"::timestamp + ((split_part(b."end_time", ':', 1)::int * 60 + split_part(b."end_time", ':', 2)::int) - 300) * interval '1 minute')
+    WHERE b."status" = 'ACTIVE'
+      AND b."session_ended_at" IS NULL
+      AND b."session_ends_at" IS NULL;
+  END IF;
+END
+$$;
 
--- To'lov kutilayotgan bronlarda "band qilish" muddati = TTL dan keyingi vaqt
+-- 4) To'lov kutilayotgan bronlarda "band qilish" muddati = TTL dan keyingi vaqt
 UPDATE "bookings"
 SET "hold_expires_at" = "created_at" + interval '60 minutes'
 WHERE "status" IN ('PENDING', 'PENDING_PAYMENT') AND "hold_expires_at" IS NULL;
