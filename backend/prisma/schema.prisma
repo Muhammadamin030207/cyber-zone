@@ -221,7 +221,8 @@ model SecurityEvent {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
   // LOGIN_SUCCESS | LOGIN_FAILED | LOGIN_LOCKED | LOGIN_UNLOCKED |
-  // PASSWORD_CHANGED | PASSWORD_RESET | TWOFA_ENABLED | TWOFA_DISABLED |
+  // PASSWORD_CHANGED | PASSWORD_RESET | PASSWORD_RESET_BY_ADMIN |
+  // TWOFA_ENABLED | TWOFA_DISABLED |
   // TWOFA_RECOVERY_USED | PASSKEY_ADDED | PASSKEY_REMOVED | LOGOUT | SESSION_REVOKED
   type      String   @map("type")
   ip        String?  @map("ip")

@@ -12,6 +12,14 @@ export function totpKeyHealthy(): boolean {
   return lengthOf(process.env.TOTP_AT_REST_KEY) >= TOTP_MIN_LENGTH;
 }
 
+/**
+ * SMTP sozlanganmi. forgot-password/parol tiklash emailga bog'liq — sozlanmagan
+ * bo'lsa foydalanuvchi hech qanday yo'l bilan parolini tiklay olmaydi.
+ */
+export function isEmailConfigured(): boolean {
+  return Boolean(config.email.host && config.email.user && config.email.pass && config.email.from);
+}
+
 export function isJwtSecretHealthy(): boolean {
   return lengthOf(config.jwt.secret) >= JWT_MIN_LENGTH && lengthOf(config.jwt.refreshSecret) >= JWT_MIN_LENGTH;
 }
@@ -33,9 +41,11 @@ export function assertTotpAtRestKey(): void {
 export function securityConfigStatus(): {
   totpEncryption: 'ok' | 'misconfigured';
   jwt: 'ok' | 'weak';
+  email: 'ok' | 'not_configured';
 } {
   return {
     totpEncryption: totpKeyHealthy() ? 'ok' : 'misconfigured',
     jwt: isJwtSecretHealthy() ? 'ok' : 'weak',
+    email: isEmailConfigured() ? 'ok' : 'not_configured',
   };
 }

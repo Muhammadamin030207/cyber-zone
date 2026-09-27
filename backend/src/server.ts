@@ -30,7 +30,7 @@ import { io, configureSocketAdapter } from './lib/socket';
 import { redisClient } from './lib/redis';
 import { scheduleBookingWorker } from './utils/bookingWorker';
 import { setSandboxForced } from './config/paymentsRuntime';
-import { totpKeyHealthy, isJwtSecretHealthy } from './config/securityCheck';
+import { totpKeyHealthy, isJwtSecretHealthy, isEmailConfigured } from './config/securityCheck';
 import { isProduction, isNonProduction } from './config/runtime';
 
 const app = express();
@@ -218,6 +218,14 @@ if (!totpKeyHealthy()) {
   );
 }
 
+if (!isEmailConfigured()) {
+  console.error(
+    '[SECURITY] SMTP (EMAIL_HOST/EMAIL_USER/EMAIL_PASS/DEFAULT_FROM_EMAIL) sozlanmagan. ' +
+      'Parolni unutdingizmi ishlaydi, LEKIN hech qanday email YUBORILMAYDI — ' +
+      'foydalanuvchi parolini faqat SUPER_ADMIN orqali tiklaydi.',
+  );
+}
+
 if (!isJwtSecretHealthy()) {
   console.error(
     '[SECURITY] ⚠️ JWT_SECRET/JWT_REFRESH_SECRET juda qisqa yoki default qiymatda. ' +
@@ -258,6 +266,7 @@ app.get('/api/ready', async (_req, res) => {
   // observability uchun alohida ko'rsatiladi.
   checks.webauthn = checks.redis === 'ok' ? 'ok' : 'unavailable';
   checks.totpEncryption = totpKeyHealthy() ? 'ok' : 'misconfigured';
+  checks.email = isEmailConfigured() ? 'ok' : 'not_configured';
   checks.jwt = isJwtSecretHealthy() ? 'ok' : 'weak';
 
   res.status(ready ? 200 : 503).json({

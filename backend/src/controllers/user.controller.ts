@@ -2,7 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../types';
+import crypto from 'crypto';
 import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/response';
+import { recordSecurityEvent } from '../lib/securityAlerts';
 
 function sanitizeUser(u: any) {
   const { passwordHash, ...rest } = u;
@@ -202,6 +204,74 @@ export const getSuperAdminStats = async (req: AuthRequest, res: Response, next: 
       recentRooms,
       districtStats,
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ POST /api/users/:id/reset-password — SUPER_ADMIN: parol tiklash ============
+// NIMA UCHUN BU KERAK: "Parolni unutdingizmi" faqat EMAIL orqali ishlaydi. SMTP
+// sozlanmagan yoki xatolarsiz yetkazilmayotgan bo'lsa (Gmail spam/quarantine,
+// SPF/DKIM yo'qligi) foydalanuvchi parolini umuman tiklay olmaydi — tizimga
+// kirishdan qoladi. Bu endpoint email KANALIGA bog'liq bo'lmagan yechim.
+//
+// XAVFSIZLIK:
+//  * faqat SUPER_ADMIN (authorize('SUPER_ADMIN') route'da);
+//  * parolni admin TANLAMAYDI — tizim tasodifiy VAQTINCHALIK parol yaratadi va
+//    uni faqat BIR marta, faqat shu javobda qaytaradi (DB'da faqat hash turibdi);
+//  * `mustChangePassword: true` — kirgach darhol o'z parolini qo'yishi SHART;
+//  * vaqtinchalik parol muddati o'tib ketadi (TEMP_PASSWORD_MINUTES);
+//  * 2FA yoqilgan bo'lsa O'CHIRILMAYDI (2FA alohida himoya);
+//  * barcha harakat SECURITY_EVENTS jadvaliga yoziladi;
+//  * eski tiklash ma'lumotlari (resetToken, temp hash) tozalanadi.
+export const adminResetUserPassword = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!target) return notFoundMsg(res, 'Foydalanuvchi topilmadi');
+
+    // SUPER_ADMIN ning o'z parolini o'zi tiklashi mumkin emas — bu tasodifiy
+    // boshqaruv: o'zini bloklab qo'yishidan saqlaydi.
+    if (target.id === req.user!.userId) {
+      return badRequest(res, 'O\'z parolingizni bu yo\'l bilan tiklaysiz olmaysiz');
+    }
+
+    // Tasodifiy vaqtinchalik parol (base64url — faqat xavfsiz belgilar)
+    const tempPassword = crypto.randomBytes(10).toString('base64url');
+    const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
+    const minutes = Number(process.env.TEMP_PASSWORD_MINUTES) || 30;
+    const expiresAt = new Date(Date.now() + minutes * 60 * 1000);
+
+    await prisma.user.update({
+      where: { id: target.id },
+      data: {
+        tempPasswordHash,
+        tempPasswordExpiresAt: expiresAt,
+        mustChangePassword: true,
+        // eskirgan tiklash kanalini yopamiz
+        resetToken: null,
+        resetTokenExpiresAt: null,
+      },
+    });
+
+    void recordSecurityEvent(target.id, 'PASSWORD_RESET_BY_ADMIN', {
+      ip: (req as any).ip || 'unknown',
+      userAgent: req.headers['user-agent'] as string | undefined,
+      metadata: {
+        adminId: req.user!.userId,
+        expiresAt: expiresAt.toISOString(),
+        emailDelivered: false,
+      },
+    });
+
+    // Vaqtinchalik parol FAQAT shu javobda — qaytarilmaydi, saqlanmaydi.
+    return ok(res, {
+      userId: target.id,
+      email: target.email,
+      tempPassword,
+      expiresAt: expiresAt.toISOString(),
+      minutes,
+      twoFactorStillEnabled: Boolean(target.twoFactorEnabled),
+    }, 'Vaqtinchalik parol yaratildi — uni foydalanuvchiga xavfsiz yetkazing');
   } catch (err) {
     next(err);
   }
