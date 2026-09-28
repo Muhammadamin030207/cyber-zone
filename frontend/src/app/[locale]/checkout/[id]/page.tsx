@@ -75,8 +75,14 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [sandbox, setSandbox] = useState(false);
   const [method, setMethod] = useState<PayMethod>('CASH');
+  /**
+   * TO'LOV FOIZI — mijoz xohlagan foizda yoki to'liq to'lashi mumkin.
+   * `null` = minimal depozit (brondagi `depositPercent`). Server pastga
+   * cheklaydi, shuning uchun bu faqat yuqoriga (50/70/100) yo'naltiradi.
+   */
+  const [payPercent, setPayPercent] = useState<number | null>(null);
   // Qo'lda o'tkazma holati
-  const [transferPayment, setTransferPayment] = useState<{ id: string; status: string; amount: number } | null>(null);
+  const [transferPayment, setTransferPayment] = useState<{ id: string; status: string; amount: number; receiptNumber: string | null } | null>(null);
   const [card, setCard] = useState<MerchantCard | null>(null);
 
   const [paying, setPaying] = useState(false);
@@ -211,11 +217,19 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
         bookingId: booking.id,
         method: m,
         idempotencyKey: payIdemKey.current,
+        // Faqat xohlangan bo'lsa yuboriladi — `null` bo'lsa backend brondagi
+        // minimal foizni o'zi oladi.
+        ...(payPercent !== null ? { depositPercent: payPercent } : {}),
       });
       const d = data.data;
       if (m === 'TRANSFER' || d?.manual === true) {
         // Hech qanday redirect yo'q — shu sahifada karta + chek formasi ochiladi
-        setTransferPayment({ id: d.payment.id, status: d.payment.status, amount: d.payment.amount });
+        setTransferPayment({
+          id: d.payment.id,
+          status: d.payment.status,
+          amount: d.payment.amount,
+          receiptNumber: d.payment.receiptNumber ?? null,
+        });
         setCard(d.merchantCard || null);
       } else if (m === 'CASH' || (data.data?.method === 'CASH')) {
         setCashNotified(true);
@@ -250,6 +264,28 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
     }
     return Array.from(byMethod.values());
   }, [providers]);
+
+  /**
+   * To'lov foizi variantlari. Faqat brondan yuqoriga taklif etiladi —
+   * server ham shundan pastga cheklaydi, shuning uchun 10% kabi variantlar
+   * ko'rsatilmasligi kerak (ular rad etilardi).
+   */
+  const percentOptions = useMemo(() => {
+    const base = Math.max(1, Math.trunc(Number(booking?.depositPercent) || 30));
+    const values = new Set<number>([base]);
+    for (const v of [30, 50, 70, 100]) if (v > base) values.add(v);
+    return [...values]
+      .sort((a, b) => a - b)
+      .map((value) => ({ value, label: value === 100 ? "To'liq" : `${value}%` }));
+  }, [booking?.depositPercent]);
+
+  /** Hozir tanlangan foiz (tanlanmasa — brondagi minimal). */
+  const selectedPercent = Math.max(
+    Math.trunc(Number(booking?.depositPercent) || 30),
+    payPercent ?? 0
+  );
+  /** Tanlangan foiz bo'yicha to'lov summasi (server hisobi bilan bir xil). */
+  const payAmount = Math.round(Number(booking?.finalPrice) * (selectedPercent / 100));
 
   if (loading) {
     return (
@@ -414,6 +450,45 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
             </div>
           )}
 
+          {/* TO'LOV FOIZI — minimal depozitdan boshlab, xohlagancha yoki to'liq.
+              Server pastga cheklaydi (brondan kam to'lash mumkin emas), shu
+              sabab bu yerda faqat brondan yuqori variantlar taklif etiladi. */}
+          {!transferPayment && percentOptions.length > 1 && (
+            <fieldset className="rounded-2xl border border-white/10 surface p-4 mb-5">
+              <legend className="px-2 text-xs text-gray-400 flex items-center gap-1.5">
+                <BadgePercent size={12} aria-hidden="true" /> Qancha to&apos;lamoqchisiz?
+              </legend>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
+                {percentOptions.map((opt) => {
+                  const selected = (payPercent ?? depositPercent) === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setPayPercent(opt.value === depositPercent ? null : opt.value)}
+                      aria-pressed={selected}
+                      className={cn(
+                        'px-3 py-2.5 rounded-xl border text-sm font-semibold transition-colors',
+                        selected
+                          ? 'border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan'
+                          : 'border-white/10 hover:border-white/25 text-gray-300'
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2.5 text-[11px] text-gray-500">
+                {formatPrice(payAmount)} so&apos;m to&apos;laysiz
+                {selectedPercent > depositPercent && (
+                  <> — qolgan {100 - selectedPercent}% keyin, joyda to&apos;lanadi</>
+                )}
+                {selectedPercent === 100 && <> — bitta to&apos;lovda hammasi yopiladi</>}
+              </p>
+            </fieldset>
+          )}
+
           {/* To'lov usulini tanlash — bitta tanlash guruhi (radio semantics) */}
           <div role="radiogroup" aria-label="To'lov usuli" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 mb-5">
             {dedupMethods.map((p) => {
@@ -467,6 +542,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
                 paymentId={transferPayment.id}
                 amount={Number(transferPayment.amount)}
                 merchantCard={card}
+                appName={PROVIDER_UI[method]?.label}
+                receiptNumber={transferPayment.receiptNumber}
                 onDone={() => { void reloadBooking(); }}
               />
             </div>

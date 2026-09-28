@@ -18,6 +18,10 @@ export const SITE_SETTING_KEYS = [
   'payment_card_holder',
   'payment_card_bank',
   'payment_card_note',
+  // Usulga (method) bog'langan dogaon kartalari — JSON. Har bir to'lov usuli
+  // uchun alohida karta: {"UZUM":{...},"UZCARD":{...},"DEFAULT":{...}}.
+  // `payment_card_*` (legacy) saqlanadi — `DEFAULT` bo'sh bo'lsa u ishlatiladi.
+  'payment_cards_by_method',
 ] as const;
 
 export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[number];
@@ -33,6 +37,7 @@ export const PRIVATE_SITE_SETTING_KEYS: readonly string[] = [
   'payment_card_holder',
   'payment_card_bank',
   'payment_card_note',
+  'payment_cards_by_method',
 ];
 
 export const SITE_SETTING_MAX_LENGTH: Record<SiteSettingKey, number> = {
@@ -48,6 +53,8 @@ export const SITE_SETTING_MAX_LENGTH: Record<SiteSettingKey, number> = {
   payment_card_holder: 120,
   payment_card_bank: 120,
   payment_card_note: 500,
+  // 6 usul x 3 maydon — JSON uchun joy.
+  payment_cards_by_method: 4000,
 };
 
 // ============ GET /api/settings/site — PUBLIC: AI va UI konteksti uchun ============
@@ -57,6 +64,22 @@ export async function getSiteSettings(_req: Request, res: Response) {
     const rows = await prisma.siteSetting.findMany({
       where: { key: { in: SITE_SETTING_KEYS.filter((k) => !PRIVATE_SITE_SETTING_KEYS.includes(k)) } },
     });
+    const settings: Record<string, string> = {};
+    for (const r of rows) settings[r.key] = r.value;
+    return ok(res, { settings });
+  } catch (err) {
+    return serverError(res, 'Settings o\'qishda xatolik');
+  }
+}
+
+// ============ GET /api/settings/site/admin — ADMIN: KARTA KALITLARI HAM ============
+// Ommaviy GET maxfiylik uchun karta kalitlarini yashiradi. Admin panelda esa
+// ularni tahrirlash kerak — shuning uchun alohida, faqat ADMIN/SUPER_ADMIN
+// ga ochiq endpoint. Xavfsizlik: `authenticate` + `authorize` middleware'lari
+// majburiy, karta raqamlari hech qanday ommaviy ro'yxatga chiqmaydi.
+export async function getAdminSiteSettings(_req: AuthRequest, res: Response) {
+  try {
+    const rows = await prisma.siteSetting.findMany({ where: { key: { in: [...SITE_SETTING_KEYS] } } });
     const settings: Record<string, string> = {};
     for (const r of rows) settings[r.key] = r.value;
     return ok(res, { settings });

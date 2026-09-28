@@ -5,6 +5,8 @@ import { AuthRequest } from '../types';
 import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/response';
 import { toNumber, round2, isValidAmount } from '../utils/money';
 import { resolveDepositPercent } from '../utils/pricing';
+import { resolveMerchantCard } from '../utils/merchantCards';
+import { reserveReceiptNumber } from '../utils/receiptNumber';
 import { io } from '../lib/socket';
 import { Prisma } from '@prisma/client';
 import { getProvider, getProviderAvailability, isProviderAvailable, ProviderNotConfiguredError, ProviderUnavailableError, SANDBOX_CLICK, SANDBOX_PAYME, SANDBOX_UZUM, SANDBOX_PAYNET } from '../services/payments';
@@ -340,12 +342,27 @@ amount: Number(active.amount),
     const totalPaid = paidAmount(prevPayments);
     if (totalPaid >= finalPrice - 0.004) return badRequest(res, 'Bron to\'liq to\'langan');
 
-    // Depozit foizi — QAT'IY SERVER AVTORITETI: faqat bronga yozilgan
-    // `booking.depositPercent` (bron yaratilgandagi config bo'yicha).
-    // Request body's `depositPercent` butunlay E'TIBORSIZ qoldiriladi:
-    // frontend buni pasaytirib (masalan 10%) to'lab, tasdiqlash chegarasini
-    // chetlab o'tmasligi kerak. Hech qayerda 30 hardcode emas.
-    const percent = Math.min(100, Math.max(config.payments.minDepositPercent, resolveDepositPercent(booking.depositPercent)));
+    // Depozit foizi — server AVTORITETI bronda: `booking.depositPercent` bu
+    // bronni KIRISH uchun talab qilinadigan MINIMUM. Mijoz bu chegaradan
+    // KAM pul to'lashi mumkin emas (aks holda tasdiqlash chegarasini chetlab
+    // o'tadi) — shuning uchun pastga cheklaymiz.
+    //
+    // Lekin YUQORIGA erkin: mijoz xohlagan foizda (50%, 70%...) yoki to'liq
+    // (100%) to'lashi mumkin. Masalan 30% deponi bor, mijoz to'liq to'lashni
+    // tanlasa — `percent = 100`, qoldiq 0, bitta to'lovda hamma yopiladi.
+    // Tanlangan foiz bronga yoziladi, shuning uchun keyingi qoldiq to'lov
+    // aynan shu foiz bo'yicha qoladi.
+    const minPercent = Math.min(
+      100,
+      Math.max(config.payments.minDepositPercent, resolveDepositPercent(booking.depositPercent))
+    );
+    // So'rovdagi foiz faqat yuqoriga yo'naltiradi. `Math.round` — UI foizni
+    // qadamlar (10/25/50/100) bo'yicha beradi, lekin kelajakda boshqa
+    // qiymat kelsa ham butun songa yaxlitlanadi.
+    const requestedPercent = depositPercent === undefined
+      ? minPercent
+      : Math.min(100, Math.max(minPercent, Math.round(Number(depositPercent))));
+    const percent = requestedPercent;
     const requiredDeposit = round2((finalPrice * percent) / 100);
     const depositAlreadyPaid = round2(Math.min(totalPaid, requiredDeposit));
     const amount = round2(Math.max(0, requiredDeposit - depositAlreadyPaid));
@@ -365,6 +382,11 @@ amount: Number(active.amount),
 
     const isAdvance = amount < round2(finalPrice - totalPaid) - 0.004;
 
+    // CHEK RAQAMI — mijoz bank ilovasida to'lagandan keyin shu raqamni
+    // yozadi (izohga) yoki adminga aytadi; admin aynan shu raqam bo'yicha
+    // to'lovni topadi. UUID o'rniga qisqa, o'qiladigan `CZ-7K2M9QX4`.
+    const receiptNumber = await reserveReceiptNumber();
+
     const payment = await prisma.$transaction(async (tx) => {
       const p = await tx.payment.create({
         data: {
@@ -380,6 +402,7 @@ amount: Number(active.amount),
           currency: 'UZS',
           depositPercent: percent,
           idempotencyKey: idemKey,
+          receiptNumber,
           metadata: (cash
             ? null
             : manual
@@ -387,7 +410,7 @@ amount: Number(active.amount),
               : { providerMethod: providerId.toLowerCase() }) as any,
         },
       });
-      await auditLog(tx, { paymentId: p.id, action: 'payment_created', actorId: req.user!.userId, actorRole: req.user!.role as string, metadata: { method, percent, amount } });
+      await auditLog(tx, { paymentId: p.id, action: 'payment_created', actorId: req.user!.userId, actorRole: req.user!.role as string, metadata: { method, percent, amount, receiptNumber } });
       return p;
     });
 
@@ -460,10 +483,8 @@ amount: Number(active.amount),
     // (mijoz nusxalaydi). Karta raqami ommaviy endpointda emas, shu
     // autentifikatsiyalangan javobda bor.
     if (manual) {
-      const cardRows = await prisma.siteSetting.findMany({ where: { key: { in: [...CARD_SETTING_KEYS] } } });
-      const cardMap: Record<string, string> = {};
-      for (const r of cardRows) cardMap[r.key] = r.value;
-      const cardNumber = (cardMap.payment_card_number || '').trim();
+      // Har bir usulga alohida dogaon karta (UZUM -> VISA, UZCARD -> o'z kartasi).
+      const merchantCard = await resolveMerchantCard(method);
 
       await prisma.$transaction(async (tx) => {
         await tx.booking.update({ where: { id: booking.id }, data: { status: 'PENDING_PAYMENT' as any } });
@@ -472,7 +493,7 @@ amount: Number(active.amount),
           action: 'payment_created',
           actorId: req.user!.userId,
           actorRole: req.user!.role as string,
-          metadata: { method: 'TRANSFER', percent, amount, cardConfigured: Boolean(cardNumber) },
+          metadata: { method: 'TRANSFER', percent, amount, cardConfigured: Boolean(merchantCard) },
         });
       });
 
@@ -490,15 +511,7 @@ amount: Number(active.amount),
         payment,
         checkoutUrl: null,
         manual: true,
-        merchantCard: cardNumber
-          ? {
-              number: cardNumber,
-              numberFormatted: cardNumber.replace(/\s+/g, '').replace(/(.{4})/g, '$1 ').trim(),
-              holder: cardMap.payment_card_holder || '',
-              bank: cardMap.payment_card_bank || '',
-              note: cardMap.payment_card_note || '',
-            }
-          : null,
+        merchantCard,
         depositPercent: percent,
         requiredDeposit: round2(Math.max(0, requiredDeposit - totalPaid)),
         amount,
@@ -1025,9 +1038,31 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
 // ============ GET /api/payments — SUPER_ADMIN: barcha to'lovlar ============
 export const getAllPayments = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { limit, offset, status } = req.query as { limit?: string; offset?: string; status?: string };
+    const { limit, offset, status, q, receiptNumber: receiptQuery } = req.query as {
+      limit?: string;
+      offset?: string;
+      status?: string;
+      /** Umumiy qidiruv: chek raqami, ism yoki email. */
+      q?: string;
+      /** Aniq chek raqami — bankda tekshirishda tez topish uchun. */
+      receiptNumber?: string;
+    };
     const where: any = {};
     if (status) where.status = status.toUpperCase();
+
+    // Chek raqami — aniq qidirish. Mijoz raqamni telefon orqali aytadi;
+    // `contains` bilan kiritilgan bo'shliq/kichik-harf farqini kechiradi.
+    const receipt = (receiptQuery || '').trim().toUpperCase();
+    if (receipt) where.receiptNumber = { contains: receipt };
+
+    const term = (q || '').trim();
+    if (term) {
+      where.OR = [
+        { receiptNumber: { contains: term.toUpperCase() } },
+        { user: { fullName: { contains: term, mode: 'insensitive' } } },
+        { user: { email: { contains: term, mode: 'insensitive' } } },
+      ];
+    }
 
     const [payments, total, revenue] = await Promise.all([
       prisma.payment.findMany({
@@ -1056,36 +1091,22 @@ export const getAllPayments = async (req: AuthRequest, res: Response, next: Next
 // QO'LDA O'TKAZMA (TRANSFER) OQIMI — karta orqali to'lov
 // ============================================================================
 
-/** Ommaviy GET'da chiqariladigan kalitlar (karta ma'lumotlari aralashmasin) */
-const CARD_SETTING_KEYS = ['payment_card_number', 'payment_card_holder', 'payment_card_bank', 'payment_card_note'] as const;
-
 /**
  * GET /api/payments/merchant-card — Dogaon kartasi (foydalanuvchi nusxalaydi).
  *
  * AUTENTIFIKATSIYA MAJBURIY: karta raqami ommaviy ro'yxatga tushmasin
  * (skraper/bo'g'in). Faqat tizimga kiritgan foydalanuvchi ko'radi.
  */
-export const getMerchantCard = async (_req: AuthRequest, res: Response, next: NextFunction) => {
+export const getMerchantCard = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const rows = await prisma.siteSetting.findMany({ where: { key: { in: [...CARD_SETTING_KEYS] } } });
-    const card: Record<string, string> = {};
-    for (const r of rows) card[r.key] = r.value;
-
-    const number = (card.payment_card_number || '').trim();
-    if (!number) {
-      return ok(res, { configured: false, card: null }, 'To\'lov kartasi hali sozlanmagan');
+    // `?method=UZUM` — har bir to'lov usuli uchun alohida karta. Berilmasa
+    // `DEFAULT` (yoki eski umumiy karta) qaytariladi.
+    const method = typeof req.query?.method === 'string' ? req.query.method : '';
+    const card = await resolveMerchantCard(method);
+    if (!card) {
+      return ok(res, { configured: false, card: null, method: method.toUpperCase() || null }, 'To\'lov kartasi hali sozlanmagan');
     }
-    return ok(res, {
-      configured: true,
-      card: {
-        number,
-        // Foydalanuvchi nusxalashi uchun bo'shliqlarni olib tashlaymiz
-        numberFormatted: number.replace(/\s+/g, '').replace(/(.{4})/g, '$1 ').trim(),
-        holder: card.payment_card_holder || '',
-        bank: card.payment_card_bank || '',
-        note: card.payment_card_note || '',
-      },
-    });
+    return ok(res, { configured: true, card, method: method.toUpperCase() || null });
   } catch (err) {
     next(err);
   }

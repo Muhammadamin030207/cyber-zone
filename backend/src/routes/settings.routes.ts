@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { getSiteSettings, updateSiteSettings } from '../controllers/settings.controller';
+import { getSiteSettings, updateSiteSettings, getAdminSiteSettings } from '../controllers/settings.controller';
 import { authenticate, authorize } from '../middlewares/auth';
 
 const router = Router();
@@ -22,6 +22,14 @@ const settingsLimiter = rateLimit({
  *     summary: Sayt bilimlarini o'qish (FAQ, aloqa, to'lov, bekor qilish siyosati) — PUBLIC
  */
 router.get('/site', settingsLimiter, getSiteSettings);
+
+/**
+ * GET /api/settings/site/admin:
+ *
+ * Xuddi `/site`, lekin KARTA KALITLARINI HAM qaytaradi (`payment_card_*`,
+ * `payment_cards_by_method`). Faqat ADMIN/SUPER_ADMIN.
+ */
+router.get('/site/admin', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), settingsLimiter, getAdminSiteSettings);
 
 /**
  * @swagger

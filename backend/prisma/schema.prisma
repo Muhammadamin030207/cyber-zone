@@ -457,6 +457,13 @@ model Payment {
   providerPaymentId     String?          @map("provider_payment_id")
   transactionId         String?          @map("transaction_id") // eski/kompat
   idempotencyKey        String?          @unique @map("idempotency_key") // client so'rovi kaliti — takroriy yaratishni DB darajasida to'xtatadi
+  // ===== CHEK (RECEIPT) RAQAMI =====
+  // To'lov yaratilganda avtomatik generatsiya qilinadigan inson o'qiydigan
+  // qisqa raqam, masalan "CZ-7K2M9QX4". Mijoz bank ilovasida to'lagandan
+  // keyin shu raqamni (yoki karta oxirgi 4 raqam + ismni) yozadi; admin esa
+  // aynan shu raqam bo'yicha to'lovni topadi. UUID (32 belgi) telefon orqali
+  // aytib bo'lmaydi — shuning uchun qisqa, o'qiladigan, unikal identifikator.
+  receiptNumber         String?          @unique @map("receipt_number")
   metadata              Json?            @map("metadata")
   failureReason         String?          @map("failure_reason")
   expiresAt             DateTime?        @map("expires_at")
@@ -490,6 +497,9 @@ model Payment {
   @@index([userId, createdAt], map: "payments_user_id_created_at_idx")
   @@index([status, expiresAt], map: "payments_status_expires_at_idx")
   @@index([isDebt, status], map: "payments_is_debt_status_idx")
+  // Chek raqami bo'yicha admin qidiruvi (unique index allaqachon bor — bu
+  // `proof_submitted_at` bilan birga "kutilmoqda" filtrini tezlashtiradi).
+  @@index([receiptNumber, proofSubmittedAt], map: "payments_receipt_proof_idx")
   @@map("payments")
 }
 

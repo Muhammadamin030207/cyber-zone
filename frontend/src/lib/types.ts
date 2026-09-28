@@ -229,6 +229,8 @@ export interface Payment {
   method?: 'PAYME' | 'CLICK' | 'UZCARD' | 'HUMO' | 'UZUM' | 'PAYNET' | 'CASH' | 'TRANSFER' | null;
   provider?: 'PAYME' | 'CLICK' | 'UZUM' | 'PAYNET' | null;
   status: 'CREATED' | 'PENDING' | 'REDIRECT_REQUIRED' | 'PROCESSING' | 'PAID' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'EXPIRED' | 'REFUNDED';
+  /** To'lov yaratilgandagi depozit foizi — UI da 30% deb QATOR YOZILMASIN. */
+  depositPercent?: number | null;
   paidAt?: string | null;
   isDebt?: boolean;
   dueAt?: string | null;
@@ -239,6 +241,12 @@ export interface Payment {
   proofSubmittedAt?: string | null;
   // Kassada to'lash tasdig'i
   settledAt?: string | null;
+  /**
+   * CHEK RAQAMI — inson o'qiydigan qisqa identifikator (`CZ-7K2M9QX4`).
+   * Mijoz bank ilovasida to'lagandan keyin shu raqamni izohga yozadi
+   * yoki adminga aytadi; admin aynan shu raqam bo'yicha to'lovni topadi.
+   */
+  receiptNumber?: string | null;
   createdAt?: string;
   metadata?: Record<string, unknown> | null;
   /** `GET /api/payments` (SUPER_ADMIN) ro'yxatida qo'sshiladi. */

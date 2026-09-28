@@ -8,6 +8,7 @@ import {
   Settings, Monitor, CalendarDays, BadgePercent, Newspaper, BarChart3, MessageSquare,
   Plus, Pencil, Trash2, Loader2, AlertCircle, Check, ShieldCheck, Users, Zap,
   Save, X, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy, MessagesSquare, Info, Banknote, UserX,
+  CreditCard,
   } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -21,12 +22,13 @@ import BarAdmin from '@/components/admin/BarAdmin';
 import ChatAdmin from '@/components/admin/ChatAdmin';
 import SupportChat from '@/components/support/SupportChat';
 import SiteSettingsTab from '@/components/admin/SiteSettingsTab';
+import MerchantCardsSettings from '@/components/admin/MerchantCardsSettings';
 import TillTab from '@/components/admin/TillTab';
 import Logo from '@/components/brand/Logo';
 
 const MapPicker = dynamic(() => import('@/components/rooms/MapPicker'), { ssr: false });
 
-type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'till' | 'bar' | 'chat' | 'requests' | 'support' | 'promos' | 'news' | 'stats' | 'site';
+type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'till' | 'cards' | 'bar' | 'chat' | 'requests' | 'support' | 'promos' | 'news' | 'stats' | 'site';
 
 const TABS: { key: Tab; icon: LucideIcon; label: string }[] = [
   { key: 'room', icon: Settings, label: 'Xona' },
@@ -34,6 +36,7 @@ const TABS: { key: Tab; icon: LucideIcon; label: string }[] = [
   { key: 'computers', icon: Monitor, label: 'Kompyuterlar' },
   { key: 'bookings', icon: CalendarDays, label: 'Bronlar' },
   { key: 'till', icon: Banknote, label: 'Kassa' },
+  { key: 'cards', icon: CreditCard, label: 'To\'lov kartalari' },
   { key: 'bar', icon: Gamepad2, label: 'Gaming Bar' },
   { key: 'chat', icon: MessageSquare, label: 'Chat' },
   { key: 'requests', icon: MessagesSquare, label: 'Murojaatlar' },
@@ -122,7 +125,7 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
       </div>
 
       {/* Content */}
-      {!room && tab !== 'room' && tab !== 'bar' && tab !== 'chat' && tab !== 'requests' && tab !== 'support' && tab !== 'site' && tab !== 'bookings' && tab !== 'till' ? (
+      {!room && tab !== 'room' && tab !== 'bar' && tab !== 'chat' && tab !== 'requests' && tab !== 'support' && tab !== 'site' && tab !== 'bookings' && tab !== 'cards' && tab !== 'till' ? (
         <div className="text-center py-20">
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center bg-[var(--acc-b)]/10 border border-[var(--acc-b)]/25">
             <Logo size={38} />
@@ -142,6 +145,8 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
         <BookingsTab room={room} />
       ) : tab === 'till' ? (
         <TillTab />
+      ) : tab === 'cards' ? (
+        <MerchantCardsSettings />
       ) : tab === 'bar' ? (
         <BarAdmin />
       ) : tab === 'chat' ? (

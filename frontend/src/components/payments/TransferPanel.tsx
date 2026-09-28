@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Check, Copy, CreditCard, ImagePlus, Loader2, ShieldCheck, Trash2, Upload } from 'lucide-react';
+import { Check, Copy, CreditCard, ExternalLink, ImagePlus, Loader2, ShieldCheck, Smartphone, Trash2, Upload } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { toastError, toastInfo, toastSuccess } from '@/lib/toast';
 import { cn, formatPrice } from '@/lib/utils';
@@ -12,6 +12,8 @@ export interface MerchantCard {
   holder: string;
   bank: string;
   note: string;
+  /** Bank/to'lov ilovasining URL'i — «Ilovaga o'tib to'lash» tugmasi shuni ochadi. */
+  appUrl?: string;
 }
 
 const MAX_RECEIPTS = 3;
@@ -34,12 +36,18 @@ export default function TransferPanel({
   amount,
   merchantCard,
   alreadySubmitted,
+  appName,
+  receiptNumber,
   onDone,
 }: {
   paymentId: string;
   amount: number;
   merchantCard: MerchantCard | null;
   alreadySubmitted?: boolean;
+  /** «Ilovaga o'tib to'lash» tugmasi matni uchun — masalan "Payme". */
+  appName?: string;
+  /** Chek (kutilmoqda) raqami — admin bankda shu raqam bo'yicha qidiradi. */
+  receiptNumber?: string | null;
   onDone?: () => void;
 }) {
   const [phase, setPhase] = useState<Phase>(alreadySubmitted ? 'submitted' : 'idle');
@@ -47,6 +55,7 @@ export default function TransferPanel({
   const [holder, setHolder] = useState('');
   const [picked, setPicked] = useState<Picked[]>([]);
   const [copied, setCopied] = useState(false);
+  const [copiedReceipt, setCopiedReceipt] = useState(false);
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const pickedRef = useRef<Picked[]>([]);
@@ -74,6 +83,17 @@ export default function TransferPanel({
       setTimeout(() => setCopied(false), 2000);
     } catch {
       toastError("Karta raqamini nusxalab bo'lmadi — qo'lda yozib oling");
+    }
+  }
+
+  async function copyReceipt() {
+    if (!receiptNumber) return;
+    try {
+      await navigator.clipboard.writeText(receiptNumber);
+      setCopiedReceipt(true);
+      setTimeout(() => setCopiedReceipt(false), 2000);
+    } catch {
+      toastError("Chek raqamini nusxalab bo'lmadi");
     }
   }
 
@@ -164,6 +184,19 @@ export default function TransferPanel({
                 {holder.trim()}
               </p>
             )}
+            {receiptNumber && (
+              <p className="text-[11px] text-gray-500 mt-2.5">
+                Chek raqami:{' '}
+                <button
+                  type="button"
+                  onClick={copyReceipt}
+                  className="inline-flex items-center gap-1 font-mono font-bold tracking-widest text-neon-cyan"
+                >
+                  {receiptNumber}
+                  {copiedReceipt ? <Check size={12} className="text-neon-green" /> : <Copy size={12} />}
+                </button>
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -211,6 +244,35 @@ export default function TransferPanel({
           )}
           {merchantCard.note && (
             <p className="text-[11px] text-amber-300/90 mt-1.5">{merchantCard.note}</p>
+          )}
+
+          {merchantCard.appUrl && (
+            <a
+              href={merchantCard.appUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-neon-cyan/35 bg-neon-cyan/10 text-sm font-bold text-neon-cyan hover:bg-neon-cyan/20 transition-colors"
+            >
+              <Smartphone size={15} aria-hidden="true" />
+              Ilovaga o&apos;tib to&apos;lash{appName ? ` — ${appName}` : ''}
+              <ExternalLink size={13} aria-hidden="true" />
+            </a>
+          )}
+
+          {receiptNumber && (
+            <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
+              <span className="text-[11px] text-gray-400">
+                Chek raqami <span className="text-gray-600">— adminga ayting</span>
+              </span>
+              <button
+                type="button"
+                onClick={copyReceipt}
+                className="inline-flex items-center gap-1.5 font-mono text-sm font-bold tracking-widest text-white"
+              >
+                {receiptNumber}
+                {copiedReceipt ? <Check size={13} className="text-neon-green" /> : <Copy size={13} className="text-gray-500" />}
+              </button>
+            </div>
           )}
         </div>
       ) : (

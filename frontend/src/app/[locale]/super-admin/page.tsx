@@ -320,7 +320,28 @@ function UsersTab() {
       )}
 
       <div className="neo-card rounded-2xl lg:overflow-x-auto table-scroll-mobile">
-        {loading ? (
+      <div className="neo-card rounded-2xl p-3 flex flex-col sm:flex-row sm:items-center gap-2">
+        <div className="relative flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" aria-hidden="true" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Chek raqami (CZ-7K2M9QX4), ism yoki email"
+            aria-label="To'lovlarni qidirish"
+            className="w-full rounded-xl border border-white/10 bg-black/25 pl-9 pr-3 py-2.5 text-sm outline-none focus:border-neon-cyan/40"
+          />
+        </div>
+        {search && (
+          <button
+            onClick={() => setSearch('')}
+            className="px-3 py-2.5 rounded-xl btn-ghost text-xs font-semibold shrink-0"
+          >
+            Tozalash
+          </button>
+        )}
+      </div>
+
+      {loading ? (
           <div className="space-y-2 p-5">{[1, 2, 3].map((i) => <div key={i} className="h-14 rounded-xl bg-cyber-800 animate-pulse" />)}</div>
         ) : users.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-14">{t('noUsers')}</p>
@@ -706,17 +727,30 @@ function PaymentsTab() {
   const [loading, setLoading] = useState(true);
   const [sandbox, setSandbox] = useState<boolean | null>(null);
   const [sandboxBusy, setSandboxBusy] = useState(false);
+  /** Chek raqami / ism / email bo'yicha qidiruv. */
+  const [search, setSearch] = useState('');
+  /** Kiritish to'xtagach so'rov yuboriladigan qiymat (debounce natijasi). */
+  const [query, setQuery] = useState('');
+
+  // Har bir tugma bosilishida so'rov yubormaslik uchun kechikish: admin
+  // chek raqamini bosib-yozadi, har bir harf uchun tarmoq so'rovi kerak emas.
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get<{ data: PaymentsListResponse }>('/api/payments?limit=100');
+      const params = new URLSearchParams({ limit: '100' });
+      if (query) params.set('q', query);
+      const { data } = await api.get<{ data: PaymentsListResponse }>(`/api/payments?${params.toString()}`);
       setPayments(data.data?.payments || []);
       setTotal(data.data?.total || 0);
       setRevenue(Number(data.data?.revenue) || 0);
     } catch { /* skip */ }
     setLoading(false);
-  }, []);
+  }, [query]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -786,7 +820,9 @@ function PaymentsTab() {
       {loading ? (
         <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 rounded-xl bg-cyber-800 animate-pulse" />)}</div>
       ) : !payments?.length ? (
-        <p className="text-gray-500 text-center py-16">To'lovlar hali yo'q</p>
+        <p className="text-gray-500 text-center py-16">
+          {query ? `"${query}" bo'yicha to'lov topilmadi` : "To'lovlar hali yo'q"}
+        </p>
       ) : (
         <div className="neo-card rounded-2xl overflow-hidden">
           {/* MOBIL / TABLET: kartochka */}
@@ -800,9 +836,16 @@ function PaymentsTab() {
                   <p className="font-bold text-neon-cyan text-sm shrink-0">{formatPrice(p.amount)} so'm</p>
                 </div>
                 <p className="text-xs text-gray-500">{p.booking?.room?.name || '—'}</p>
+                {p.receiptNumber && (
+                  <p className="font-mono text-[11px] tracking-widest text-neon-cyan/80">
+                    {p.receiptNumber}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-1.5 pt-0.5">
                   <span className="text-[11px] px-2 py-0.5 rounded bg-white/5 border border-white/10 text-gray-400">
-                    {p.type === 'ADVANCE' ? 'Avans (30%)' : 'Qoldiq (70%)'}
+                    {p.type === 'ADVANCE'
+                      ? `Avans (${Number(p.depositPercent) || 30}%)`
+                      : `Qoldiq (${100 - (Number(p.depositPercent) || 30)}%)`}
                   </span>
                   <span className="text-[11px] px-2 py-0.5 rounded bg-white/5 border border-white/10 text-gray-400">
                     {p.method || '—'}
@@ -822,6 +865,7 @@ function PaymentsTab() {
             <thead>
               <tr className="text-left text-xs text-gray-500 border-b border-neon-cyan/10">
                 <th className="px-4 py-3">Foydalanuvchi</th>
+                <th className="px-4 py-3">Chek raqami</th>
                 <th className="px-4 py-3">Xona</th>
                 <th className="px-4 py-3">Miqdor</th>
                 <th className="px-4 py-3">Tur</th>
@@ -834,9 +878,16 @@ function PaymentsTab() {
               {payments.map((p) => (
                 <tr key={p.id} className="border-b border-white/5 hover:bg-white/[0.02]">
                   <td className="px-4 py-3 text-gray-300">{p.user?.fullName || p.user?.email || '—'}</td>
+                  <td className="px-4 py-3 font-mono text-xs tracking-wider text-neon-cyan/80">
+                    {p.receiptNumber || '—'}
+                  </td>
                   <td className="px-4 py-3 text-gray-400">{p.booking?.room?.name || '—'}</td>
                   <td className="px-4 py-3 font-bold text-neon-cyan">{formatPrice(p.amount)} so'm</td>
-                  <td className="px-4 py-3 text-gray-300">{p.type === 'ADVANCE' ? 'Avans (30%)' : 'Qoldiq (70%)'}</td>
+                  <td className="px-4 py-3 text-gray-300">
+                    {p.type === 'ADVANCE'
+                      ? `Avans (${Number(p.depositPercent) || 30}%)`
+                      : `Qoldiq (${100 - (Number(p.depositPercent) || 30)}%)`}
+                  </td>
                   <td className="px-4 py-3 text-gray-400">{p.method || '—'}</td>
                   <td className="px-4 py-3">
                     <span className={cn('px-2 py-0.5 rounded text-xs font-medium', statusStyle[p.status] || 'bg-gray-500/15 text-gray-400')}>{p.status}</span>
