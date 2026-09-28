@@ -1,49 +1,58 @@
-'use client';
-
-import { useEffect } from 'react';
-import api from '@/lib/api';
 import { getSiteUrl } from '@/lib/site';
 
 /**
  * JSON-LD (schema.org) — Google qidiruvida CYBER-ZONE ni to'g'ri
  * ko'rsatish uchun.
  *
- * Nima uchun kerak: `LocalBusiness` / `HealthAndBeautyBusiness` turi
+ * Nima uchun kerak: `LocalBusiness` / `EntertainmentBusiness` turi
  * Google xaritada, "qayerda" natijalarida va Knowledge Panel'da
  * ko'rsatiladi. Boshqa turlardan farqli ravishda bu BEPUL — faqat
  * to'g'ri markup kerak (reklama emas).
  *
- * Diqqat: narx/joylashuv QO'LDAN yoziladi (backend'da kompaniya
- * manzili yo'q). Bu ma'lumot o'zgarganda shu fayl ham yangilanishi kerak.
+ * NIMA UCHUN SERVER komponenti (Muhim):
+ * Google boti sahifani olganda JavaScript NI ISHLATMAYDI va `fetch` ga
+ * javob kutmaydi. Agar JSON-LD `useEffect` orqali sahifa yuklangandan
+ * KEYIN qo'shilsa, u bot uchun umuman yo'q bo'lib qoladi — kod to'g'ri
+ * bo'lsa ham. Shuning uchun bu SERVER da chiziladi va HTML'ning o'zida
+ * `<script type="application/ld+json">` sifatida keladi.
  *
- * `dangerouslySetInnerHTML` xavfsizligi: ma'lumot statik (kod ichida),
- * foydalanuvchi kiritmaydi — `JSON.stringify` `<` belgisini unicode'ga
- * aylantiradi (`</script>` ichidagi kod buzilmaydi).
+ * Xonalar ro'yxati serverda yig'iladi (natija haqiqiy — soxta raqam
+ * yo'q). Backend javob bermasa yoki sekin bo'lsa, `[]` bilan davom
+ * etamiz: asosiy `LocalBusiness`/`WebSite` ma'lumotlari statik, xonalar
+ * esa qo'shimcha — ularsiz ham markup to'g'ri qoladi.
+ *
+ * `dangerouslySetInnerHTML` xavfsizligi: `JSON.stringify` `<` belgisini
+ * unicode'ga aylantiradi, shuning uchun `</script>` ichidagi kod
+ * buzilmaydi.
  */
-export default function StructuredData() {
-  useEffect(() => {
-    // Xonalar ro'yxatidan foydalanuvchi kelganda real kompyuter xonalari
-    // soni va eng mashhurlari haqiqatda ko'rinadi (soxta raqam yo'q).
-    let cancelled = false;
 
-    api
-      .get('/api/rooms')
-      .then(({ data }) => {
-        if (cancelled) return;
-        const rooms = (data.data as Array<{ name: string; address?: string | null }> | undefined) || [];
-        inject(rooms);
-      })
-      // Backend bo'lmasa ham sahifa ishlashi kerak — asosiy ma'lumot
-      // (nom, tavsif, manzil) statik, xonalar qo'shimcha.
-      .catch(() => inject([]));
-
-    return () => { cancelled = true; };
-  }, []);
-
-  return null;
+/** Xona ro'yxati — serverda, qisqa muddat bilan. */
+async function fetchRooms(): Promise<Array<{ name: string; address?: string | null }>> {
+  const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  try {
+    const res = await fetch(`${base}/api/rooms?limit=20`, {
+      // Sahifa chizilishini kechiktirmaslik uchun qisqa muddat: backend
+      // javob bermasa, `catch` da statik ma'lumot bilan chiqamiz.
+      signal: AbortSignal.timeout(2500),
+      headers: { accept: 'application/json' },
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return [];
+    const json: unknown = await res.json();
+    const data = (json as { data?: unknown })?.data;
+    if (!Array.isArray(data)) return [];
+    return data
+      .filter((r): r is { name: string; address?: string | null } =>
+        !!r && typeof r === 'object' && typeof (r as { name?: unknown }).name === 'string')
+      .map((r) => ({ name: r.name, address: typeof r.address === 'string' ? r.address : null }));
+  } catch {
+    // Backend yo'q/kechikkan — markupni statik qism bilan chiqaramiz.
+    return [];
+  }
 }
 
-function inject(rooms: Array<{ name: string; address?: string | null }>) {
+export default async function StructuredData() {
+  const rooms = await fetchRooms();
   const siteUrl = getSiteUrl();
   const businessId = `${siteUrl}/#organization`;
 
@@ -69,16 +78,14 @@ function inject(rooms: Array<{ name: string; address?: string | null }>) {
         },
         areaServed: { '@type': 'City', name: 'Toshkent' },
         sameAs: [] as string[],
-        makesOffer: rooms
-          .slice(0, 20)
-          .map((r) => ({
-            '@type': 'Offer',
-            itemOffered: {
-              '@type': 'Service',
-              name: `Kompyuter xonasi — ${r.name}`,
-              ...(r.address ? { description: r.address } : {}),
-            },
-          })),
+        makesOffer: rooms.map((r) => ({
+          '@type': 'Offer',
+          itemOffered: {
+            '@type': 'Service',
+            name: `Kompyuter xonasi — ${r.name}`,
+            ...(r.address ? { description: r.address } : {}),
+          },
+        })),
         potentialAction: {
           '@type': 'ReserveAction',
           target: {
@@ -99,14 +106,14 @@ function inject(rooms: Array<{ name: string; address?: string | null }>) {
     ],
   };
 
-  // Xuddi shu schema ikki marta qo'shilmasin (StrictMode effektlar
-  // qo'sha chaqiradi) — eskisini olib tashlaymiz.
-  document.getElementById('cz-structured-data')?.remove();
-
-  const script = document.createElement('script');
-  script.type = 'application/ld+json';
-  script.id = 'cz-structured-data';
   // `</` ni qochiramiz — HTML parser script tugunini bevaxta yopmasin.
-  script.textContent = JSON.stringify(data).replace(/</g, '\\u003c');
-  document.head.appendChild(script);
+  const json = JSON.stringify(data).replace(/</g, '\\u003c');
+
+  return (
+    <script
+      type="application/ld+json"
+      id="cz-structured-data"
+      dangerouslySetInnerHTML={{ __html: json }}
+    />
+  );
 }
