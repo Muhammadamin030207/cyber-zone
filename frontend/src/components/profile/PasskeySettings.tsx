@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Fingerprint, ScanFace, Plus, Loader2, Trash2, Pencil, ShieldCheck, Smartphone, type LucideIcon } from 'lucide-react';
+import { Fingerprint, ScanFace, Loader2, Trash2, Pencil, ShieldCheck, Smartphone, type LucideIcon } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { toastSuccess, toastError } from '@/lib/toast';
 import { confirmDialog } from '@/lib/confirm';
@@ -140,7 +140,7 @@ export default function PasskeySettings() {
     <div className="neo-card rounded-2xl p-5 sm:p-6">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
         <h3 className="font-bold flex items-center gap-2">
-          <BiometricIcon size={16} className="text-neon-cyan" /> Passkey va biometriya
+          <BiometricIcon size={16} className="text-neon-cyan" /> Face ID va barmoq izi
         </h3>
         {bioAvailable ? (
           <span className="text-[10px] px-2 py-1 rounded-full bg-neon-green/10 text-neon-green border border-neon-green/25 font-bold uppercase tracking-wider">
@@ -154,8 +154,12 @@ export default function PasskeySettings() {
       </div>
 
       <p className="text-xs text-gray-500 leading-relaxed mb-4">
-        Passkey — {bioLabel} orqali xavfsiz kirish. Private key
-        hech qachon serverga yuborilmaydi, faqat qurilmangizda saqlanadi.
+        {bioAvailable
+          ? `Ushbu qurilmada ${bioLabel} mavjud — bir marta qo‘shib qo‘ying, keyin
+             login sahifasidagi tugmani bosib ${bioLabel} bilan kiring. Email kiritish
+             shart emas.`
+          : 'Bu qurilmada biometrik sensor topilmadi. Passkey yana ham ishlaydi — security key yoki brauzer paroli orqali.'}{' '}
+        Private key hech qachon serverga yuborilmaydi, faqat qurilmangizda saqlanadi.
       </p>
 
       {/* Passkey talab tugmasi */}
@@ -296,10 +300,10 @@ export default function PasskeySettings() {
           type="button"
           onClick={handleAdd}
           disabled={busy}
-          className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl neon-btn font-bold text-sm disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl neon-btn font-bold text-sm disabled:opacity-50 whitespace-nowrap"
         >
-          {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-          Passkey qo&apos;shish
+          {busy ? <Loader2 size={16} className="animate-spin" /> : <BiometricIcon size={16} />}
+          {bioAvailable ? `${bioLabel} ulash` : 'Passkey qo‘shish'}
         </button>
       </div>
     </div>

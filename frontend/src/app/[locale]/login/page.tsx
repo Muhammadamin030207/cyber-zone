@@ -13,7 +13,7 @@ import { useAuthStore } from '@/store/auth';
 import type { AuthResponse, User } from '@/lib/types';
 import GoogleButton from '@/components/auth/GoogleButton';
 import Logo from '@/components/brand/Logo';
-import { finishPasskeyLogin, passwordlessLogin, supportsBiometric, detectBiometric, type BiometricInfo } from '@/lib/webauthn';
+import { finishPasskeyLogin, passwordlessLogin, biometricLogin, supportsBiometric, detectBiometric, type BiometricInfo } from '@/lib/webauthn';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email kiriting').email('Email noto\u2019g\u2019ri'),
@@ -201,18 +201,26 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
     }
   }
 
-  // Passwordless (Faollashtirish) — email kiritilgan bo'lsa
+  // Biometrik kirish — Face ID / Touch ID / Windows Hello / Android biometriya.
+  //
+  // Ikki xil usul bor:
+  //  1) Email kiritilgan bo'lsa — aniq usul (`passwordlessLogin`): server
+  //     foydalanuvchini email bo'yicha topadi, allowCredentials to'ldiriladi.
+  //     Ishonchliroq, lekin email kiritish shart.
+  //  2) Email bo'sh bo'lsa — DISCOVERABLE (usernavigatsiyasiz) passkey
+  //     (`biometricLogin`): allowCredentials bo'sh bo'lgani uchun brauzer shu
+  //     domen uchun saqlangan passkeylarni o'zi ko'rsatadi. Foydalanuvchi
+  //     shunchaki tugmani bosadi va qurilmaning biometriyasi bilan
+  //     tasdiqlaydi — email kiritish shart emas. Mana shu "Face ID bilan
+  //     kirish" ni universal qiladi: har qanday qurilmada o'sha qurilmaning
+  //     o'z biometriyasi ishlaydi.
   async function launchPasswordless() {
     const email = getValues('email').trim().toLowerCase();
-    if (!email) {
-      setError(`Avval email kiriting, so'ng "${bioLabel} bilan kirish" tugmasini bosing.`);
-      return;
-    }
     setPasskeyBusy(true);
     setError(null);
     setPasskeyError(null);
     try {
-      const result = await passwordlessLogin(email);
+      const result = email ? await passwordlessLogin(email) : await biometricLogin();
       if (result.success) {
         const user = useAuthStore.getState().user;
         if (user?.mustChangePassword) {
@@ -221,11 +229,26 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
         else router.push(user && user.role !== 'USER' ? '/admin' : '/dashboard');
         router.refresh();
       } else {
-        setPasskeyError(result.message || 'Bu qurilmada ro&apos;yxatdan o&apos;tgan passkey topilmadi');
+        setPasskeyError(
+          result.message ||
+            (email
+              ? 'Bu akkount uchun bu qurilmada passkey topilmadi'
+              : 'Bu qurilmada hech qanday passkey saqlanmagan. Profil → Face ID / barmoq izi orqali qo‘shing.')
+        );
       }
     } catch (err: unknown) {
-      const data = (err as { response?: { data?: ApiErrorData } })?.response?.data;
-      setPasskeyError(data?.message || 'Brauzer bilan bog&apos;lanishda xatolik. Passkey ushbu qurilmada mavjudligiga ishonch hosil qiling.');
+      // Foydalanuvchi biometrik oynani bekor qilgan bo'lishi mumkin
+      // (NotAllowedError) — bu xato emas, alohilda ko'rsatamiz.
+      const name = (err as { name?: string })?.name;
+      if (name === 'NotAllowedError' || name === 'AbortError') {
+        setPasskeyError('Biometrik tasdiqlash bekor qilindi');
+      } else {
+        const data = (err as { response?: { data?: ApiErrorData } })?.response?.data;
+        setPasskeyError(
+          data?.message ||
+            'Brauzer bilan bog‘lanishda xatolik. Passkey ushbu qurilmada mavjudligiga ishonch hosil qiling.'
+        );
+      }
     } finally {
       setPasskeyBusy(false);
     }
@@ -708,10 +731,19 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
                   type="button"
                   disabled={passkeyBusy}
                   onClick={launchPasswordless}
-                  className="w-full mb-3 py-3 rounded-xl border border-neon-green/40 bg-neon-green/5 text-neon-green hover:bg-neon-green/10 flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-60 transition-colors"
+                  className="w-full mb-2 py-3.5 rounded-xl border border-neon-green/40 bg-neon-green/5 text-neon-green hover:bg-neon-green/10 flex flex-col items-center justify-center gap-1 disabled:opacity-60 transition-colors"
                 >
-                  {passkeyBusy ? <Loader2 size={18} className="animate-spin" /> : <BiometricIcon size={18} />}
-                  {bioInfo?.method === 'faceid' ? `${bioLabel} bilan kirish` : 'Passkey (Face ID / barmoq izi) bilan kirish'}
+                  <span className="flex items-center gap-2 text-sm font-semibold">
+                    {passkeyBusy ? <Loader2 size={18} className="animate-spin" /> : <BiometricIcon size={18} />}
+                    {bioInfo?.method === 'faceid'
+                      ? `${bioLabel} bilan kirish`
+                      : bioInfo?.method === 'touchid'
+                        ? 'Touch ID bilan kirish'
+                        : 'Barmoq izi bilan kirish'}
+                  </span>
+                  <span className="text-[11px] font-normal text-neon-green/70">
+                    Email kiritish shart emas — tugmani bosing va qurilmani tasdiqlang
+                  </span>
                 </button>
 
                 <GoogleButton mode="signin" />
