@@ -1,8 +1,17 @@
 'use client';
 
-import { startRegistration, startAuthentication, platformAuthenticatorIsAvailable } from '@simplewebauthn/browser';
+import {
+  startRegistration,
+  startAuthentication,
+  platformAuthenticatorIsAvailable,
+} from '@simplewebauthn/browser';
+import type {
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from '@simplewebauthn/browser';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
+import type { AuthResponse, User } from '@/lib/types';
 
 export interface PasskeyRecord {
   id: string;
@@ -107,7 +116,9 @@ export async function platformName(): Promise<string> {
 
 // ============ REGISTRATION (passkey qo'shish) ============
 export async function addPasskey(deviceName?: string): Promise<PasskeyRecord> {
-  const { data: optsData } = await api.post<{ success: boolean; data: any }>('/api/webauthn/register/options');
+  const { data: optsData } = await api.post<{ success: boolean; data: PublicKeyCredentialCreationOptionsJSON }>(
+    '/api/webauthn/register/options'
+  );
   const assertion = await startRegistration({ optionsJSON: optsData.data });
   const { data: results } = await api.post<{ success: boolean; data: PasskeyRecord; message?: string }>(
     '/api/webauthn/register/verify',
@@ -118,14 +129,29 @@ export async function addPasskey(deviceName?: string): Promise<PasskeyRecord> {
 
 // ============ PASSWORDLESS LOGIN (passkey faqat) ============
 // Login sahifasi: email -> options -> brauzer so'rovi -> verify -> session.
-export async function passwordlessLogin(email: string): Promise<{ success: boolean; message?: string; code?: string }> {
-  const { data } = await api.post<{ success: boolean; data: { options: any; userId: string } }>('/api/webauthn/auth/options', { email });
+/** `/api/webauthn/auth/verify` ning muvaffaqiyatli javobi — AuthResponse'ning o'zi. */
+type WebauthnVerifyData = AuthResponse & { mustChangePassword?: boolean };
+/** Umumiy `{ success, message, code }` qaytaruvchi webauthn natijasi. */
+export interface WebauthnResult {
+  success: boolean;
+  message?: string;
+  code?: string;
+}
+
+export async function passwordlessLogin(email: string): Promise<WebauthnResult> {
+  const { data } = await api.post<{ success: boolean; data: { options: PublicKeyCredentialRequestOptionsJSON; userId: string } }>(
+    '/api/webauthn/auth/options',
+    { email }
+  );
   const assertion = await startAuthentication({ optionsJSON: data.data.options });
-  const verifyRes = await api.post<
-    { success: boolean; data: { user: any; accessToken: string; refreshToken: string }; message?: string; code?: string }
-  >('/api/webauthn/auth/verify', { response: assertion, userId: data.data.userId });
+  const verifyRes = await api.post<{
+    success: boolean;
+    data: { user: User; accessToken: string; refreshToken: string };
+    message?: string;
+    code?: string;
+  }>('/api/webauthn/auth/verify', { response: assertion, userId: data.data.userId });
   if (verifyRes.data?.data?.accessToken) {
-    useAuthStore.getState().setAuth(verifyRes.data.data);
+    useAuthStore.getState().setAuth(verifyRes.data.data as WebauthnVerifyData);
   }
   return { success: true, code: verifyRes.data?.code, message: verifyRes.data?.message };
 }
@@ -135,20 +161,23 @@ export async function passwordlessLogin(email: string): Promise<{ success: boole
 // brauzer shu domen uchun saqlangan passkeylarni o'zi ko'rsatadi. Foydalanuvchi
 // Face ID / Touch ID / Windows Hello bilan tasdiqlaydi — email kiritilmaydi.
 // Xavfsizlik: foydalanuvchi credential orqali kriptografik imzo bilan aniqlanadi.
-export async function biometricLogin(): Promise<{ success: boolean; message?: string; code?: string }> {
+export async function biometricLogin(): Promise<WebauthnResult> {
   if (!window.PublicKeyCredential) {
     return { success: false, message: 'Bu brauzer WebAuthnni qo\'llamaydi' };
   }
-  const { data } = await api.post<{ success: boolean; data: { options: any; discoverable: boolean } }>(
+  const { data } = await api.post<{ success: boolean; data: { options: PublicKeyCredentialRequestOptionsJSON; discoverable: boolean } }>(
     '/api/webauthn/auth/options',
     {}
   );
   const assertion = await startAuthentication({ optionsJSON: data.data.options });
-  const verifyRes = await api.post<
-    { success: boolean; data: { user: any; accessToken: string; refreshToken: string }; message?: string; code?: string }
-  >('/api/webauthn/auth/verify', { response: assertion });
+  const verifyRes = await api.post<{
+    success: boolean;
+    data: { user: User; accessToken: string; refreshToken: string };
+    message?: string;
+    code?: string;
+  }>('/api/webauthn/auth/verify', { response: assertion });
   if (verifyRes.data?.data?.accessToken) {
-    useAuthStore.getState().setAuth(verifyRes.data.data);
+    useAuthStore.getState().setAuth(verifyRes.data.data as WebauthnVerifyData);
   }
   return { success: true, code: verifyRes.data?.code, message: verifyRes.data?.message };
 }
@@ -158,21 +187,24 @@ export async function biometricLogin(): Promise<{ success: boolean; message?: st
 export async function finishPasskeyLogin(
   email: string,
   pendingLoginToken: string
-): Promise<{ success: boolean; message?: string; code?: string }> {
-  const { data } = await api.post<{ success: boolean; data: { options: any; userId: string } }>(
+): Promise<WebauthnResult> {
+  const { data } = await api.post<{ success: boolean; data: { options: PublicKeyCredentialRequestOptionsJSON; userId: string } }>(
     '/api/webauthn/auth/options',
     { email }
   );
   const assertion = await startAuthentication({ optionsJSON: data.data.options });
-  const verifyRes = await api.post<
-    { success: boolean; data: { user: any; accessToken: string; refreshToken: string; mustChangePassword?: boolean }; message?: string; code?: string }
-  >('/api/webauthn/auth/verify', {
+  const verifyRes = await api.post<{
+    success: boolean;
+    data: { user: User; accessToken: string; refreshToken: string; mustChangePassword?: boolean };
+    message?: string;
+    code?: string;
+  }>('/api/webauthn/auth/verify', {
     response: assertion,
     userId: data.data.userId,
     pendingLoginToken,
   });
   if (verifyRes.data?.data?.accessToken) {
-    useAuthStore.getState().setAuth(verifyRes.data.data);
+    useAuthStore.getState().setAuth(verifyRes.data.data as WebauthnVerifyData);
   }
   return {
     success: !!verifyRes.data?.data?.accessToken,

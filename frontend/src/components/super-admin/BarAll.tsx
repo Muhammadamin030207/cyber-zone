@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Coffee, Plus, Trash2, Loader2, Save, Check, Pencil, X, Timer, ChefHat, PackageCheck, Truck, Monitor, ShoppingCart,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { confirmDialog } from '@/lib/confirm';
 import { formatPrice, formatDateTime, cn } from '@/lib/utils';
@@ -30,7 +31,7 @@ interface Order {
   user?: { fullName: string; phone?: string | null };
 }
 
-const STATUS_META: Record<string, { label: string; color: string; icon: any }> = {
+const STATUS_META: Record<string, { label: string; color: string; icon: LucideIcon }> = {
   PENDING: { label: 'Kutilmoqda', color: 'bg-yellow-500/15 text-yellow-400', icon: Timer },
   PREPARING: { label: 'Tayyorlanmoqda', color: 'bg-neon-cyan/15 text-neon-cyan', icon: ChefHat },
   READY: { label: 'Tayyor', color: 'bg-neon-green/15 text-neon-green', icon: PackageCheck },
@@ -161,7 +162,7 @@ export default function BarAll() {
                       </span>
                     </div>
                     <div className="space-y-0.5 text-sm text-gray-300">
-                      {(o.items as any[]).map((l, i) => (
+                      {o.items.map((l, i) => (
                         <div key={i} className="flex justify-between">
                           <span className="truncate">{l.name} × {l.qty}</span>
                           <span className="text-gray-400 shrink-0">{formatPrice(l.price * l.qty)}</span>

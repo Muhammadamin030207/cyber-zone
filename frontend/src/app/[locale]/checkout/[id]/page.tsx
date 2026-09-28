@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
-import type { Booking, BookingStatus } from '@/lib/types';
+import type { Booking, BookingStatus, Payment } from '@/lib/types';
 import { formatPrice, formatDate, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
 import TicketQR from '@/components/booking/TicketQR';
@@ -140,7 +140,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
       api
         .get(`/api/payments/${id}`)
         .then(({ data }) => {
-          const active = (data.data?.payments as any[] | undefined)
+          const active = (data.data?.payments as Payment[] | undefined)
             ?.find((p) => ['CREATED', 'REDIRECT_REQUIRED', 'PROCESSING'].includes(p.status));
           if (active && !cancelled) setVerifyPayment({ id: active.id });
         })

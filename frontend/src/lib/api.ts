@@ -15,7 +15,7 @@ const api = axios.create({
  *
  * Ortiqcha qatlam: `fallback` — chaqiruvchi nuqta uchun maxsus matn.
  */
-export function getApiErrorMessage(err: any, fallback = 'Xatolik yuz berdi') {
+export function getApiErrorMessage(err: unknown, fallback = 'Xatolik yuz berdi') {
   return humanizeApiError(err) ?? fallback;
 }
 

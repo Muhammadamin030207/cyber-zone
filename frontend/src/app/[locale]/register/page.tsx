@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { UserPlus, Mail, Lock, User as UserIcon, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
+import { getApiErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import PhoneInput, { phoneToDigits, isValidUzbekPhone } from '@/components/auth/PhoneInput';
 import GoogleButton from '@/components/auth/GoogleButton';
@@ -111,8 +112,8 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
       }
       router.push('/dashboard');
       router.refresh();
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Ro\u2019yxatdan o\u2019tishda xatolik");
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Ro\u2019yxatdan o\u2019tishda xatolik"));
     } finally {
       setSubmitting(false);
     }

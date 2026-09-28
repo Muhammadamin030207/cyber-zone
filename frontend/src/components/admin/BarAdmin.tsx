@@ -119,7 +119,7 @@ export default function BarAdmin() {
         {([['orders', `Buyurtmalar (${pending.length})`, ShoppingCart], ['menu', 'Menyu', Coffee]] as const).map(([k, label, Icon]) => (
           <button
             key={k}
-            onClick={() => setTab(k as any)}
+            onClick={() => setTab(k)}
             className={cn(
               'flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors',
               tab === k ? 'border-amber-400/40 bg-amber-400/10 text-amber-300' : 'border-neon-cyan/10 text-gray-400 hover:text-neon-cyan'
@@ -153,7 +153,7 @@ export default function BarAdmin() {
                   </div>
 
                   <div className="space-y-0.5 text-sm text-gray-300">
-                    {(o.items as any[]).map((l, i) => (
+                    {o.items.map((l, i) => (
                       <div key={i} className="flex justify-between">
                         <span>{l.name} × {l.qty}</span>
                         <span className="text-gray-400">{formatPrice(l.price * l.qty)}</span>

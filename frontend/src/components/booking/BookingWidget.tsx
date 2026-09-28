@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
-import type { Room, AvailabilityZone } from '@/lib/types';
+import type { Room, AvailabilityZone, CreateBookingPayload } from '@/lib/types';
 import { formatPrice, formatDate, toNumber, cn, todayISO, businessNowHHMM } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
 import SeatMap, { type SeatInfo } from './SeatMap';
@@ -240,7 +240,7 @@ async function submit() {
     setSubmitting(true);
     setError(null);
     try {
-      const payload: Record<string, any> = {
+      const payload: CreateBookingPayload = {
         roomId: room.id,
         zoneId,
         date,
@@ -258,8 +258,8 @@ async function submit() {
       const bookingId = data.data?.id;
       router.push(bookingId ? `/checkout/${bookingId}` : '/dashboard');
       setSuccess(true);
-    } catch (err: any) {
-      const code = err?.response?.data?.code as string | undefined;
+    } catch (err) {
+      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
       const msg = getApiErrorMessage(err, t('notAvailable'));
       if (code === 'BOOKING_TIME_ALREADY_RESERVED') {
         setError('Tanlangan vaqt band. Boshqa vaqt yoki kompyuterni tanlang.');

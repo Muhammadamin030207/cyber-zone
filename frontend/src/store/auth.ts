@@ -15,6 +15,20 @@ export interface LoginResult {
   mustChangePassword?: boolean;
 }
 
+/** Google'dan keladigan, hali ro'yxatdan o'tmagan profil (register sahifasi uchun). */
+export interface GooglePendingProfile {
+  fullName: string;
+  email: string;
+  avatarUrl: string | null;
+  phone: string | null;
+}
+
+export interface GoogleLoginResult {
+  data?: {
+    data?: { pendingRegister?: boolean; profile?: GooglePendingProfile; user?: User };
+  };
+}
+
 interface AuthState {
   user: User | null;
   token: string | null;
@@ -22,7 +36,7 @@ interface AuthState {
   initialized: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<LoginResult>;
-  googleLogin: (idToken: string) => Promise<{ data?: { data?: { pendingRegister?: boolean; profile?: any; user?: User } } } | undefined>;
+  googleLogin: (idToken: string) => Promise<GoogleLoginResult | undefined>;
   register: (data: { email: string; password?: string; fullName: string; phone?: string; language?: string; googleToken?: string }) => Promise<void>;
   logout: () => Promise<void>;
   setAuth: (auth: AuthResponse) => void;
@@ -137,7 +151,7 @@ export const useAuthStore = create<AuthState>()(
       googleLogin: async (idToken) => {
         set({ loading: true, error: null });
         try {
-          const res = await api.post<{ success: boolean; data: AuthResponse & { pendingRegister?: boolean; profile?: any } }>('/api/auth/login/google', {
+          const res = await api.post<{ success: boolean; data: AuthResponse & { pendingRegister?: boolean; profile?: GooglePendingProfile } }>('/api/auth/login/google', {
             token: idToken,
           });
           if (res.data?.data?.pendingRegister) return res;

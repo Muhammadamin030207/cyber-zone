@@ -1,12 +1,13 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import type { ComputerSpecs } from '@/lib/types';
 import { Monitor, Armchair } from 'lucide-react';
 
 export interface SeatInfo {
   id: string;
   name: string;
-  specs: Record<string, any>;
+  specs: ComputerSpecs;
   status: 'AVAILABLE' | 'OCCUPIED' | 'MAINTENANCE' | 'BROKEN';
   canBook: boolean;
 }

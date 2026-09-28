@@ -22,11 +22,23 @@ export interface AuthResponse {
   refreshToken: string;
 }
 
+/**
+ * Kompyuter xususiyatlari. Backend JSON maydoni — qiymatlar string
+ * (masalan `"RTX 4070"`), lekin kelajakda son/boolean ham bo'lishi mumkin,
+ * shuning uchun `unknown` indekslash qo'yiladi.
+ */
+export interface ComputerSpecs {
+  cpu?: string | null;
+  gpu?: string | null;
+  ram?: string | null;
+  [key: string]: unknown;
+}
+
 export interface Computer {
   id: string;
   zoneId: string;
   name: string;
-  specs: Record<string, any>;
+  specs: ComputerSpecs;
   status: 'AVAILABLE' | 'OCCUPIED' | 'MAINTENANCE' | 'BROKEN';
 }
 
@@ -149,15 +161,37 @@ export interface Booking {
   promoCode?: Pick<PromoCode, 'id' | 'code' | 'discountType' | 'discountValue'>;
   user?: Pick<User, 'id' | 'fullName' | 'email' | 'phone'>;
   payments?: Payment[];
-  evidences?: Array<{
-    id: string;
-    fileUrl: string;
-    fileName: string;
-    mimeType: string;
-    status: 'SUBMITTED' | 'APPROVED' | 'REJECTED';
-    reviewNote?: string | null;
-    createdAt: string;
-  }>;
+  evidences?: PaymentEvidence[];
+}
+
+export interface PaymentEvidence {
+  id: string;
+  paymentId: string;
+  bookingId?: string;
+  fileUrl: string;
+  fileName: string;
+  mimeType: string;
+  status: 'SUBMITTED' | 'APPROVED' | 'REJECTED';
+  reviewNote?: string | null;
+  createdAt: string;
+}
+
+/**
+ * `POST /api/bookings` so'rovi. `idempotencyKey` — takroriy bosishda
+ * bir xil bronni qaytarish uchun (backend `Booking.idempotencyKey`).
+ */
+export interface CreateBookingPayload {
+  roomId: string;
+  zoneId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  durationHours: number;
+  idempotencyKey: string;
+  computerId?: string;
+  promoCode?: string;
+  usePoints?: boolean;
+  notes?: string;
 }
 
 export interface BookingSessionState {
@@ -205,7 +239,23 @@ export interface Payment {
   proofSubmittedAt?: string | null;
   // Kassada to'lash tasdig'i
   settledAt?: string | null;
+  createdAt?: string;
   metadata?: Record<string, unknown> | null;
+  /** `GET /api/payments` (SUPER_ADMIN) ro'yxatida qo'sshiladi. */
+  user?: Pick<User, 'id' | 'fullName' | 'email'> | null;
+  booking?: {
+    id: string;
+    finalPrice: number | string;
+    status: BookingStatus;
+    room?: { name: string } | null;
+  } | null;
+}
+
+/** `GET /api/payments` (SUPER_ADMIN) javobi. */
+export interface PaymentsListResponse {
+  payments: Payment[];
+  total: number;
+  revenue: number | string;
 }
 
 export interface AvailabilityZone {
@@ -237,4 +287,28 @@ export interface NewsItem {
   publishedAt: string;
   room?: Pick<Room, 'id' | 'name'>;
   author?: Pick<User, 'id' | 'fullName'>;
+}
+
+export type BarOrderStatus = 'PENDING' | 'PREPARING' | 'READY' | 'DELIVERED' | 'CANCELLED';
+
+export interface BarOrderItem {
+  itemId: string;
+  name: string;
+  price: number;
+  qty: number;
+}
+
+export interface BarOrder {
+  id: string;
+  roomId: string;
+  room?: { id: string; name: string } | null;
+  userId?: string;
+  user?: { id?: string; fullName: string; phone?: string | null } | null;
+  seatNumber?: string | null;
+  bookingId?: string | null;
+  booking?: { date: string; startTime: string } | null;
+  items: BarOrderItem[];
+  totalPrice: number | string;
+  status: BarOrderStatus;
+  createdAt: string;
 }

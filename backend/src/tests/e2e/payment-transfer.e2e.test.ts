@@ -76,7 +76,7 @@ describe("E2E: Qo'lda o'tkazma to'lov (karta oxirgi 4 + chek) + kassa", () => {
   });
 
   it('GET /merchant-card — authenticated foydalanuvchiga karta ko\'rinadi', async () => {
-    for (const [key, value] of [['payment_card_holder', 'CYBER ZONE MChJ'], ['payment_card_bank', 'Kapitalbank']] as const) {
+    for (const [key, value] of [['payment_card_holder', 'CYBER ZONE MChJ'], ['payment_card_bank', 'TESTBANK']] as const) {
       await prisma.siteSetting.upsert({ where: { key }, update: { value }, create: { key, value } });
     }
 

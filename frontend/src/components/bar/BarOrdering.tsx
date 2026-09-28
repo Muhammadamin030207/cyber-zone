@@ -9,6 +9,7 @@ import {
 import api, { getApiErrorMessage } from '@/lib/api';
 import { formatPrice, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
+import type { BarOrder } from '@/lib/types';
 
 export interface BarItem {
   id: string;
@@ -43,7 +44,7 @@ export default function BarOrdering({ roomId }: { roomId: string }) {
   const [placing, setPlacing] = useState(false);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
-  const [myOrders, setMyOrders] = useState<any[]>([]);
+  const [myOrders, setMyOrders] = useState<BarOrder[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,8 +59,10 @@ export default function BarOrdering({ roomId }: { roomId: string }) {
 
   useEffect(() => {
     if (user) {
-      api.get('/api/bar/orders/my').then(({ data }) => {
-        const mine = (data.data || []).filter((o: any) => o.roomId === roomId && ['PENDING', 'PREPARING', 'READY'].includes(o.status));
+      api.get<{ data: BarOrder[] }>('/api/bar/orders/my').then(({ data }) => {
+        const mine = (data.data || []).filter(
+          (o) => o.roomId === roomId && ['PENDING', 'PREPARING', 'READY'].includes(o.status)
+        );
         setMyOrders(mine);
       }).catch(() => { /* skip */ });
     }

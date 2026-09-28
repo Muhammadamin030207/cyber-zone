@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   MessageSquare, Send, Loader2, Monitor, ShieldCheck, Inbox, MessageCircleDashed, Building2,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import api from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/store/auth';
@@ -296,7 +297,7 @@ function Tabs({ tab, onChange, className }: {
   onChange: (t: 'rooms' | 'admin' | 'superadmin') => void;
   className?: string;
 }) {
-  const opts: { key: 'rooms' | 'admin' | 'superadmin'; icon: any; label: string }[] = [
+  const opts: { key: 'rooms' | 'admin' | 'superadmin'; icon: LucideIcon; label: string }[] = [
     { key: 'rooms', icon: Monitor, label: 'Xonalar' },
     { key: 'admin', icon: Building2, label: 'Admin PM' },
     { key: 'superadmin', icon: ShieldCheck, label: 'Super Admin' },

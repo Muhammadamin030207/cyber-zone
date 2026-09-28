@@ -102,9 +102,11 @@ export function zoneTypeLabel(type: string): string {
   return map[type] || type;
 }
 
-export function toNumber(v: any): number {
+export function toNumber(v: unknown): number {
   if (typeof v === 'string') return parseFloat(v);
-  if (typeof v === 'object' && v !== null && 'toString' in v) return Number(v.toString());
+  // Prisma `Decimal` va boshqa value ob'ektlari: `String()` ularning
+  // `toString()`'ini chaqiradi ("15000.00" -> 15000).
+  if (typeof v === 'object' && v !== null) return Number(String(v));
   return Number(v || 0);
 }
 

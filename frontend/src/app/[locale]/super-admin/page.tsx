@@ -12,7 +12,7 @@ import {
 import api, { getApiErrorMessage } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/toast';
 import { confirmDialog } from '@/lib/confirm';
-import type { User, Room } from '@/lib/types';
+import type { User, Room, Payment, PaymentsListResponse } from '@/lib/types';
 import { formatPrice, formatDate, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
 import { TASHKENT_DISTRICTS } from '@/lib/constants';
@@ -86,14 +86,26 @@ export default function SuperAdminPage({ params }: { params: Promise<{ locale: s
 }
 
 /* ====================== OVERVIEW ====================== */
+/** `GET /api/users/stats` javobi (backend `getSuperAdminStats`). */
+interface SuperAdminStats {
+  totalUsers: number;
+  totalAdmins: number;
+  totalRooms: number;
+  totalBookings: number;
+  totalRevenue: number | string;
+  activeBookings: number;
+  recentRooms: Room[];
+  districtStats: Array<{ district: string; bookings: number; revenue: number }>;
+}
+
 function OverviewTab() {
   const t = useTranslations('superAdmin');
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<SuperAdminStats | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get('/api/users/stats')
+    api.get<{ data: SuperAdminStats }>('/api/users/stats')
       .then(({ data }) => setStats(data.data))
       .catch(() => { /* skip */ })
       .finally(() => setLoading(false));
@@ -143,7 +155,7 @@ function OverviewTab() {
       <h3 className="font-bold text-lg mb-3">{t('recentRooms')}</h3>
       <div className="neo-card rounded-2xl divide-y divide-neon-cyan/10">
         {stats.recentRooms?.length === 0 && <p className="text-sm text-gray-500 p-6 text-center">{t('noRooms')}</p>}
-        {stats.recentRooms?.map((r: any) => (
+        {stats.recentRooms?.map((r) => (
           <div key={r.id} className="flex items-center justify-between px-5 py-3">
             <div>
               <span className="font-medium">{r.name}</span>
@@ -166,8 +178,8 @@ function OverviewTab() {
         </p>
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
-          {stats.districtStats.map((d: any) => {
-            const max = Math.max(...stats.districtStats.map((x: any) => x.revenue), 1);
+          {stats.districtStats.map((d) => {
+            const max = Math.max(...stats.districtStats.map((x) => x.revenue), 1);
             const pct = Math.max(4, Math.round((d.revenue / max) * 100));
             return (
               <div key={d.district} className="neo-card rounded-2xl p-4">
@@ -688,7 +700,7 @@ async function remove(room: Room) {
 
 /* ====================== PAYMENTS ====================== */
 function PaymentsTab() {
-  const [payments, setPayments] = useState<Array<any> | null>(null);
+  const [payments, setPayments] = useState<Payment[] | null>(null);
   const [total, setTotal] = useState(0);
   const [revenue, setRevenue] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -698,10 +710,10 @@ function PaymentsTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/api/payments?limit=100');
+      const { data } = await api.get<{ data: PaymentsListResponse }>('/api/payments?limit=100');
       setPayments(data.data?.payments || []);
       setTotal(data.data?.total || 0);
-      setRevenue(data.data?.revenue || 0);
+      setRevenue(Number(data.data?.revenue) || 0);
     } catch { /* skip */ }
     setLoading(false);
   }, []);

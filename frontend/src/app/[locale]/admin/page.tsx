@@ -9,11 +9,12 @@ import {
   Plus, Pencil, Trash2, Loader2, AlertCircle, Check, ShieldCheck, Users, Zap,
   Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy, MessagesSquare, Info, Banknote, UserX,
   } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/toast';
 import { confirmDialog, promptDialog } from '@/lib/confirm';
 import { getSocket } from '@/lib/socket';
-import type { Room, Zone, Computer, Booking, PromoCode, NewsItem } from '@/lib/types';
+import type { Room, Zone, Computer, Booking, PromoCode, NewsItem, ComputerSpecs } from '@/lib/types';
 import { formatPrice, formatDate, formatDateTime, todayISO, zoneTypeLabel, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
 import BarAdmin from '@/components/admin/BarAdmin';
@@ -27,7 +28,7 @@ const MapPicker = dynamic(() => import('@/components/rooms/MapPicker'), { ssr: f
 
 type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'till' | 'bar' | 'chat' | 'requests' | 'support' | 'promos' | 'news' | 'stats' | 'site';
 
-const TABS: { key: Tab; icon: any; label: string }[] = [
+const TABS: { key: Tab; icon: LucideIcon; label: string }[] = [
   { key: 'room', icon: Settings, label: 'Xona' },
   { key: 'zones', icon: Users, label: 'Zonalar' },
   { key: 'computers', icon: Monitor, label: 'Kompyuterlar' },
@@ -385,7 +386,7 @@ function ComputersTab({ room }: { room: Room }) {
   const [selectedZoneId, setSelectedZoneId] = useState('');
   const [computers, setComputers] = useState<Computer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ name: '', cpu: '', gpu: '', ram: '', status: 'AVAILABLE' });
+  const [form, setForm] = useState<{ name: string; cpu: string; gpu: string; ram: string; status: Computer['status'] }>({ name: '', cpu: '', gpu: '', ram: '', status: 'AVAILABLE' });
   const [editId, setEditId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -406,7 +407,11 @@ function ComputersTab({ room }: { room: Room }) {
   async function save() {
     setSaving(true);
     try {
-      const payload: any = { name: form.name, specs: { cpu: form.cpu, gpu: form.gpu, ram: form.ram }, status: form.status };
+      const payload: { name: string; specs: ComputerSpecs; status: Computer['status'] } = {
+        name: form.name,
+        specs: { cpu: form.cpu, gpu: form.gpu, ram: form.ram },
+        status: form.status,
+      };
       if (editId) {
         await api.put(`/api/rooms/${room.id}/zones/${selectedZoneId}/computers/${editId}`, payload);
       } else {
@@ -498,12 +503,13 @@ function ComputersTab({ room }: { room: Room }) {
 /* ====================== BOOKINGS TAB ====================== */
 type BookingsError = { kind: 'unauthorized' | 'server' | 'network' | 'unknown'; message: string };
 
-function classifyBookingsError(err: any): BookingsError {
-  const status = err?.response?.status;
+function classifyBookingsError(err: unknown): BookingsError {
+  const e = err as { response?: { status?: number }; request?: unknown } | null;
+  const status = e?.response?.status;
   if (status === 401) return { kind: 'unauthorized', message: 'Ruxsat muddati tugagan. Qaytadan kirib ko\'ring.' };
   if (status === 403) return { kind: 'unauthorized', message: 'Sizga bu bo\'limga ruxsat berilmagan.' };
   if (status && status >= 500) return { kind: 'server', message: 'Serverda xatolik yuz berdi. Qayta urinib ko\'ring.' };
-  if (!err?.response && err?.request) return { kind: 'network', message: 'Internet aloqasi yo\'q. Tarmoqqa ulanganligingizni tekshiring.' };
+  if (!e?.response && e?.request) return { kind: 'network', message: 'Internet aloqasi yo\'q. Tarmoqqa ulanganligingizni tekshiring.' };
   return { kind: 'unknown', message: getApiErrorMessage(err, 'Bronlarni yuklashda xatolik yuz berdi') };
 }
 
@@ -618,7 +624,7 @@ function BookingsTab({ room }: { room?: Room | null }) {
     (p) => p.method === 'TRANSFER' && p.proofSubmittedAt && !PAID_STATUSES.has(p.status),
   );
   const evidenceOf = (b: Booking, paymentId: string) =>
-    (Array.isArray(b.evidences) ? b.evidences : []).filter((e: any) => e.paymentId === paymentId);
+    (Array.isArray(b.evidences) ? b.evidences : []).filter((e) => e.paymentId === paymentId);
 
   // To'lovni PAID qilish — faqat CASH/TRANSFER uchun (backend ham shuni tekshiradi)
   async function confirmPayment(paymentId: string) {
@@ -806,7 +812,7 @@ function BookingsTab({ room }: { room?: Room | null }) {
                       </p>
                       {evs.length > 0 && (
                         <div className="flex flex-wrap gap-1.5">
-                          {evs.map((e: any, i: number) => (
+                          {evs.map((e, i) => (
                             <a key={e.id} href={e.fileUrl} target="_blank" rel="noreferrer"
                               className="text-[10px] px-2 py-1 rounded border border-cyber-600 text-gray-300">Chek {i + 1} ↗</a>
                           ))}
@@ -988,10 +994,27 @@ function BookingsTab({ room }: { room?: Room | null }) {
 }
 
 /* ====================== PROMOS TAB ====================== */
+/** `POST`/`PATCH /api/promo` tanasi. */
+interface PromoPayload {
+  code: string;
+  discountType: PromoCode['discountType'];
+  discountValue: number;
+  minBookingAmount: number;
+  maxUses: number;
+  startsAt: string;
+  expiresAt: string;
+  usageLimitPerUser: number;
+  isPersonal?: boolean;
+  recipientPhone?: string;
+  recipientEmail?: string;
+}
+
 function PromosTab({ room }: { room: Room }) {
   const [promos, setPromos] = useState<PromoCode[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ code: '', discountType: 'PERCENTAGE', discountValue: 10, minBookingAmount: 0, maxUses: 100, startsAt: todayISO(), expiresAt: '', usageLimitPerUser: 1, isPersonal: false, recipientPhone: '', recipientEmail: '' });
+  const [form, setForm] = useState<{ code: string; discountType: PromoCode['discountType']; discountValue: number; minBookingAmount: number; maxUses: number; startsAt: string; expiresAt: string; usageLimitPerUser: number; isPersonal: boolean; recipientPhone: string; recipientEmail: string }>(
+    { code: '', discountType: 'PERCENTAGE', discountValue: 10, minBookingAmount: 0, maxUses: 100, startsAt: todayISO(), expiresAt: '', usageLimitPerUser: 1, isPersonal: false, recipientPhone: '', recipientEmail: '' }
+  );
   const [editId, setEditId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -1006,7 +1029,7 @@ function PromosTab({ room }: { room: Room }) {
   async function save() {
     setSaving(true);
     try {
-      const payload: any = {
+      const payload: PromoPayload = {
         code: form.code.toUpperCase(), discountType: form.discountType,
         discountValue: Number(form.discountValue), minBookingAmount: Number(form.minBookingAmount),
         maxUses: Number(form.maxUses), startsAt: form.startsAt, expiresAt: form.expiresAt,
@@ -1045,7 +1068,7 @@ function PromosTab({ room }: { room: Room }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Turi</label>
-              <select value={form.discountType} onChange={(e) => setForm((f) => ({ ...f, discountType: e.target.value }))} className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none">
+              <select value={form.discountType} onChange={(e) => setForm((f) => ({ ...f, discountType: e.target.value as PromoCode['discountType'] }))} className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none">
                 <option value="PERCENTAGE">Foiz (%)</option>
                 <option value="FIXED">Aniq (so'm)</option>
               </select>
@@ -1102,7 +1125,7 @@ function PromosTab({ room }: { room: Room }) {
                   {p.usageLimitPerUser !== undefined && p.usageLimitPerUser !== 1 && (
                     <span className="text-[10px] text-gray-500 ml-2">1 user: {p.usageLimitPerUser}×</span>
                   )}
-                  {(p as any).isPersonal && (
+                  {p.isPersonal && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-neon-green/15 text-neon-green border border-neon-green/25 ml-2 uppercase tracking-wider">Shaxsiy</span>
                   )}
                 </div>
@@ -1120,10 +1143,21 @@ function PromosTab({ room }: { room: Room }) {
 }
 
 /* ====================== NEWS TAB ====================== */
+/** `POST`/`PUT /api/news` tanasi. */
+interface NewsPayload {
+  title: string;
+  content: string;
+  type: NewsItem['type'];
+  imageUrl?: string;
+  roomId: string | null;
+}
+
 function NewsTab({ room }: { room: Room | null }) {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ title: '', content: '', type: 'NEWS' as const, imageUrl: '' });
+  const [form, setForm] = useState<{ title: string; content: string; type: NewsItem['type']; imageUrl: string }>(
+    { title: '', content: '', type: 'NEWS', imageUrl: '' }
+  );
   const [editId, setEditId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -1138,7 +1172,7 @@ function NewsTab({ room }: { room: Room | null }) {
   async function save() {
     setSaving(true);
     try {
-      const payload: any = { ...form, roomId: room?.id || null, imageUrl: form.imageUrl || undefined };
+      const payload: NewsPayload = { ...form, roomId: room?.id || null, imageUrl: form.imageUrl || undefined };
       if (editId) { await api.put(`/api/news/${editId}`, payload); }
       else { await api.post('/api/news', payload); }
       setForm({ title: '', content: '', type: 'NEWS', imageUrl: '' });
@@ -1150,7 +1184,7 @@ function NewsTab({ room }: { room: Room | null }) {
 
   function edit(n: NewsItem) {
     setEditId(n.id);
-    setForm({ title: n.title, content: n.content, type: n.type as any, imageUrl: n.imageUrl || '' });
+    setForm({ title: n.title, content: n.content, type: n.type, imageUrl: n.imageUrl || '' });
   }
 
   async function remove(id: string) {
@@ -1171,7 +1205,7 @@ function NewsTab({ room }: { room: Room | null }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Turi</label>
-              <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as any }))} className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none">
+              <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as NewsItem['type'] }))} className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none">
                 <option value="NEWS">Yangilik</option>
                 <option value="PROMOTION">Aktsiya</option>
                 <option value="BANNER">Reklama</option>
@@ -1214,12 +1248,23 @@ function NewsTab({ room }: { room: Room | null }) {
 }
 
 /* ====================== STATS TAB ====================== */
+/* ====================== STATS TAB ====================== */
+/** `GET /api/rooms/:id/stats` javobi (backend `getRoomStats`). */
+interface RoomStats {
+  totalBookings: number;
+  activeBookings: number;
+  completedBookings: number;
+  revenue: number | string;
+  zoneCount: number;
+  computerCount: number;
+}
+
 function StatsTab({ room }: { room: Room }) {
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<RoomStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get(`/api/rooms/${room.id}/stats`).then(({ data }) => setStats(data.data)).finally(() => setLoading(false));
+    api.get<{ data: RoomStats }>(`/api/rooms/${room.id}/stats`).then(({ data }) => setStats(data.data)).finally(() => setLoading(false));
   }, [room.id]);
 
   if (loading) return <div className="neo-card rounded-2xl h-64 animate-pulse" />;
@@ -1227,10 +1272,10 @@ function StatsTab({ room }: { room: Room }) {
 
   const cards = [
     { icon: CalendarDays, label: 'Jami bronlar', value: stats.totalBookings ?? 0, color: 'text-neon-cyan' },
-    { icon: CircleDollarSign, label: 'Jami tushum', value: `${formatPrice(stats.totalRevenue ?? 0)} so'm`, color: 'text-neon-green' },
-    { icon: TrendingUp, label: 'O\'rtacha narx', value: `${formatPrice(stats.avgBookingPrice ?? 0)} so'm`, color: 'text-neon-magenta' },
-    { icon: Users, label: 'Zonalar', value: stats.totalZones ?? room._count?.zones ?? 0, color: 'text-neon-purple' },
-    { icon: Monitor, label: 'Kompyuterlar', value: stats.totalComputers ?? 0, color: 'text-yellow-400' },
+    { icon: CircleDollarSign, label: 'Jami tushum', value: `${formatPrice(stats.revenue ?? 0)} so'm`, color: 'text-neon-green' },
+    { icon: TrendingUp, label: 'Tugagan bronlar', value: stats.completedBookings ?? 0, color: 'text-neon-magenta' },
+    { icon: Users, label: 'Zonalar', value: stats.zoneCount ?? room._count?.zones ?? 0, color: 'text-neon-purple' },
+    { icon: Monitor, label: 'Kompyuterlar', value: stats.computerCount ?? 0, color: 'text-yellow-400' },
     { icon: Zap, label: 'Aktiv bronlar', value: stats.activeBookings ?? 0, color: 'text-neon-green' },
   ];
 
