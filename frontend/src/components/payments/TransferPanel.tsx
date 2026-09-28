@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Copy, CreditCard, ImagePlus, Loader2, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { toastError, toastInfo, toastSuccess } from '@/lib/toast';
-import { cn } from '@/lib/utils';
+import { cn, formatPrice } from '@/lib/utils';
 
 export interface MerchantCard {
   number: string;
@@ -18,6 +18,9 @@ const MAX_RECEIPTS = 3;
 const MAX_MB = 8;
 
 type Phase = 'idle' | 'submitting' | 'submitted';
+
+/** Tanlangan chek + uning ko'rish uchun yaratilgan object URL. */
+type Picked = { file: File; url: string };
 
 /**
  * Qo'lda o'tkazma (karta -> bank) oqimi.
@@ -42,18 +45,26 @@ export default function TransferPanel({
   const [phase, setPhase] = useState<Phase>(alreadySubmitted ? 'submitted' : 'idle');
   const [last4, setLast4] = useState('');
   const [holder, setHolder] = useState('');
-  const [files, setFiles] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<string[]>([]);
+  const [picked, setPicked] = useState<Picked[]>([]);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const pickedRef = useRef<Picked[]>([]);
+  const files = picked.map((p) => p.file);
 
-  // object URL'arni tozalash (memory leak bo'lmasin)
+  // object URL'lar fayl tanlanganda YARATILADI (render'da emas — render toza
+  // bo'lishi shart) va o'chirilganda darhol bekor qilinadi. Sahifa yopilganda
+  // qolganlari tozalanadi (memory leak bo'lmasin).
   useEffect(() => {
-    const urls = files.map((f) => URL.createObjectURL(f));
-    setPreviews(urls);
-    return () => urls.forEach((u) => URL.revokeObjectURL(u));
-  }, [files]);
+    pickedRef.current = picked;
+  }, [picked]);
+
+  useEffect(
+    () => () => {
+      pickedRef.current.forEach((p) => URL.revokeObjectURL(p.url));
+    },
+    []
+  );
 
   async function copyNumber() {
     if (!merchantCard?.number) return;
@@ -66,6 +77,12 @@ export default function TransferPanel({
     }
   }
 
+  function removeFile(index: number) {
+    const target = picked[index];
+    if (target) URL.revokeObjectURL(target.url);
+    setPicked((prev) => prev.filter((_, idx) => idx !== index));
+  }
+
   function pickFiles(list: FileList | null) {
     if (!list) return;
     const incoming = Array.from(list).filter((f) => f.type.startsWith('image/') || f.type === 'application/pdf');
@@ -74,13 +91,18 @@ export default function TransferPanel({
       return;
     }
     setError('');
-    setFiles((prev) => {
-      const next = [...prev, ...incoming].slice(0, MAX_RECEIPTS);
-      if (prev.length + incoming.length > MAX_RECEIPTS) {
-        toastInfo(`Ko'pi bilan ${MAX_RECEIPTS} ta chek yuklanadi`);
-      }
-      return next;
-    });
+    const room = MAX_RECEIPTS - picked.length;
+    if (room <= 0) {
+      toastInfo(`Ko'pi bilan ${MAX_RECEIPTS} ta chek yuklanadi`);
+      if (inputRef.current) inputRef.current.value = '';
+      return;
+    }
+    const accepted = incoming.slice(0, room);
+    if (incoming.length > accepted.length) {
+      toastInfo(`Ko'pi bilan ${MAX_RECEIPTS} ta chek yuklanadi`);
+    }
+    const added: Picked[] = accepted.map((file) => ({ file, url: URL.createObjectURL(file) }));
+    setPicked((prev) => [...prev, ...added]);
     if (inputRef.current) inputRef.current.value = '';
   }
 
@@ -157,6 +179,9 @@ export default function TransferPanel({
           <div className="flex items-center justify-between gap-3 mb-3">
             <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
               Pul o'tkazing
+              <span className="ml-2 text-sm font-bold text-neon-cyan normal-case tracking-normal">
+                {formatPrice(amount)}
+              </span>
             </p>
             {merchantCard.bank && (
               <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/15 text-gray-400">
@@ -238,22 +263,22 @@ export default function TransferPanel({
           </span>
 
           <div className="grid grid-cols-3 gap-2">
-            {files.map((f, i) => (
+            {picked.map((p, i) => (
               <div
-                key={`${f.name}-${i}`}
+                key={`${p.file.name}-${i}`}
                 className="relative aspect-[3/4] rounded-xl overflow-hidden border border-white/10 bg-black/30"
               >
-                {previews[i] && f.type.startsWith('image/') ? (
+                {p.url && p.file.type.startsWith('image/') ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={previews[i]} alt={`Chek ${i + 1}`} className="w-full h-full object-cover" />
+                  <img src={p.url} alt={`Chek ${i + 1}`} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full grid place-items-center text-[10px] text-gray-400 px-1 text-center">
-                    {f.name.slice(-12)}
+                    {p.file.name.slice(-12)}
                   </div>
                 )}
                 <button
                   type="button"
-                  onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                  onClick={() => removeFile(i)}
                   className="absolute top-1 right-1 w-6 h-6 grid place-items-center rounded-lg bg-black/75 text-red-400 hover:bg-black"
                   aria-label="O'chirish"
                 >
@@ -262,7 +287,7 @@ export default function TransferPanel({
               </div>
             ))}
 
-            {files.length < MAX_RECEIPTS && (
+            {picked.length < MAX_RECEIPTS && (
               <button
                 type="button"
                 onClick={() => inputRef.current?.click()}

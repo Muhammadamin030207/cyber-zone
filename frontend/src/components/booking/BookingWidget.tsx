@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   CalendarDays, Clock, BadgePercent, Check, Loader2, Ticket, Zap, ShieldCheck,
@@ -8,7 +8,7 @@ import {
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { Room, AvailabilityZone, CreateBookingPayload } from '@/lib/types';
-import { formatPrice, formatDate, toNumber, cn, todayISO, businessNowHHMM } from '@/lib/utils';
+import { formatPrice, formatDate, toNumber, cn, todayISO, businessNowHHMM, newIdempotencyKey } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
 import SeatMap, { type SeatInfo } from './SeatMap';
 
@@ -48,7 +48,6 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
   const [autoPc, setAutoPc] = useState(true);
   const [startTime, setStartTime] = useState('14:00');
   const [endTime, setEndTime] = useState('18:00');
-  const [timeError, setTimeError] = useState<string | null>(null);
   const [promoCode, setPromoCode] = useState('');
   const [promo, setPromo] = useState<PromoCheck | null>(null);
   const [promoApplied, setPromoApplied] = useState(false);
@@ -61,22 +60,16 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
   // §13: moslashuvchan (custom) davomiylik — 0.5 soat qadamida, chips + qo'lda kiritish
   const [customH, setCustomH] = useState('');
 
-  const selectedZone = availability.find((z) => z.id === zoneId) || availability[0];
+  // Tanlangan zona render paytida YECHILADI (effect emas): sana almashsa
+  // eski zona mavjudlik ro'yxatidan "yo'qoladi" va birinchi zona qo'llanadi.
+  // Effect orqali bu holat avval 1 qo'shimcha render kechikardi.
+  const selectedZone = availability.find((z) => z.id === zoneId) || availability[0] || null;
+  const effectiveZoneId = selectedZone?.id ?? '';
 
-  useEffect(() => {
-    if (availability.length && !zoneId) {
-      setZoneId(availability[0].id);
-    }
-  }, [availability, zoneId]);
-
-  // Sana/mavjudlik o'zgarganda eski tanlov yangi sanaga "ko'chib" qolmasligi uchun
-  // tanlangan zona mavjud emas bo'lsa — birinchi zonaga qaytamiz va kompyuterni tozalaymiz.
-  useEffect(() => {
-    if (zoneId && availability.length && !availability.some((z) => z.id === zoneId)) {
-      setZoneId(availability[0].id);
-      setComputerId('');
-    }
-  }, [availability, zoneId]);
+  // Xudsi shunday: zona o'zgarganda `computerId` eskirishi mumkin — u
+  // endi tanlangan zonada mavjud bo'lmasa bo'sh hisoblanadi.
+  const effectiveComputerId =
+    computerId && (selectedZone?.allComputers || []).some((c) => c.id === computerId) ? computerId : '';
 
   const pricePerHour = selectedZone ? toNumber(selectedZone.pricePerHour) : 0;
 
@@ -106,11 +99,11 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
 
   // Tanlangan kompyuter ushbu oynada bo'shmi (manual tanlov uchun)
   const selectedComputerFree = useMemo(() => {
-    if (autoPc || !computerId) return true;
-    const comp = byComputerWindows.find((c) => c.id === computerId);
+    if (autoPc || !effectiveComputerId) return true;
+    const comp = byComputerWindows.find((c) => c.id === effectiveComputerId);
     if (!comp || comp.status !== 'AVAILABLE') return false;
     return comp.windows.some((w) => w.start <= startMin && w.end >= endMin);
-  }, [autoPc, computerId, byComputerWindows, startMin, endMin]);
+  }, [autoPc, effectiveComputerId, byComputerWindows, startMin, endMin]);
 
   // Tanlangan boshlanish vaqtidan maksimal mumkin bo'lgan davomiylik
   const maxDurationHours = useMemo(() => {
@@ -139,19 +132,16 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
     const em = total % 60;
     const next = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
     setEndTime(next);
-    setTimeError(null);
   }
 
   function applyCustomDuration() {
     const h = Number(String(customH).replace(',', '.'));
     if (!Number.isFinite(h) || h <= 0 || h > 24) {
-      setTimeError('Davomiylik 0.5 dan 24 soatgacha bo\u2018lishi kerak.');
       return false;
     }
     const [sh, sm] = startTime.split(':').map(Number);
     const total = sh * 60 + sm + h * 60;
     if (total > 24 * 60) {
-      setTimeError('Bron 24:00 dan oshib ketyapti.');
       return false;
     }
     applyDuration(h);
@@ -214,26 +204,23 @@ async function submit() {
     }
     if (isToday && startInPast) {
       setError('Boshlanish vaqti allaqachon o\u2018tib ketgan. Boshqa vaqtni tanlang.');
-      setTimeError('Hozirgi vaqtdan oldingi vaqtni tanlab bo\u2018lmaydi.');
       return;
     }
-    if (!zoneId || !timeOk) {
+    if (!effectiveZoneId || !timeOk) {
       setError(t('notAvailable'));
-      if (!timeOk) setTimeError('Tugash vaqti boshlanish vaqtidan keyin bo\u2018lishi kerak.');
       return;
     }
     if (durationExceeds) {
       setError(
         `Bu davomiylik uchun vaqt yetarli emas — maksimal ${maxDurationHours.toFixed(maxDurationHours % 1 === 0 ? 0 : 1)} soat. Boshlanish vaqtini yoki davomiylikni kamaytiring.`
       );
-      setTimeError('Tanlangan vaqt ish vaqtidan tashqari yoki band.');
       return;
     }
     if (freeInWindow === 0) {
       setError('Bu vaqt oralig\u2018ida bo\u2018sh kompyuter yo\u2018q. Boshqa vaqtni tanlang.');
       return;
     }
-    if (!autoPc && computerId && !selectedComputerFree) {
+    if (!autoPc && effectiveComputerId && !selectedComputerFree) {
       setError('Tanlangan kompyuter bu vaqtda band. Boshqa kompyuter yoki vaqtni tanlang.');
       return;
     }
@@ -242,15 +229,15 @@ async function submit() {
     try {
       const payload: CreateBookingPayload = {
         roomId: room.id,
-        zoneId,
+        zoneId: effectiveZoneId,
         date,
         startTime,
         endTime,
         durationHours,
         // Ikkinchi marta bosish / refresh takroriy bron yaratmasligi uchun idempotentlik kaliti
-        idempotencyKey: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+        idempotencyKey: newIdempotencyKey('booking'),
       };
-      if (!autoPc && computerId) payload.computerId = computerId;
+      if (!autoPc && effectiveComputerId) payload.computerId = effectiveComputerId;
       if (promoApplied && promoCode) payload.promoCode = promoCode;
       if (usePoints && pointsBalance > 0) payload.usePoints = true;
 
@@ -269,10 +256,8 @@ async function submit() {
         setError('Bu vaqt uchun bo\u2018sh kompyuter qolmadi. Boshqa vaqtni tanlang.');
       } else if (code === 'BOOKING_IN_PAST') {
         setError('Boshlanish vaqti o\u2019tib ketgan. Kelajakdagi vaqtni tanlang.');
-        setTimeError('Hozirgi vaqtdan oldingi vaqtni tanlab bo\u2018lmaydi.');
       } else if (code === 'INVALID_DURATION') {
         setError('Tanlangan davomiylik noto\u2019g\u2019ri. Tugash vaqti boshlanish vaqtidan keyin bo\u2018lishi kerak.');
-        setTimeError('Tugash vaqti boshlanish vaqtidan keyin bo\u2018lishi kerak.');
       } else {
         setError(msg);
       }
@@ -360,7 +345,7 @@ async function submit() {
                   }}
                   className={cn(
                     'w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm transition-colors',
-                    zoneId === z.id
+                    effectiveZoneId === z.id
                       ? 'border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan'
                       : 'border-white/10 surface text-gray-300 hover:border-neon-cyan/40'
                   )}
@@ -418,7 +403,7 @@ async function submit() {
                     canBook: !!freeHere,
                   };
                 })}
-                selectedId={computerId}
+                selectedId={effectiveComputerId}
                 onSelect={(id) => setComputerId(id)}
               />
             )}
@@ -482,7 +467,7 @@ async function submit() {
               <input
                 type="time"
                 value={startTime}
-                onChange={(e) => { setStartTime(e.target.value); setTimeError(null); }}
+                onChange={(e) => setStartTime(e.target.value)}
                 className={`glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none ${!timeOk ? 'border-red-500/50' : ''}`}
               />
             </div>
@@ -493,7 +478,7 @@ async function submit() {
               <input
                 type="time"
                 value={endTime}
-                onChange={(e) => { setEndTime(e.target.value); setTimeError(null); }}
+                onChange={(e) => setEndTime(e.target.value)}
                 className={`glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none ${!timeOk ? 'border-red-500/50' : ''}`}
               />
             </div>
@@ -627,7 +612,7 @@ async function submit() {
         {/* Submit */}
         <button
           onClick={submit}
-          disabled={submitting || availabilityLoading || availability.length === 0 || !timeOk || (isToday && startInPast) || durationExceeds || freeInWindow === 0 || (!autoPc && Boolean(computerId) && !selectedComputerFree)}
+          disabled={submitting || availabilityLoading || availability.length === 0 || !timeOk || (isToday && startInPast) || durationExceeds || freeInWindow === 0 || (!autoPc && Boolean(effectiveComputerId) && !selectedComputerFree)}
           className="w-full py-3.5 rounded-xl neon-btn flex items-center justify-center gap-2 font-bold text-base disabled:opacity-50"
         >
           {submitting || availabilityLoading ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}

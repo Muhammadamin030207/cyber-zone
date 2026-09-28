@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Loader2, CheckCircle2, Wallet, Banknote, AlertCircle,
@@ -9,7 +9,7 @@ import {
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { Booking, BookingStatus, Payment } from '@/lib/types';
-import { formatPrice, formatDate, cn } from '@/lib/utils';
+import { formatPrice, formatDate, cn, newIdempotencyKey } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
 import TicketQR from '@/components/booking/TicketQR';
 import SplashLoader from '@/components/ui/SplashLoader';
@@ -86,8 +86,10 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   const [polling, setPolling] = useState(false);
 
   // Idempotency kaliti: bitta to'lov urinishida barqaror qoladi.
-  // Sahifa yangilanganda yangi kalit yaratiladi (yangi to'lov niyati).
-  const payIdemKey = useRef<string>(`pay_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`);
+  // Render paytida emas, `startPay` ichida birinchi marta yaratiladi —
+  // `Date.now()`/`Math.random()` render'da noto'g'ri (render toza bo'lishi
+  // shart). Sahifa yangilanganda `ref` bo'sh bo'ladi -> yangi kalit.
+  const payIdemKey = useRef<string>('');
 
   // Provayderlar holati (qaysilari ulangan — backend javobi)
   const [providersError, setProvidersError] = useState(false);
@@ -104,8 +106,11 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
       .catch(() => { setProviders([]); setProvidersError(true); });
   }, []);
 
-  // Bronni qayta yuklash (to'lov tasdiqlanganda yoki chek yuborilganda)
-  async function reloadBooking() {
+  // Bronni qayta yuklash (to'lov tasdiqlanganda yoki chek yuborilganda).
+  // `useCallback` — polling effect'ining dependency'siga kirishi uchun
+  // (har render'da yangi funksiya hosil bo'lsa, interval har safar
+  // qayta o'rnatilib ketadi).
+  const reloadBooking = useCallback(async () => {
     try {
       const { data } = await api.get(`/api/bookings/${id}`);
       const b = data.data as Booking;
@@ -114,7 +119,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
     } catch {
       /* tarmoq xatosi — jimgina qoldiramiz */
     }
-  }
+  }, [id]);
 
   // Bronni yuklash + oynada pid/test bo'lsa tasdiqlash jarayonini boshlash
   useEffect(() => {
@@ -198,6 +203,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   // To'lov sessiyasini yaratish (backend summani o'zi hisoblaydi)
   async function startPay(m: PayMethod) {
     if (!booking) return;
+    if (!payIdemKey.current) payIdemKey.current = newIdempotencyKey('pay');
     setPaying(true);
     setError(null);
     try {
@@ -232,7 +238,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
     if (verified || !LIVE_STATUSES.includes(booking?.status ?? 'PENDING')) return;
     const t = setInterval(() => { void reloadBooking(); }, 5000);
     return () => clearInterval(t);
-  }, [transferPayment, id, verified, booking?.status]);
+  }, [transferPayment, reloadBooking, verified, booking?.status]);
 
   // Backend ham CASH/TRANSFER qaytarsa takrorlanib qolmasligi uchun method bo'yicha
   // birlashtiramiz — aks holda React `key` takrorlanadi va tanlov noto'g'ri ishlaydi.

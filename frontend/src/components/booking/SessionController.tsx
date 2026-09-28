@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { confirmDialog } from '@/lib/confirm';
-import { toastSuccess, toastError } from '@/lib/toast';
+import { toastSuccess } from '@/lib/toast';
 import type { Booking, BookingSessionState } from '@/lib/types';
 import { formatPrice, cn } from '@/lib/utils';
 
@@ -27,10 +27,12 @@ export default function SessionController({
   refresh: () => void;
 }) {
   const [session, setSession] = useState<BookingSessionState | null>(null);
-  const [loading, setLoading] = useState(false);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState<number>(Date.now());
+  // `now` — lokal soat (interval to'ldiradi). Boshlang'ich qiymat 0: render
+  // paytida `Date.now()` chaqirish noto'g'ri (purity). 0 bo'lganda xronometr
+  // server qiymatini (`session.elapsedMinutes`) ko'rsatadi — bu ham aniqroq.
+  const [now, setNow] = useState<number>(0);
   const [busy, setBusy] = useState(true);
 
   const isActive = booking.status === 'ACTIVE' && !!booking.sessionStartedAt;
@@ -120,7 +122,11 @@ export default function SessionController({
   }
 
   const startedAt = booking.sessionStartedAt ? new Date(booking.sessionStartedAt).getTime() : 0;
-  const elapsedSec = isActive && startedAt ? Math.floor((now - startedAt) / 1000) : (session?.elapsedMinutes || 0) * 60;
+  // `now === 0` — interval hali ishga tushmagan; server hisobini ko'rsatamiz.
+  const elapsedSec =
+    isActive && startedAt && now > 0
+      ? Math.floor((now - startedAt) / 1000)
+      : (session?.elapsedMinutes || 0) * 60;
   const remainingSec = isActive && session ? Math.floor(session.remainingMs / 1000) : 0;
   const minBill = booking.minBillingMinutes ?? 60;
 

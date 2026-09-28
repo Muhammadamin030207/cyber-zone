@@ -73,7 +73,6 @@ export default function SecurityActivity() {
       .then(({ data }) => setEvents(data.data || []))
       .catch(() => setEvents([]))
       .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

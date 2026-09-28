@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import Image from 'next/image';
+import { useEffect, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -96,11 +97,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
     };
   }, [roomId, fetchAvailability]);
 
-  const minPrice = useMemo(() => {
-    if (!room?.zones?.length) return 0;
-    return Math.min(...room.zones.map((z) => Number(z.pricePerHour)));
-  }, [room]);
-
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 grid lg:grid-cols-3 gap-8">
@@ -147,7 +143,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
           <div className="neo-card rounded-2xl overflow-hidden">
             <div className="relative h-64 sm:h-80 bg-[var(--bg-1)]">
               {img ? (
-                <img src={img} alt={room.name} className="absolute inset-0 w-full h-full object-cover" />
+                <Image src={img} alt={room.name} fill sizes="100vw" priority className="object-cover" />
               ) : (
                 <div className="absolute inset-0 bg-gradient-to-br from-[color-mix(in_srgb,var(--acc-a)_14%,var(--bg-1))] to-[color-mix(in_srgb,var(--acc-b)_10%,var(--bg-1))]" />
               )}

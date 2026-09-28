@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { LogIn, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, Fingerprint, ScanFace, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
+import { nowMs } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
 import type { AuthResponse, User } from '@/lib/types';
 import GoogleButton from '@/components/auth/GoogleButton';
@@ -322,10 +323,11 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
 
       if (data?.code === 'ACCOUNT_LOCKED' && data.lockedUntil) {
         const until = Date.parse(data.lockedUntil);
-        const serverNow = data.serverNow ? Date.parse(data.serverNow) : Date.now();
-        const offset = Date.now() - serverNow;
+        const clientNow = nowMs();
+        const serverNow = data.serverNow ? Date.parse(data.serverNow) : clientNow;
+        const offset = clientNow - serverNow;
         setLock({ email: key, until, offset });
-        setTick(Date.now());
+        setTick(clientNow);
         setError(null);
         setRemainingAttempts(null);
         try {

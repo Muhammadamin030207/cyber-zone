@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Controller, useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { UserPlus, Mail, Lock, User as UserIcon, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
@@ -64,13 +64,17 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
     register: field,
     control,
     handleSubmit,
-    watch,
     setValue,
     formState: { errors },
   } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
     defaultValues: { fullName: '', email: '', phone: '', password: '' },
   });
+
+  // `watch()` React Compiler uchun xavfsiz emas (`incompatible-library`), shuning
+  // uchun bitta maydonni `useWatch` bilan kuzatamiz — bu kerakli re-render'ni
+  // ham kamaytiradi (barcha maydonlar emas, faqat telefon).
+  const phoneValue = useWatch({ control, name: 'phone' });
 
   // Google bilan kirishda bazada topilmagan user -> avtoto'ldirish
   useEffect(() => {
@@ -236,7 +240,7 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
                   {isGoogle && <span className="text-xs text-gray-500 font-normal ml-1">(ixtiyoriy)</span>}
                 </label>
                 <PhoneInput
-                  value={watch('phone') || ''}
+                  value={phoneValue || ''}
                   onChange={(v) => setValue('phone', v)}
                 />
                 {errors.phone && <p className="text-xs text-red-400 mt-1">{errors.phone.message}</p>}

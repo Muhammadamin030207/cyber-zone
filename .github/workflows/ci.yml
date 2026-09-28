@@ -71,12 +71,9 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Lint
-        # HOZIRCHA bloklamaydi (continue-on-error): repoda ~150 ta oldindan
-        # bor ESLint xatosi (asosan `@typescript-eslint/no-explicit-any`) —
-        # ular frontend/store va komponentlarida, boshqa muallif fayllarida.
-        # Typecheck va build BLOKLASHUVCHI qoladi; lint xatolari tuzatilgach
-        # bu qatorni bloklovchi qilib aylantirish mumkin.
-        continue-on-error: true
+        # Bloklovchi: `npx eslint .` xatolarda (severity 2) exit code 1 beradi.
+        # Warning'lar (masalan `set-state-in-effect` — ma'lumot yuklash usuli,
+        # `eslint.config.mjs`da izohlangan) build'ni to'xtatmaydi.
         run: npx eslint .
 
       # Build uchun maxfiy qiymat kerak emas: API/Backend URL topilmasa

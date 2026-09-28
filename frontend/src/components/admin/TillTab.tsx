@@ -55,6 +55,9 @@ export default function TillTab() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showSettled, setShowSettled] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  // Muddati o'tgan qarzlar belgisi vaqt o'tishi bilan yangilanib turadi.
+  // Boshlang'ich 0 — render toza bo'lsin (`Date.now()` render'da noto'g'ri).
+  const [now, setNow] = useState(0);
 
   const load = useCallback(async (opts?: { silent?: boolean; open?: boolean }) => {
     if (!opts?.silent) setLoading(true);
@@ -78,6 +81,11 @@ export default function TillTab() {
   }, []);
 
   useEffect(() => { load({ open: !showSettled }); }, [load, showSettled]);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const onFocus = () => load({ silent: true, open: !showSettled });
@@ -258,7 +266,7 @@ export default function TillTab() {
       ) : (
         <div className="space-y-2">
           {debts.map((d) => {
-            const overdue = !d.settledAt && d.dueAt && new Date(d.dueAt).getTime() < Date.now();
+            const overdue = !d.settledAt && !!d.dueAt && now > 0 && new Date(d.dueAt).getTime() < now;
             return (
               <div
                 key={d.id}

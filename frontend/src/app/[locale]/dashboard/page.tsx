@@ -7,7 +7,7 @@ import {
   CalendarDays, Clock, MapPin, Loader2, CheckCircle2, XCircle, AlertCircle,
   Wallet, BadgePercent, Monitor, CreditCard, Ticket,
 } from 'lucide-react';
-import { Link, useRouter } from '@/i18n/navigation';
+import { Link } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { confirmDialog } from '@/lib/confirm';
 import type { Booking } from '@/lib/types';

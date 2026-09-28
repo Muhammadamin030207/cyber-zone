@@ -110,8 +110,32 @@ export function toNumber(v: unknown): number {
   return Number(v || 0);
 }
 
+/**
+ * Hozirgi vaqt (ms).
+ *
+ * Nima uchun yordamchi funksiya: React Compiler `Date.now()` ni render
+ * paytida "impure" deb hisoblaydi. Bu funksiya **faqat hodisa
+ * ishlovchilarida** (submit, interval) chaqiriladi — render toqalunmaydi.
+ */
+export function nowMs(): number {
+  return Date.now();
+}
+
 export function cn(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(' ');
+}
+
+/**
+ * Idempotency kaliti (bron/to'lov). Render paytida emas, **hodisa
+ * ishlovchisi** ichida chaqiriladi — `Date.now()`/`Math.random()` render
+ * davomida noto'g'ri (qayta renderda qiymat o'zgaradi).
+ */
+export function newIdempotencyKey(prefix: string): string {
+  const rand =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  return `${prefix}_${rand}`;
 }
 
 export function mergeChatMessages<T extends { id: string; createdAt: string }>(

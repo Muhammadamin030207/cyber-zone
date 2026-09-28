@@ -5,9 +5,9 @@ import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import {
-  Settings, Monitor, Cpu, CalendarDays, BadgePercent, Newspaper, BarChart3, MessageSquare,
+  Settings, Monitor, CalendarDays, BadgePercent, Newspaper, BarChart3, MessageSquare,
   Plus, Pencil, Trash2, Loader2, AlertCircle, Check, ShieldCheck, Users, Zap,
-  Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy, MessagesSquare, Info, Banknote, UserX,
+  Save, X, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy, MessagesSquare, Info, Banknote, UserX,
   } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -61,7 +61,6 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
     if (user.role !== 'ADMIN') {
       router.replace(user.role === 'SUPER_ADMIN' ? '/super-admin' : '/dashboard');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, router]);
 
   useEffect(() => {
@@ -166,7 +165,6 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
 
 /* ====================== ROOM TAB ====================== */
 function RoomTab({ room, setRoom }: { room: Room | null; setRoom: (r: Room) => void }) {
-  const t = useTranslations('admin');
   const tC = useTranslations('common');
   const [form, setForm] = useState({
     name: room?.name || '',
@@ -474,7 +472,11 @@ function ComputersTab({ room }: { room: Room }) {
 
         <div className="neo-card rounded-2xl p-5">
           <h3 className="font-bold mb-4">Kompyuterlar ({computers.length})</h3>
-          {computers.length === 0 ? (
+          {loading ? (
+            <p className="text-sm text-gray-500 text-center py-10 flex items-center justify-center gap-2">
+              <Loader2 size={14} className="animate-spin" /> Yuklanmoqda...
+            </p>
+          ) : computers.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-10">Hali kompyuter yo'q</p>
           ) : (
             <div className="space-y-2">
@@ -1010,6 +1012,9 @@ interface PromoPayload {
 }
 
 function PromosTab({ room }: { room: Room }) {
+  // Promo-kodlar global (`/api/promo`) — xonaga bog'liq emas. Prop boshqa
+  // tab'lar bilan bir xil imzoda qolishi uchun saqlanadi.
+  void room;
   const [promos, setPromos] = useState<PromoCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<{ code: string; discountType: PromoCode['discountType']; discountValue: number; minBookingAmount: number; maxUses: number; startsAt: string; expiresAt: string; usageLimitPerUser: number; isPersonal: boolean; recipientPhone: string; recipientEmail: string }>(

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import {
   ShoppingCart, Plus, Minus, Trash2, Loader2, Coffee, UtensilsCrossed, CakeSlice,
-  CheckCircle2, AlertCircle, LogIn, Armchair,
+  CheckCircle2, AlertCircle, Armchair,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { formatPrice, cn } from '@/lib/utils';

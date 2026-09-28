@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import {
-  Coffee, Plus, Trash2, Loader2, Save, Check, Pencil, X, Timer, ChefHat, PackageCheck, Truck, Monitor, ShoppingCart,
+  Coffee, Trash2, Save, Check, Pencil, X, Timer, ChefHat, PackageCheck, Truck, Monitor, ShoppingCart,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';

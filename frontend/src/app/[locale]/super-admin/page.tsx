@@ -328,7 +328,7 @@ function UsersTab() {
           <>
           {/* MOBIL / TABLET: kartochka — gorizontal scroll yo'q */}
           <div className="lg:hidden divide-y divide-white/5">
-            {users.map((u, i) => (
+            {users.map((u) => (
               <div key={u.id} className="p-4 space-y-2.5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">

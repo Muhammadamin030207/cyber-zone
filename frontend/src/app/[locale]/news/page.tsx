@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { Newspaper, Image as ImageIcon, CalendarDays, AlertCircle } from 'lucide-react';
@@ -92,7 +93,13 @@ export default function NewsPage({ params }: { params: Promise<{ locale: string 
             <article key={item.id} className="neo-card rounded-2xl overflow-hidden flex flex-col">
               {item.imageUrl ? (
                 <div className="relative h-44 bg-[var(--bg-1)]">
-                  <img src={item.imageUrl} alt={item.title} className="absolute inset-0 w-full h-full object-cover" />
+                  <Image
+                    src={item.imageUrl}
+                    alt={item.title}
+                    fill
+                    sizes="(max-width:768px) 100vw, 50vw"
+                    className="object-cover"
+                  />
                   <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg-0)]/70 via-transparent" />
                 </div>
               ) : (

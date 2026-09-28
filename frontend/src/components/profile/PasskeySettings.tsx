@@ -16,7 +16,6 @@ export default function PasskeySettings() {
   const [busy, setBusy] = useState(false);
   const [bioAvailable, setBioAvailable] = useState(false);
   const [bioInfo, setBioInfo] = useState<BiometricInfo | null>(null);
-  const [requirePasskey, setRequirePasskey] = useState(false);
   const [deviceName, setDeviceName] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -39,12 +38,20 @@ export default function PasskeySettings() {
     }
   }
 
+  // Dependency sifatida butun `user` obyektini emas, `id`'ni ishlatamiz:
+  // store'da obyekt har render'da yangi bo'lsa, bu effect doim qayta ishga
+  // tushib turardi.
+  const userId = user?.id;
+  // Majburiy-passkey holatining YAGINA manbai — store. Mahalliy `useState`
+  // bilan ko'rsatish (mirror) ikki manba hosil qilardi va `updateUser` dan
+  // keyin `setState` effect'iga ehtiyoj qoldirardi.
+  const requirePasskey = !!user?.requirePasskey;
+
   useEffect(() => {
     load();
     supportsBiometric().then(setBioAvailable).catch(() => setBioAvailable(false));
     detectBiometric().then(setBioInfo).catch(() => setBioInfo(null));
-    if (user) setRequirePasskey(!!user.requirePasskey);
-  }, [user?.id]);
+  }, [userId]);
 
   async function handleAdd() {
     // platformAuthenticatorIsAvailable ichonchsiz bo'lishi mumkin (masalan ba'zi brauzerlar),
@@ -122,7 +129,6 @@ export default function PasskeySettings() {
     }
     try {
       const { data } = await api.patch('/api/webauthn/settings', { requirePasskey: next });
-      setRequirePasskey(data.data?.requirePasskey ?? next);
       updateUser({ requirePasskey: data.data?.requirePasskey ?? next });
       toastSuccess(data?.message || 'Sozlama yangilandi');
     } catch (err) {
