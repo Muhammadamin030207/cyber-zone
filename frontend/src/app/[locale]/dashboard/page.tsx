@@ -40,13 +40,16 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
 
   const fetchBookings = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true);
-    setError(null);
+    // Xato faqat foydalanuvchi yangilashni bosilganda tozalanadi — aks holda
+    // jimgina (socket/focus) qayta so'rovlar bekor qilish xatosini darhol o'chirdi.
+    if (!opts?.silent) setError(null);
     try {
       const { data } = await api.get('/api/bookings');
-      setBookings(data.data || []);
+      setBookings(data?.data ?? []);
     } catch (err) {
       if (!opts?.silent) setError(getApiErrorMessage(err));
     } finally {
+      // `loading` har qanday holatda tushiriladi — aks holda skeleton doimiy qolib ketadi.
       if (!opts?.silent) setLoading(false);
     }
   }, []);
@@ -98,6 +101,16 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
   const totalPaidAll = bookings.reduce(
     (acc, b) => acc + (b.payments || []).filter((p) => p.status === 'COMPLETED').reduce((a, p) => a + Number(p.amount), 0),
     0
+  );
+
+  /**
+   * Faqat backend qaytargan haqiqiy bron tasdiqlangan holatda bo'lsa banner ko'rsatiladi.
+   * Aks holda `?booked=` parametri yolg'on «tasdiqlandi» xabari yaratardi.
+   */
+  const newlyBooked = Boolean(
+    bookedId &&
+    !loading &&
+    bookings.some((b) => b.id === bookedId && b.status === 'CONFIRMED')
   );
 
   return (
@@ -152,14 +165,18 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
       </div>
 
       {error && (
-        <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
-          <AlertCircle size={16} /> {error}
+        <div role="alert" className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
+          <AlertCircle size={16} className="shrink-0" aria-hidden="true" /> {error}
         </div>
       )}
 
-      {bookedId && (
-        <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-neon-green/10 border border-neon-green/30 text-sm text-neon-green">
-          <CheckCircle2 size={16} /> {t('bookingStatus.CONFIRMED')}
+      {/* Eslatma: `?booked=` parametri o'zi tasdiq emas. Faqat backend qaytargan
+          booking haqiqiy bo'lib, holati tasdiqlangan bo'lsa ko'rsatamiz. Aks holda
+          hech qanday link tasdiqlanganlikni yolg'on ko'rsata olmasdi. */}
+      {newlyBooked && (
+        <div role="status" className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-neon-green/10 border border-neon-green/30 text-sm text-neon-green">
+          <CheckCircle2 size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
+          <span>{t('bookingStatus.CONFIRMED')}</span>
         </div>
       )}
 
@@ -201,7 +218,8 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
             const paidPayments = (b.payments || []).filter((p) => p.status === 'COMPLETED');
             const totalPaid = paidPayments.reduce((a, p) => a + Number(p.amount), 0);
             const remainingDue = Math.max(0, Number(b.finalPrice) - totalPaid);
-            return (
+
+  return (
               <div key={b.id} className="neo-card card-hover rounded-2xl p-5 relative overflow-hidden">
                 <div className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full ${
                   b.status === 'CANCELLED' ? 'bg-red-500/60' : b.status === 'COMPLETED' ? 'bg-gray-500/50' : b.status === 'ACTIVE' ? 'bg-neon-green' : b.status === 'CONFIRMED' ? 'bg-neon-cyan' : 'bg-yellow-500'

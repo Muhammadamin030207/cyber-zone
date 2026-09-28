@@ -66,21 +66,10 @@ async function geminiChat(
     return null;
   }
 
-  const system = [
-    'Sen Cyber-ZONE — kompyuter xona (gaming club) platformasining rasmiy AI yordamchisisan.',
-    'Foydalanuvchilarga o\'zbek tilida, do\'stona va aniq javob ber. Kerakli joyda emojilar ishlat.',
-    'Foydalanuvchi oddiy suhbat qurmoqchi bo\'lsa (salomlashish, o\'yinlar, umumiy savollar, maslahat) — erkin, qisqa va xushmuomalalik bilan javob ber. Sun\'iy ravishda hamma savolni platformaga bog\'lash shart emas.',
-    'Narx, ish vaqti, xona ro\'yxati, promo-kodlar va mavjudlik haqidagi ma\'lumotlarni FAQAT quyida berilgan KONTEKSTDAN ol. Unda yo\'q bo\'lsa — "hozircha ma\'lumot yo\'q" deb ayt, o\'ylab chiqma.',
-    'Foydalanuvchining shaxsiy bronlari, to\'lovlari, bonus balansi, profil ma\'lumoti faqat KONTEKSTDAGI "FOYDALANUVCHI MA\'LUMOTI" bo\'limida berilganini ayt. U yerda yo\'q narsani uydirma. Masalan bron holati haqida faqat ro\'yxatda kelgan bronlarni ko\'rsat.',
-    'AI hech qachon bronni o\'zi tasdiqlamaydi, to\'lovni muvaffaqiyatli deb aytmaydi va narxni taxmin qilmaydi — bular platforma/backenda tekshiriladi.',
-    'Bron qilish qadamlari haqida aniq ayt: 1) xona sahifasi, 2) sana/vaqt/zonani tanlash, 3) promo-kod (agar bo\'lsa), 4) to\'lov (Click/PayMe/naqd), 5) tasdiqlanish.',
-    'Havolalarni /rooms, /chat, /profile, /news kabi sahifa nomlari bilan ko\'rsat.',
-    'Foydalanuvchining tiliga moslash: o\'zbekcha — o\'zbekcha, ruscha — ruscha, inglizcha — inglizcha javob ber.',
-    'Javobni 3-6 qisqa paragraf yoki ro\'yxat shaklida yoz, uzun bo\'lmasin.',
-  ].join('\n');
+  const system = buildSystemPrompt(context);
 
   const body = {
-    system_instruction: { parts: [{ text: system + '\n\n===== PLATFORMA KONTEKSTI =====\n' + context }] },
+    system_instruction: { parts: [{ text: system }] },
     contents: [
       ...history.map((h) => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.content }] })),
       { role: 'user', parts: [{ text: message }] },
@@ -138,7 +127,7 @@ async function geminiChatWithModel(
   // Kichik ichki qayta-chiqarish — faqat bitta urinish, recursion yo'q
   const body = {
     system_instruction: {
-      parts: [{ text: 'Sen Cyber-ZONE AI yordamchisisan. O\'zbek tilida qisqa va aniq javob ber. Kontekstdan foydalan:\n' + context }],
+      parts: [{ text: buildSystemPrompt(context) }],
     },
     contents: [
       ...history.map((h) => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.content }] })),
@@ -167,17 +156,32 @@ async function geminiChatWithModel(
 const ANTHROPIC_VERSION = '2023-06-01';
 
 // Ikkala LLM (Gemini/Claude) uchun umumiy tizim yo'riqnomasi.
+//
+// AI UMUMIY YORDAMCHI: saytga bog'liq savollarga KONTEKSTDAN javob beradi,
+// qolgan BARCHA savollarga (umumiy bilim, dasturlash, matematika, ta'lim,
+// kundalik maslahat, tarjima, yozish va h.k.) o'z bilimi bilan to'liq javob
+// beradi. "Faqat sayt haqida" deb cheklov yo'q.
 function buildSystemPrompt(context: string): string {
   return [
-    'Sen Cyber-ZONE — kompyuter xona (gaming club) platformasining rasmiy AI yordamchisisan.',
-    'Foydalanuvchilarga o\'zbek tilida, do\'stona va aniq javob ber. Kerakli joyda emojilar ishlat.',
-    'Narx, ish vaqti, xona ro\'yxati, promo-kodlar va mavjudlik haqidagi ma\'lumotlarni FAQAT quyida berilgan KONTEKSTDAN ol. Unda yo\'q bo\'lsa — "hozircha ma\'lumot yo\'q" deb ayt, o\'ylab chiqma.',
-    "Foydalanuvchining shaxsiy bronlari, to'lovlari, bonus balansi, profil ma'lumoti faqat KONTEKSTDAGI \"FOYDALANUVCHI MA'LUMOTI\" bo'limida berilganini ayt.",
-    'AI hech qachon bronni o\'zi tasdiqlamaydi, to\'lovni muvaffaqiyatli deb aytmaydi va narxni taxmin qilmaydi.',
-    'Bron qilish qadamlari haqida aniq ayt: 1) xona sahifasi, 2) sana/vaqt/zonani tanlash, 3) promo-kod (agar bo\'lsa), 4) to\'lov (Click/PayMe/naqd), 5) tasdiqlanish.',
-    'Havolalarni /rooms, /chat, /profile, /news kabi sahifa nomlari bilan ko\'rsat.',
-    'Foydalanuvchining tiliga moslash: o\'zbekcha — o\'zbekcha, ruscha — ruscha, inglizcha — inglizcha javob ber.',
-    'Javobni 3-6 qisqa paragraf yoki ro\'yxat shaklida yoz, uzun bo\'lmasin.',
+    'Sen Cyber-ZONE — kompyuter xona (gaming club) platformasining AI yordamchisisan.',
+    '',
+    'ASOSIY QO\'RIDA: Sen UMUMIY sun\'iy intellekt yordamchisisan. Foydalanuvchi senga HECH QANDAY savol bersa ham to\'liq va aniq javob ber.',
+    '  • Saytga oid savollar (narx, ish vaqti, xonalar, promo-kod, bron, mening balansim/to\'lovlarim) — quyidagi KONTEKSTDAN javob ber.',
+    '  • Boshqa BARCHA savollar (ta\'lim, fan, dasturlash, matematika, tarix, sport, maslahat, tarjima, matn yozish, kod, g\'oya) — o\'z biliming bilan to\'liq javob ber. "Ma\'lumotim yo\'q" deb rad etma, qisqartirib ham bo\'lma.',
+    '  • Savol noaniq bo\'lsa, taxmin qilmasdan ANIQ bir qisqa savol bilan aniqlash so\'ra.',
+    '',
+    'O\'ZBEK TILI: Foydalanuvchiga o\'zbek tilida, do\'stona va aniq javob ber. Kerakli joyda emojilar ishlat.',
+    'Foydalanuvchi ruscha yoki inglizcha yozsa — o\'sh tilda javob ber.',
+    '',
+    'ANIQLIK (bu qoidalar buzilmaydi):',
+    '  • Narx, ish vaqti, xona ro\'yxati, promo-kod, mavjudlik, aloqa ma\'lumotlari — FAQAT KONTEKSTDAN. U yerda yo\'q bo\'lsa "hozircha ma\'lumot yo\'q" de. Xotiradan yoki taxmin qilib narx aytma.',
+    '  • Foydalanuvchining shaxsiy ma\'lumotlari (bron, to\'lov, bonus balans, qarz) — FAQAT "FOYDALANUVCHI MA\'LUMOTI" bo\'limidan. U yerda yo\'q narsani uydirma.',
+    '  • Bronni o\'zi tasdiqlamaysan, to\'lovni muvaffaqiyatli deb aytmaysan, tasdiqlanmagan holatni "bajarildi" deb ko\'rsatmaysan — bular platforma tomonda tekshiriladi.',
+    '',
+    'QULAY YORDAM:',
+    '  • Bron qilish qadamlari: 1) xona sahifasi, 2) sana/vaqt/zonani tanlash, 3) promo-kod (agar bo\'lsa), 4) to\'lov (Click/PayMe/Uzum/Paynet/karta orqali o\'tkazma/naqd), 5) tasdiqlash.',
+    '  • Sayt sahifalarini /rooms, /chat, /profile, /news, /checkout shaklida ko\'rsat.',
+    '  • Javobni 3-6 qisqa paragraf yoki ro\'yxat shaklida yoz, uzun bo\'lmasin.',
     '',
     '===== PLATFORMA KONTEKSTI =====',
     context,
@@ -185,6 +189,57 @@ function buildSystemPrompt(context: string): string {
 }
 
 /** Claude Messages API orqali yagona (streamsiz) javob. Kalit yo'q bo'lsa — null. */
+/**
+ * OpenAI-compatible provider (chat/completions).
+ *
+ * Nima uchun alohida funksiya: OpenAI, Groq, Together, OpenRouter, vLLM,
+ * LM Studio, Ollama — hammasi shu biri formatda ishlaydi. Ya'ni bitta
+ * kalit + bitta base URL bilan istalgan provider'ni ulash mumkin.
+ * Kalit yo'q bo'lsa — null qaytaradi, zanjirdagi keyingi bosqichga o'tadi.
+ */
+async function openaiChat(
+  message: string,
+  context: string,
+  model: string,
+  history: ChatHistoryItem[]
+): Promise<{ text: string; model: string } | null> {
+  const key = config.ai.openaiApiKey;
+  if (!key) return null;
+
+  const base = config.ai.openaiBaseUrl.replace(/\/$/, '');
+  const url = `${base}/chat/completions`;
+  const body = {
+    model,
+    messages: [
+      { role: 'system', content: buildSystemPrompt(context) },
+      ...history.map((h) => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content })),
+      { role: 'user', content: message },
+    ],
+    max_tokens: config.ai.maxTokens,
+    temperature: config.ai.temperature,
+  };
+
+  try {
+    const resp = await fetchWithTimeout(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      console.warn(`[AI] OpenAI-compatible ${model} xatosi ${resp.status}: ${errText.slice(0, 180)}`);
+      return null;
+    }
+    const data = (await resp.json()) as any;
+    const text = (data?.choices?.[0]?.message?.content || '').toString().trim();
+    if (!text) return null;
+    return { text, model };
+  } catch (err) {
+    console.warn('[AI] OpenAI-compatible chaqiruv xatoligi:', (err as Error).message);
+    return null;
+  }
+}
+
 async function claudeChat(
   message: string,
   context: string,
@@ -599,11 +654,27 @@ function detectFallbackIntent(msg: string): string {
   return 'fallback';
 }
 
+/** Hech qanday LLM kaliti yo'q — foydalanuvchiga halol aytamiz (yashirmaymiz). */
+const AI_NOT_CONFIGURED =
+  'AI yordamchi hozircha texnik nosozlikda: sun\'iy intellekt kaliti serverga o\'rnatilmagan, shuning uchun men har qanday savolga to\'liq javob bera olmayapman. ' +
+  'Hozircha quyidagilarda yordam bera olaman: narxlar, ish vaqti, xonalar, promo-kodlar va bron qilish. Administratorga xabar bering — muammo tez orada tuzatiladi.';
+
 async function fallbackReply(message: string, lat?: number, lng?: number): Promise<string> {
   const intent = detectFallbackIntent(message);
+
+  // Saytga oid aniq savollarga DB'dan halol javob beramiz (kalit kerak emas).
+  // Qolgani — kalitsiz javob mumkin emas, uni yashirmaslik uchun ochiq aytamiz.
+  if (!config.ai.anthropicApiKey && !config.ai.geminiApiKey && !config.ai.openaiApiKey && intent !== 'greeting' && intent !== 'thanks' && intent !== 'bye') {
+    if (intent === 'promo' || intent === 'prices' || intent === 'working_hours' || intent === 'nearest' || intent === 'search_rooms' || intent === 'booking') {
+      // quyidagi DB-qisimlar ishlaydi
+    } else {
+      return AI_NOT_CONFIGURED;
+    }
+  }
+
   if (intent === 'greeting') {
     return countWords(message) <= 3
-      ? `${INTRO}\n\nSalom! Savolingizni yozing — masalan "narxlar qanday" yoki "yaqin xonalari ko'rsat".`
+      ? `${INTRO}\n\nSalom! Savolingizni yozing — masalan "narxlar qanday", "yaqin xonalari ko'rsat" yoki boshqa har qanday savol.`
       : 'Salom! Xonalar, narxlar, bron qilish va promo-kodlar bo\'yicha yordam bera olaman. Nima bilmoqchisiz?';
   }
   if (intent === 'thanks') return 'Arzimaydi! Boshqa savolingiz bo\'lsa, bemalol so\'rang.';
@@ -686,15 +757,51 @@ async function fallbackReply(message: string, lat?: number, lng?: number): Promi
     return `Bizda quyidagi xonalar bor:\n${rooms.slice(0, 8).map((r) => `• ${r.name} — ${r.address}`).join('\n')}\n\n/rooms sahifasiga o'ting va qidiring.`;
   }
 
-  return `Kechirasiz, buni aniq tushunmadim. Narxlar, xonalar, ish vaqti, promo-kodlar va bron haqida so'rashingiz mumkin.`;
+  return `Kechirasiz, buni aniq tushunmadim. Savolingizni biroz boshqacha yozib ko'ring.`;
 }
+
+// ============ GET /api/ai/status — AI yordamchining holati (diagnostika) ============
+// Yordamchi "hammasiga javob bermayapti" degan muammoning eng tez tekshiriladigan
+// sababi — serverda API kaliti yo'q. Shu sabab bu endpoint faqat RO'YXAT QILADI:
+// kalitlarning qaysilari o'rnatilgan, qaysi model ishlatiladi, real LLM bormi.
+// Hech qanday kalit qiymati QAYTARILMAYDI.
+export const getAiStatus = async (_req: AuthRequest, res: ExpressResponse, next: NextFunction) => {
+  try {
+    const hasClaude = Boolean(config.ai.anthropicApiKey);
+    const hasGemini = Boolean(config.ai.geminiApiKey);
+    const hasOpenAI = Boolean(config.ai.openaiApiKey);
+    const live = hasClaude
+      ? config.ai.anthropicModel
+      : hasGemini
+        ? config.ai.model
+        : hasOpenAI
+          ? config.ai.openaiModel
+          : null;
+    return ok(res, {
+      live: Boolean(live),
+      activeModel: live,
+      fallbackOnly: !live,
+      providers: {
+        claude: { configured: hasClaude, model: config.ai.anthropicModel },
+        gemini: { configured: hasGemini, model: config.ai.model, fallbackModel: config.ai.fallbackModel },
+        openai: { configured: hasOpenAI, model: config.ai.openaiModel, baseUrl: config.ai.openaiBaseUrl },
+      },
+      limits: { maxTokens: config.ai.maxTokens, temperature: config.ai.temperature },
+      hint: live
+        ? null
+        : "AI yordamchi qoidaviy (oddiy) javoblar bilan ishlayapti. Render dashboard'ga ANTHROPIC_API_KEY, GEMINI_API_KEY yoki OPENAI_API_KEY (bittasi yetarli) qo'ying va xizmatni qayta ishga tushiring — shundan keyin AI barcha savollarga to'liq javob beradi.",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
 
 // ============ POST /api/ai/chat — AI yordamchi (auth talab qilinadi) ============
 export const chat = async (req: AuthRequest, res: ExpressResponse, next: NextFunction) => {
   try {
     const { message, history } = req.body as { message?: string; history?: unknown; lat?: number; lng?: number };
     if (!message || !message.trim()) {
-      return ok(res, { reply: `${INTRO}\n\nNarxlar, xonalar, ish vaqti, promo-kodlar va bron haqida so'rashingiz mumkin.` });
+      return ok(res, { reply: `${INTRO}\n\nSavolingizni yozing — sayt bo'yicha (narx, xonalar, ish vaqti, promo-kod, bron) va boshqa har qanday savolga to'liq javob beraman.` });
     }
 
     // Xarajat himoyasi: xabarni cheklaymiz
@@ -738,6 +845,17 @@ export const chat = async (req: AuthRequest, res: ExpressResponse, next: NextFun
         console.warn('[AI] Gemini chat xatoligi:', (err as Error).message);
       }
     }
+    if (!reply && config.ai.openaiApiKey) {
+      try {
+        const result = await openaiChat(msg, context, config.ai.openaiModel, hist);
+        if (result) {
+          reply = result.text;
+          usedModel = result.model;
+        }
+      } catch (err) {
+        console.warn('[AI] OpenAI-compatible chat xatoligi:', (err as Error).message);
+      }
+    }
 
     // 3) Gemini ishlamasa — qoidaviy fallback
     if (!reply) {
@@ -756,7 +874,7 @@ export const chat = async (req: AuthRequest, res: ExpressResponse, next: NextFun
 export const chatStream = async (req: AuthRequest, res: ExpressResponse, next: NextFunction) => {
   try {
     const { message, history } = req.body as { message?: string; history?: unknown };
-    const intro = `${INTRO}\n\nNarxlar, xonalar, ish vaqti, promo-kodlar va bron haqida so'rashingiz mumkin.`;
+    const intro = `${INTRO}\n\nSavolingizni yozing — sayt bo'yicha (narx, xonalar, ish vaqti, promo-kod, bron) va boshqa har qanday savolga to'liq javob beraman.`;
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -858,6 +976,17 @@ export async function generateAIReply(
       }
     } catch (err) {
       console.warn('[AI] generateAIReply Gemini xatoligi:', (err as Error).message);
+    }
+  }
+  if (!reply && config.ai.openaiApiKey) {
+    try {
+      const result = await openaiChat(message, context, config.ai.openaiModel, history);
+      if (result) {
+        reply = result.text;
+        usedModel = result.model;
+      }
+    } catch (err) {
+      console.warn('[AI] generateAIReply OpenAI-compatible xatoligi:', (err as Error).message);
     }
   }
 

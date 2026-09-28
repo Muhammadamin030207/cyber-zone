@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { chat, chatStream } from '../controllers/ai.controller';
+import { chat, chatStream, getAiStatus } from '../controllers/ai.controller';
 import { authenticate } from '../middlewares/auth';
 import { createRedisRateLimiter } from '../lib/redis';
 
@@ -20,5 +20,8 @@ const aiRate = createRedisRateLimiter({
 
 router.post('/chat', authenticate, aiRate, chat);
 router.post('/chat/stream', authenticate, aiRate, chatStream);
+
+// Diagnostika: qaysi LLM kaliti o'rnatilgan (kalit qiymati qaytarilmaydi).
+router.get('/status', authenticate, getAiStatus);
 
 export default router;

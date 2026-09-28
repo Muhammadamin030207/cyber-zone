@@ -24,6 +24,57 @@ describe('E2E: AI assistant — ownership, history, edit/delete/regenerate, stre
     expect(res.body.data.reply.length).toBeGreaterThan(0);
   });
 
+  it('status: autentifikatsiyasiz 401', async () => {
+    const res = await api().get('/api/ai/status');
+    expect(res.status).toBe(401);
+  });
+
+  it('status: qaysi LLM kaliti o\'rnatilganini ko\'rsatadi, kalit qiymati QAYTARILMAYDI', async () => {
+    const res = await api().get('/api/ai/status').set('Authorization', auth(tokenA));
+    expect(res.status).toBe(200);
+    const d = res.body.data;
+    expect(typeof d.live).toBe('boolean');
+    expect(d.providers).toHaveProperty('claude');
+    expect(d.providers).toHaveProperty('gemini');
+    // Hech qanday kalit sirqi sizib chiqmaydi
+    const raw = JSON.stringify(d);
+    expect(raw).not.toMatch(/AIza|sk-ant|apiKey"\s*:\s*"/);
+  });
+
+  it('status: kalit yo\'q bo\'lsa aniq HINT beriladi (AI hammasiga javob bermayapti degan muammo)', async () => {
+    const res = await api().get('/api/ai/status').set('Authorization', auth(tokenA));
+    const d = res.body.data;
+    if (d.live === false) {
+      expect(typeof d.hint).toBe('string');
+      expect(d.hint.length).toBeGreaterThan(10);
+    } else {
+      expect(d.activeModel).toBeTruthy();
+    }
+  });
+
+  it('chat: SAYTGA OID emasdagi savol ham rad etilmaydi', async () => {
+    // Umumiy savol (sayt bilan bog'liq emas) — yordamchi "tushunmadim" deb
+    // javob BERMASLIGI kerak. Kalit yo'q bo'lsa holol "texnik nosozlik" deb
+    // aytadi (yashirmaydi), kalit bo'lsa haqiqiy AI javob beradi.
+    const status = await api().get('/api/ai/status').set('Authorization', auth(tokenA));
+    const live = status.body.data.live === true;
+
+    const res = await api()
+      .post('/api/ai/chat')
+      .set('Authorization', auth(tokenA))
+      .send({ message: 'Python\'da ro\'yxatni teskari qilib o\'qirish qanday yoziladi?' });
+    expect(res.status).toBe(200);
+    const reply = String(res.body.data.reply);
+    expect(reply.length).toBeGreaterThan(20);
+    expect(reply).not.toContain('buni aniq tushunmadim');
+
+    if (!live) {
+      expect(reply).toContain('texnik nosozlik');
+    } else {
+      expect(res.body.data.model).not.toBe('fallback');
+    }
+  });
+
   it('yangi suhbat yaratiladi va ro\'yxatda ko\'rinadi (faqat egasiga)', async () => {
     const create = await api().post('/api/ai/conversations').set('Authorization', auth(tokenA)).send({});
     expect(create.status).toBe(201);

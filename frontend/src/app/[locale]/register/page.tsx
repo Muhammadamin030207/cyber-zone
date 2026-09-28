@@ -119,7 +119,7 @@ export default function RegisterPage({ params }: { params: Promise<{ locale: str
   });
 
   return (
-    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 items-stretch">
+    <div className="min-h-screen grid grid-cols-1 md:grid-cols-2 items-stretch">
       {/* ===== Brand panel ===== */}
       <div className="relative hidden lg:flex flex-col justify-between p-10 overflow-hidden">
         <div className="relative flex items-center gap-3">

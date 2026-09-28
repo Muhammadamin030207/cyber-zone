@@ -178,16 +178,20 @@ function providerCallbackUrl(method: string): string {
   return `${base.replace(/\/$/, '')}/api/payments/webhook/${method.toLowerCase()}`;
 }
 
-function normalizeMethod(method: string): { method: string; providerId: string; cash: boolean } {
+function normalizeMethod(method: string): { method: string; providerId: string; cash: boolean; manual: boolean } {
   const m = String(method || '').toUpperCase();
-  if (m === 'CASH') return { method: 'CASH', providerId: '', cash: true };
+  if (m === 'CASH') return { method: 'CASH', providerId: '', cash: true, manual: false };
+  // QO'LDA O'TKAZMA: foydalanuvchi o'z bank ilovasida dogaon kartasiga
+  // pul o'tkazadi, chek (screenshot) yuboradi, admin bank hisobida tekshiradi.
+  // Provayder YO'Q, shuning uchun checkoutUrl ham chiqmaydi.
+  if (m === 'TRANSFER') return { method: 'TRANSFER', providerId: '', cash: false, manual: true };
   if (['PAYME', 'CLICK', 'UZUM', 'PAYNET'].includes(m)) {
-    return { method: m, providerId: m, cash: false };
+    return { method: m, providerId: m, cash: false, manual: false };
   }
   // Legacy nomlar -> provider'ga moslash
   const legacy: Record<string, string> = { UZCARD: 'PAYME', HUMO: 'PAYME' };
-  if (legacy[m]) return { method: m, providerId: legacy[m], cash: false };
-  return { method: '', providerId: m, cash: false };
+  if (legacy[m]) return { method: m, providerId: legacy[m], cash: false, manual: false };
+  return { method: '', providerId: m, cash: false, manual: false };
 }
 
 // ============ POST /api/payments/create — USER: to'lov sessiyasi yaratish ============
@@ -226,14 +230,14 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       }
     }
 
-    const { method: normMethod, providerId, cash } = normalizeMethod(method);
-    if (!cash && !providerId) {
+    const { method: normMethod, providerId, cash, manual } = normalizeMethod(method);
+    if (!cash && !manual && !providerId) {
       return badRequest(res, 'To\'lov metodi qo\'llab-quvvatlanmaydi');
     }
 
     let provider = null;
     let checkoutUrl: string | null = null;
-    if (!cash) {
+    if (!cash && !manual) {
       try {
         provider = getProvider(providerId);
       } catch {
@@ -255,7 +259,7 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
     }
 
     // Muddati o'tgan eski sessiyalarni tozalaymiz (yopiq checkout qoldiqlari)
-    if (!cash) {
+    if (!cash && !manual) {
       const stale = await prisma.payment.findMany({
         where: {
           bookingId,
@@ -275,7 +279,7 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
     // Idempotentlik: bu bron uchun hali yaroqli (muddati o'tmagan) aktiv onlayn
     // sessiya mavjud bo'lsa — yangi to'lov YARATMAYMIZ, mavjudini qaytaramiz.
     // Bu "refresh/bosish" vaqtida duplicate sessionlar va overpay oldini oladi.
-    if (!cash) {
+    if (!cash && !manual) {
       const active = await prisma.payment.findFirst({
         where: {
           bookingId,
@@ -369,12 +373,18 @@ amount: Number(active.amount),
           amount,
           type: isAdvance ? 'ADVANCE' : 'REMAINING',
           method: cash ? 'CASH' : (normMethod || null) as any,
-          provider: (!cash ? providerId : null) as any,
-          status: cash ? 'PENDING' : 'CREATED',
+          // manual (TRANSFER) uchun provider YO'Q — null bo'lishi SHART
+          provider: (!cash && !manual ? providerId : null) as any,
+          // CASH va TRANSFER: checkout sessiyasi yo'q -> PENDING (admin kutadi)
+          status: cash || manual ? 'PENDING' : 'CREATED',
           currency: 'UZS',
           depositPercent: percent,
           idempotencyKey: idemKey,
-          metadata: (!cash ? { providerMethod: providerId.toLowerCase() } : null) as any,
+          metadata: (cash
+            ? null
+            : manual
+              ? { manualMethod: 'card_transfer', instruction: "Karta raqamiga o'tkazing, chek yuboring" }
+              : { providerMethod: providerId.toLowerCase() }) as any,
         },
       });
       await auditLog(tx, { paymentId: p.id, action: 'payment_created', actorId: req.user!.userId, actorRole: req.user!.role as string, metadata: { method, percent, amount } });
@@ -443,6 +453,56 @@ amount: Number(active.amount),
         }
         return res.status(502).json({ success: false, message: 'To\'lov xizmati bilan bog\'lanishda xatolik yuz berdi' });
       }
+    }
+
+    // QO'LDA O'TKAZMA — bron "to'lov kutilmoqda" holatiga o'tadi, admin
+    // xabardor qilinadi. Dogaon karta ma'lumotlari frontend'ga qaytariladi
+    // (mijoz nusxalaydi). Karta raqami ommaviy endpointda emas, shu
+    // autentifikatsiyalangan javobda bor.
+    if (manual) {
+      const cardRows = await prisma.siteSetting.findMany({ where: { key: { in: [...CARD_SETTING_KEYS] } } });
+      const cardMap: Record<string, string> = {};
+      for (const r of cardRows) cardMap[r.key] = r.value;
+      const cardNumber = (cardMap.payment_card_number || '').trim();
+
+      await prisma.$transaction(async (tx) => {
+        await tx.booking.update({ where: { id: booking.id }, data: { status: 'PENDING_PAYMENT' as any } });
+        await auditLog(tx, {
+          paymentId: payment.id,
+          action: 'payment_created',
+          actorId: req.user!.userId,
+          actorRole: req.user!.role as string,
+          metadata: { method: 'TRANSFER', percent, amount, cardConfigured: Boolean(cardNumber) },
+        });
+      });
+
+      await prisma.notification.create({
+        data: {
+          userId: booking.room.ownerId,
+          title: "O'tkazma to'lovi kutilmoqda",
+          message: `${amount.toLocaleString('ru-RU')} so'm karta orqali o'tkaziladi. Mijoz chek yuborgach bank hisobida tekshirib tasdiqlang.`,
+          type: 'payment',
+        },
+      });
+      io.to(`user:${booking.room.ownerId}`).emit('notification_new', { userId: booking.room.ownerId, type: 'payment' });
+
+      return created(res, {
+        payment,
+        checkoutUrl: null,
+        manual: true,
+        merchantCard: cardNumber
+          ? {
+              number: cardNumber,
+              numberFormatted: cardNumber.replace(/\s+/g, '').replace(/(.{4})/g, '$1 ').trim(),
+              holder: cardMap.payment_card_holder || '',
+              bank: cardMap.payment_card_bank || '',
+              note: cardMap.payment_card_note || '',
+            }
+          : null,
+        depositPercent: percent,
+        requiredDeposit: round2(Math.max(0, requiredDeposit - totalPaid)),
+        amount,
+      }, "To'lov sessiyasi yaratildi");
     }
 
     // CASH to'lov — admin kassada qabul qiladi
@@ -924,12 +984,20 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
       return forbidden(res);
     }
     if (!['PENDING', 'CREATED', 'REDIRECT_REQUIRED', 'PROCESSING'].includes(payment.status)) return badRequest(res, 'Bu to\'lov allaqachon yakunlangan');
-    if (payment.method && payment.method !== 'CASH') {
+    if (payment.method && payment.method !== 'CASH' && payment.method !== 'TRANSFER') {
       return badRequest(res, 'Onlayn to\'lovni admin emas, provereng va provayder orqali yakunlanadi');
     }
 
     const txResult = await prisma.$transaction(async (tx) => {
       await auditLog(tx, { paymentId: payment.id, action: 'admin_marked_paid', actorId: req.user!.userId, actorRole: req.user!.role as string });
+      await tx.paymentEvidence.updateMany({
+        where: { paymentId: payment.id, status: 'SUBMITTED' },
+        data: { status: 'APPROVED', reviewedById: req.user!.userId, reviewedAt: new Date() },
+      });
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: { settledAt: new Date(), settledById: req.user!.userId },
+      });
       const r = await settleVerifiedPayment(tx, { id: payment.id, actorId: req.user!.userId, actorRole: req.user!.role as string, audit: { source: 'admin_cash_confirm' } });
       if (r.booking) {
         const info = bookingInfoOf(payment);
@@ -937,6 +1005,16 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
       }
       return r;
     });
+
+    await prisma.notification.create({
+      data: {
+        userId: payment.userId,
+        title: "To'lovingiz tasdiqlandi",
+        message: `${toNumber(payment.amount).toLocaleString('ru-RU')} so'm to'lov tasdiqlandi. Endi bronni boshlashingiz mumkin.`,
+        type: 'payment',
+      },
+    }).catch(() => undefined);
+    io.to(`user:${payment.userId}`).emit('notification_new', { userId: payment.userId, type: 'payment' });
 
     return ok(res, txResult.paid, 'To\'lov tasdiqlandi');
   } catch (err) {
@@ -970,6 +1048,356 @@ export const getAllPayments = async (req: AuthRequest, res: Response, next: Next
     ]);
 
     return ok(res, { payments, total, revenue: round2(toNumber(revenue._sum.amount || 0)) });
+  } catch (err) {
+    next(err);
+  }
+};
+// ============================================================================
+// QO'LDA O'TKAZMA (TRANSFER) OQIMI — karta orqali to'lov
+// ============================================================================
+
+/** Ommaviy GET'da chiqariladigan kalitlar (karta ma'lumotlari aralashmasin) */
+const CARD_SETTING_KEYS = ['payment_card_number', 'payment_card_holder', 'payment_card_bank', 'payment_card_note'] as const;
+
+/**
+ * GET /api/payments/merchant-card — Dogaon kartasi (foydalanuvchi nusxalaydi).
+ *
+ * AUTENTIFIKATSIYA MAJBURIY: karta raqami ommaviy ro'yxatga tushmasin
+ * (skraper/bo'g'in). Faqat tizimga kiritgan foydalanuvchi ko'radi.
+ */
+export const getMerchantCard = async (_req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const rows = await prisma.siteSetting.findMany({ where: { key: { in: [...CARD_SETTING_KEYS] } } });
+    const card: Record<string, string> = {};
+    for (const r of rows) card[r.key] = r.value;
+
+    const number = (card.payment_card_number || '').trim();
+    if (!number) {
+      return ok(res, { configured: false, card: null }, 'To\'lov kartasi hali sozlanmagan');
+    }
+    return ok(res, {
+      configured: true,
+      card: {
+        number,
+        // Foydalanuvchi nusxalashi uchun bo'shliqlarni olib tashlaymiz
+        numberFormatted: number.replace(/\s+/g, '').replace(/(.{4})/g, '$1 ').trim(),
+        holder: card.payment_card_holder || '',
+        bank: card.payment_card_bank || '',
+        note: card.payment_card_note || '',
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/payments/:id/proof — To'lovchi o'tkazma tasdig'ini yuboradi.
+ *
+ * Qabul qilinadi:
+ *   cardLast4  — karta raqamining OXIRGI 4 raqami (masalan "4321")
+ *   cardholderName — egasi ism-familiyasi
+ *   receipts   — 1..3 ta chek (galereyadan JPG/PNG/WEBP/PDF)
+ *
+ * XAVFSIZLIK:
+ *   * To'liq karta raqami (PAN) qabul qilinMAYDI va saqlanMAYDI — faqat
+ *     oxirgi 4 raqam. To'lovchi karta raqamining to'liqini ham yubormasligi
+ *     kerak (shu sabab maydon 4 raqam bilan cheklangan).
+ *   * Faqat to'lovning EGASI (booking.userId) yubora oladi.
+ *   * Faqat hali tasdiqlanmagan (PENDING/CREATED) to'lovga.
+ *   * Har bir yuklash auditga yoziladi.
+ */
+export const submitTransferProof = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const payment = await prisma.payment.findUnique({
+      where: { id: req.params.id },
+      include: { booking: { include: { room: { select: { ownerId: true } } } } },
+    });
+    if (!payment) return notFoundMsg(res, 'To\'lov topilmadi');
+
+    // faqat to'lov egasi
+    if (payment.userId !== req.user!.userId) return forbidden(res, 'Bu to\'lovga kirish huquqingiz yo\'q');
+
+    if (!['PENDING', 'CREATED'].includes(payment.status)) {
+      return badRequest(res, 'Bu to\'lov allaqachon tasdiqlangan yoki bekor qilingan');
+    }
+    if (payment.method && payment.method !== 'TRANSFER') {
+      return badRequest(res, 'Bu to\'lov uchun o\'tkazma tasdig\'i talab qilinmaydi');
+    }
+
+    const last4 = String(req.body?.cardLast4 ?? '').replace(/\D/g, '');
+    const holder = String(req.body?.cardholderName ?? '').trim().replace(/\s+/g, ' ');
+
+    if (!/^\d{4}$/.test(last4)) {
+      return badRequest(res, 'Karta raqamining oxirgi 4 ta raqamini kiriting (masalan: 4321)');
+    }
+    if (holder.length < 3 || holder.length > 120) {
+      return badRequest(res, 'Karta egasining ism-familiyasini to\'liq kiriting');
+    }
+
+    const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+    if (files.length < 1) {
+      return badRequest(res, 'Kamida 1 ta o\'tkazma cheki (screenshot) yuklang');
+    }
+    if (files.length > 3) {
+      return badRequest(res, 'Ko\'pi bilan 3 ta chek yuklash mumkin');
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // eski (rad etilgan) cheklarni arxivlaymiz — o'tkazib yuborilmaydi
+      await tx.paymentEvidence.updateMany({
+        where: { paymentId: payment.id, status: 'SUBMITTED' },
+        data: { status: 'REJECTED', reviewNote: 'Yangi tasdiq bilan almashtirildi' },
+      });
+
+      for (let i = 0; i < files.length; i += 1) {
+        const f = files[i];
+        await tx.paymentEvidence.create({
+          data: {
+            paymentId: payment.id,
+            bookingId: payment.bookingId,
+            uploadedById: req.user!.userId,
+            fileUrl: `/uploads/evidence/${f.filename}`,
+            fileName: f.originalname?.slice(0, 200) || `chek-${i + 1}`,
+            mimeType: f.mimetype,
+            sizeBytes: f.size,
+            status: 'SUBMITTED',
+          },
+        });
+      }
+
+      await auditLog(tx, {
+        paymentId: payment.id,
+        action: 'transfer_proof_submitted',
+        actorId: req.user!.userId,
+        actorRole: req.user!.role as string,
+        metadata: { cardLast4: last4, cardholderName: holder, receipts: files.length },
+      });
+
+      // To'lov o'zi PAID bo'lmaydi — admin bank hisobida tekshiradi va tasdiqlaydi.
+      return tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          method: 'TRANSFER',
+          provider: null,
+          status: 'PENDING',
+          proofCardLast4: last4,
+          proofCardholderName: holder,
+          proofSubmittedAt: new Date(),
+        },
+        include: { evidences: true },
+      });
+    });
+
+    const info = bookingInfoOf(payment);
+    io.emit('payment_proof_submitted', {
+      roomId: info.roomId ?? payment.booking.roomId,
+      bookingId: payment.bookingId,
+      paymentId: updated.id,
+    });
+
+    return ok(res, {
+      paymentId: updated.id,
+      cardLast4: last4,
+      receipts: updated.evidences.length,
+      status: updated.status,
+    }, 'Tasdiq yuborildi — admin bank hisobini tekshirib tasdiqlaydi');
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/payments/debts — Kassa: qarzlar (overtime) + kutilayotgan
+ * qo'lda to'lovlar (naqd / o'tkazma cheki).
+ *   USER  — faqat o'z qarzlari
+ *   ADMIN/SUPER_ADMIN — xona (ADMIN) yoki barchasi (SUPER_ADMIN)
+ * To'lanmagan (PAID/REFUNDED emas) qarzlar `open=true` bilan.
+ *
+ * MUHIM: `pending` — mijoz naqd yoki o'tkazma qilib, admin tasdig'i kutayotgan
+ * to'lovlar. Ilgari ular faqat bildirishnoma orqali ko'rinardi va "kutilmoqda"
+ * da qolib ketardi; endi kassada ro'yxatda turadi va bir bosishda tasdiqlanadi.
+ */
+export const getDebts = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { open } = req.query as { open?: string };
+    const onlyOpen = open === undefined ? true : ['1', 'true', 'yes'].includes(open.toLowerCase());
+    const isAdmin = req.user!.role === 'ADMIN' || req.user!.role === 'SUPER_ADMIN';
+    const scope: Prisma.PaymentWhereInput =
+      req.user!.role === 'SUPER_ADMIN'
+        ? {}
+        : isAdmin
+          ? { booking: { room: { ownerId: req.user!.userId } } }
+          : { userId: req.user!.userId };
+
+    const where: Prisma.PaymentWhereInput = {
+      isDebt: true,
+      ...(onlyOpen ? { status: { in: ['PENDING', 'CREATED', 'PROCESSING'] } } : {}),
+      ...scope,
+    };
+
+    const [debts, pending] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        orderBy: [{ settledAt: 'asc' }, { dueAt: 'asc' }, { createdAt: 'desc' }],
+        take: 200,
+        include: {
+          user: { select: { id: true, fullName: true, phone: true, email: true } },
+          booking: { select: { id: true, date: true, startTime: true, endTime: true, roomId: true, room: { select: { name: true } }, zone: { select: { name: true } } } },
+          settledBy: { select: { id: true, fullName: true } },
+        },
+      }),
+      // Kutilayotgan qo'lda to'lovlar — naqd (CASH) va o'tkazma (TRANSFER).
+      // Faqat admin uchun: foydalanuvchining o'z "kutilmoqda" to'lovi bor.
+      isAdmin
+        ? prisma.payment.findMany({
+            where: {
+              ...scope,
+              isDebt: false,
+              method: { in: ['CASH', 'TRANSFER'] },
+              status: { in: ['PENDING', 'CREATED', 'PROCESSING'] },
+            },
+            orderBy: { createdAt: 'asc' },
+            take: 100,
+            include: {
+              user: { select: { id: true, fullName: true, phone: true, email: true } },
+              booking: { select: { id: true, date: true, startTime: true, endTime: true, roomId: true, room: { select: { name: true } }, zone: { select: { name: true } } } },
+              evidences: { where: { status: 'SUBMITTED' }, orderBy: { createdAt: 'asc' } },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    return ok(res, {
+      openCount: debts.length,
+      total: round2(debts.reduce((s, d) => s + toNumber(d.amount), 0)),
+      pendingCount: pending.length,
+      pendingTotal: round2(pending.reduce((s, d) => s + toNumber(d.amount), 0)),
+      debts: debts.map((d) => ({
+        id: d.id,
+        amount: toNumber(d.amount),
+        dueAt: d.dueAt,
+        createdAt: d.createdAt,
+        status: d.status,
+        settledAt: d.settledAt,
+        settledBy: d.settledBy?.fullName || null,
+        bookingId: d.bookingId,
+        bookingLabel: `${d.booking.room?.name || 'Xona'}${d.booking.zone?.name ? ` / ${d.booking.zone.name}` : ''} (${d.booking.startTime}-${d.booking.endTime})`,
+        user: { id: d.user.id, fullName: d.user.fullName, phone: d.user.phone, email: d.user.email },
+      })),
+      pending: pending.map((d) => ({
+        id: d.id,
+        amount: toNumber(d.amount),
+        method: d.method,
+        status: d.status,
+        createdAt: d.createdAt,
+        proofSubmittedAt: d.proofSubmittedAt,
+        cardLast4: d.proofCardLast4,
+        cardholderName: d.proofCardholderName,
+        receipts: d.evidences.map((e) => ({ id: e.id, url: e.fileUrl, mimeType: e.mimeType })),
+        bookingId: d.bookingId,
+        bookingLabel: `${d.booking.room?.name || 'Xona'}${d.booking.zone?.name ? ` / ${d.booking.zone.name}` : ''} (${d.booking.startTime}-${d.booking.endTime})`,
+        user: { id: d.user.id, fullName: d.user.fullName, phone: d.user.phone, email: d.user.email },
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/payments/:id/settle — ADMIN: kassada to'landi deb tasdiqlash.
+ *
+ * Ikki holatni yopadi:
+ *   1) QARZ (isDebt=true) — sessiya tugagandan keyin yuzaga kelgan overtime
+ *      qarz: mijoz naqd pulni kassaga beradi, admin shu yerda tasdiqlaydi.
+ *   2) KUTILAYOTGAN QO'LDA TO'LOV (CASH / TRANSFER, isDebt=false) — mijoz
+ *      to'lov yaratgan, naqd kassaga kelgan yoki o'tkazma chekini yuborgan.
+ *      Bunday to'lov oldin faqat bildirishnoma orqali ko'rinardi va
+ *      "kutilmoqda" da qolib ketardi — endi kassada ro'yxatda turadi va
+ *      shu tugma orqali bir bosishda tasdiqlanadi.
+ *
+ * To'lov PAID ga o'tadi, `settledAt`/`settledBy` yoziladi (kim tasdiqlagan),
+ * cheklar APPROVED bo'ladi va MIJOZGA bildirishnoma boribadi.
+ */
+export const settleDebt = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const payment = await prisma.payment.findUnique({
+      where: { id: req.params.id },
+      include: { booking: { include: { room: { select: { ownerId: true } } } }, user: { select: { fullName: true } } },
+    });
+    if (!payment) return notFoundMsg(res, 'To\'lov topilmadi');
+    if (payment.booking.room.ownerId !== req.user!.userId && req.user!.role !== 'SUPER_ADMIN') {
+      return forbidden(res);
+    }
+
+    const isManualPending =
+      !payment.isDebt &&
+      (payment.method === 'CASH' || payment.method === 'TRANSFER') &&
+      ['PENDING', 'CREATED', 'PROCESSING'].includes(payment.status);
+
+    if (!payment.isDebt && !isManualPending) {
+      return badRequest(res, payment.isDebt ? 'Bu qarz emas' : 'Bu to\'lov allaqachon yakunlangan yoki tasdiqlashga loyiq emas');
+    }
+    if (payment.isDebt && payment.settledAt) {
+      return badRequest(res, 'Bu qarz allaqachon kassada to\'langan deb tasdiqlangan');
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      await auditLog(tx, {
+        paymentId: payment.id,
+        action: isManualPending ? 'manual_payment_settled' : 'debt_settled_cash',
+        actorId: req.user!.userId,
+        actorRole: req.user!.role as string,
+        metadata: {
+          amount: toNumber(payment.amount),
+          user: payment.user.fullName,
+          method: payment.method,
+          isDebt: payment.isDebt,
+        },
+      });
+      const r = await settleVerifiedPayment(tx, {
+        id: payment.id,
+        actorId: req.user!.userId,
+        actorRole: req.user!.role as string,
+        audit: { source: 'till_cash_settlement' },
+      });
+      // Cheklar tasdiqlandi deb belgilandi (TRANSFER holati uchun)
+      await tx.paymentEvidence.updateMany({
+        where: { paymentId: payment.id, status: 'SUBMITTED' },
+        data: { status: 'APPROVED', reviewedById: req.user!.userId, reviewedAt: new Date() },
+      });
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          settledAt: new Date(),
+          settledById: req.user!.userId,
+          // Naqd to'lov kassada yopilgan bo'lsa — CASH deb qoladi; o'tkazma
+          // o'z usulini saqlaydi (bank orqali kelgan edi).
+          ...(payment.method === 'CASH' ? { method: 'CASH' as const } : {}),
+        },
+      });
+      return r;
+    });
+
+    // Mijoz darhol xabar oladi — "tasdiqlash kelmayapti" muammosi shu yerda
+    // hal bo'ladi (ikkala tomon ham xabardor bo'ladi).
+    await prisma.notification.create({
+      data: {
+        userId: payment.userId,
+        title: "To'lovingiz tasdiqlandi",
+        message: `${toNumber(payment.amount).toLocaleString('ru-RU')} so'm to'lov kassada qabul qilindi. Endi bronni boshlashingiz mumkin.`,
+        type: 'payment',
+      },
+    }).catch(() => undefined);
+    io.to(`user:${payment.userId}`).emit('notification_new', { userId: payment.userId, type: 'payment' });
+    io.emit('booking_status_changed', {
+      roomId: payment.booking.roomId,
+      bookingId: payment.bookingId,
+      type: result.booking?.status || 'PAID',
+    });
+
+    return ok(res, result.paid, 'Kassada to\'langan deb tasdiqlandi');
   } catch (err) {
     next(err);
   }

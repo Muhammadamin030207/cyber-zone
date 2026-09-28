@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import {
   MapPin, Phone, Clock, Star, MessageSquare, Monitor, Cpu, MemoryStick, Video,
   ChevronLeft, Users, Rocket, ShieldCheck, Sparkles, Plus, X, Loader2,
+  AlertCircle, RefreshCw,
 } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -33,6 +34,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
   const [date, setDate] = useState(todayISO());
   const [availability, setAvailability] = useState<AvailabilityZone[]>([]);
   const [availLoading, setAvailLoading] = useState(false);
+  const [availError, setAvailError] = useState<string | null>(null);
 
   const fetchRoom = useCallback(async () => {
     if (!roomId) return;
@@ -51,11 +53,14 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
   const fetchAvailability = useCallback(async () => {
     if (!roomId) return;
     setAvailLoading(true);
+    setAvailError(null);
     try {
       const { data } = await api.get(`/api/bookings/rooms/${roomId}/availability?date=${date}`);
-      setAvailability(data.data.zones || []);
-    } catch {
-      setAvailability([]);
+      setAvailability(data?.data?.zones ?? []);
+    } catch (err) {
+      // Xatoni «band» deb ko'rsatish YOLG'ON bo'lardi: foydalanuvchi xona bo'sh
+      // deb o'ylab, boshqa xona qidiradi. Aksincha, aniq xato + qayta urinish.
+      setAvailError(getApiErrorMessage(err, 'Mavjudlikni yuklab bo‘lmadi.'));
     } finally {
       setAvailLoading(false);
     }
@@ -301,6 +306,21 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
 
         {/* Right: booking widget */}
         <div className="lg:sticky lg:top-20 h-fit">
+          {availError && (
+            <div role="alert" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              <AlertCircle size={16} className="shrink-0" aria-hidden="true" />
+              <span className="flex-1 min-w-[12rem]">
+                {availError} Bo&apos;sh vaqtlar ko&apos;rsatilmadi — bu xona band degani emas.
+              </span>
+              <button
+                type="button"
+                onClick={() => { void fetchAvailability(); }}
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-amber-400/40 px-3 font-semibold transition-colors hover:bg-amber-400/10"
+              >
+                <RefreshCw size={14} aria-hidden="true" /> Qayta urinish
+              </button>
+            </div>
+          )}
           <BookingWidget room={room} date={date} onDateChange={setDate} availability={availability} availabilityLoading={availLoading} />
         </div>
       </div>

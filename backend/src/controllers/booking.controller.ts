@@ -1055,3 +1055,124 @@ export const getAvailability = async (req: Request, res: Response, next: NextFun
     next(err);
   }
 };
+/**
+ * ============ PATCH /api/bookings/admin/bookings/:id/no-show ============
+ * No-show (kelmagan) bron uchun admin QARORI.
+ *
+ * Oqim:
+ *   1) Sessiya vaqti o'tib, mijoz kelmaganda worker bronni yopadi va
+ *      xona adminiga "qaror kerak" xabarini yuboradi.
+ *   2) Admin avval mijoz bilan bog'lanadi. Mijoz kelmayman DEGANDA:
+ *        - action='refund'  → to'langan summa REFUNDED, ballar/promo qaytariladi
+ *        - action='forfeit' → avans xonaga qoladi (jarima hisobida)
+ *   3) Qaror bir marta qabul qilinadi; takrorlanishi mumkin emas
+ *      (idempotent — allaqachon qaror bo'lsa 409).
+ *
+ * XAVFSIZLIK: faqat xona egasi (yoki SUPER_ADMIN). To'lovni `PAID` qilish
+ * bu yerda MUMKIN EMAS — faqat `REFUNDED` yoki o'z holatida qoladi.
+ */
+export const decideNoShow = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params as { id: string };
+    const action = String((req.body as { action?: string })?.action || '').toUpperCase();
+    const reason = String((req.body as { reason?: string })?.reason || '').trim().slice(0, 500);
+
+    if (action !== 'REFUND' && action !== 'FORFEIT') {
+      return badRequest(res, "action 'REFUND' yoki 'FORFEIT' bo'lishi kerak");
+    }
+    if (action === 'REFUND' && reason.length < 3) {
+      return badRequest(res, 'Qaytarish sababini yozing (kamida 3 ta belgi)');
+    }
+
+    const booking = await prisma.booking.findUnique({
+      where: { id },
+      include: { room: { select: { ownerId: true, name: true } } },
+    });
+    if (!booking) return notFoundMsg(res, 'Bron topilmadi');
+
+    const isSuper = req.user!.role === 'SUPER_ADMIN';
+    if (!isSuper && booking.room.ownerId !== req.user!.userId) {
+      return forbidden(res, 'Bu bron sizning xonangizga tegishli emas');
+    }
+
+    // Faqat no-show yopilgan bron uchun: hech qachon sessiya boshlangan emas
+    if (booking.sessionStartedAt) {
+      return badRequest(res, 'Bu bronda sessiya boshlangan — no-show emas');
+    }
+    if (booking.noShowOutcome) {
+      return badRequest(res, 'Bu bron uchun qaror allaqachon qabul qilingan', 'ALREADY_DECIDED');
+    }
+
+    const refundedPayments = await prisma.payment.findMany({
+      where: { bookingId: id, status: { in: [...PAID_STATUSES] } },
+      select: { id: true, amount: true },
+    });
+    const refundTotal = refundedPayments.reduce((s, p) => s + round2(toNumber(p.amount)), 0);
+
+    await prisma.$transaction(async (tx) => {
+      if (action === 'REFUND') {
+        // To'lovlar qaytariladi
+        await tx.payment.updateMany({
+          where: { bookingId: id, status: { in: [...PAID_STATUSES] } },
+          data: { status: 'REFUNDED' },
+        });
+        // Bonus ballar va promo-kod qaytariladi
+        await refundPoints(tx, booking);
+        if (booking.promoCodeId) {
+          await tx.promoRedemption.deleteMany({ where: { bookingId: id } });
+          await tx.promoCode.update({
+            where: { id: booking.promoCodeId },
+            data: { usedCount: { decrement: 1 } },
+          });
+        }
+      }
+
+      await tx.booking.update({
+        where: { id },
+        data: {
+          noShowOutcome: action,
+          noShowHandledAt: new Date(),
+          noShowHandledById: req.user!.userId,
+          rejectionReason: reason || null,
+        },
+      });
+
+      await tx.notification.create({
+        data: {
+          userId: booking.userId,
+          title: action === 'REFUND' ? 'To\'lov qaytarildi' : 'No-show qarori',
+          message: action === 'REFUND'
+            ? `Siz kelmaganingiz uchun bron bekor qilindi va ${refundTotal.toLocaleString('ru-RU')} so'm to'lov qaytarildi.${reason ? ` Sabab: ${reason}` : ''}`
+            : `Siz kelmaganingiz uchun bron yopildi. To'langan summa ushlab qolindi.${reason ? ` Sabab: ${reason}` : ''}`,
+          type: 'booking',
+        },
+      });
+
+      // Moliyaviy audit: har bir tegilgan to'lovga yozib boriladi
+      for (const p of refundedPayments) {
+        await tx.paymentAuditLog.create({
+          data: {
+            paymentId: p.id,
+            action: action === 'REFUND' ? 'booking_no_show_refunded' : 'booking_no_show_forfeited',
+            actorId: req.user!.userId,
+            actorRole: req.user!.role as string,
+            metadata: { bookingId: id, amount: toNumber(p.amount), reason },
+          },
+        });
+      }
+    });
+
+    io.to(`user:${booking.userId}`).emit('notification_new', { userId: booking.userId, type: 'booking' });
+    io.emit('booking_status_changed', { roomId: booking.roomId, type: 'no_show_decided' });
+
+    return ok(res, {
+      bookingId: id,
+      noShowOutcome: action,
+      refundTotal: action === 'REFUND' ? refundTotal : 0,
+      forfeitedTotal: action === 'FORFEIT' ? refundTotal : 0,
+      paymentsRefunded: action === 'REFUND' ? refundedPayments.length : 0,
+    }, action === 'REFUND' ? 'To\'lov qaytarildi' : 'Avans ushlab qolindi');
+  } catch (err) {
+    next(err);
+  }
+};

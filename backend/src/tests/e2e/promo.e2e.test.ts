@@ -198,3 +198,80 @@ describe('E2E: Promo-kod — min 100k, single-use per identity, censellikda qayt
     expect(activeBookings).toBe(1);
   });
 });
+// ============ Admin ro'yxatida muddati o'tgan promo-kod KO'RINMAYDI ============
+describe('E2E: Promo-kod — admin ro\'yxatida muddati o\'tgan kod yashiriladi', () => {
+  let superAdminToken: string;
+  let superAdminId: string;
+  let roomId: string;
+
+  beforeAll(async () => {
+    await reset();
+    const superAdmin = await createUserDirect({ email: 'promo-exp-admin@e2e.test', password: 'secret123', role: 'SUPER_ADMIN' });
+    superAdminId = superAdmin.id;
+    superAdminToken = await login('promo-exp-admin@e2e.test', 'secret123');
+    const fixture = await createRoomFixture(superAdmin.id);
+    roomId = fixture.room.id;
+  });
+
+  async function makePromo(code: string, expiresAt: Date, extra: Record<string, unknown> = {}) {
+    return prisma.promoCode.create({
+      data: {
+        code,
+        discountType: 'PERCENTAGE',
+        discountValue: 10,
+        usageScope: 'MULTI_USE',
+        createdBy: superAdminId,
+        startsAt: new Date(Date.now() - 86_400_000),
+        expiresAt,
+        roomId,
+        ...extra,
+      } as any,
+    });
+  }
+
+  it('muddati o\'tgan kod default ro\'yxatda KO\'RINMAYDI', async () => {
+    await makePromo('MUDDATIOTGAN', new Date(Date.now() - 1000));
+
+    const res = await api().get('/api/promo').set('Authorization', auth(superAdminToken));
+    expect(res.status).toBe(200);
+    const codes = res.body.data.map((p: any) => p.code);
+    expect(codes).not.toContain('MUDDATIOTGAN');
+  });
+
+  it('hali amal qiluvchi kod KO\'RINADI va status=ACTIVE', async () => {
+    await makePromo('YASHIROQ', new Date(Date.now() + 86_400_000));
+
+    const res = await api().get('/api/promo').set('Authorization', auth(superAdminToken));
+    const found = res.body.data.find((p: any) => p.code === 'YASHIROQ');
+    expect(found).toBeTruthy();
+    expect(found.status).toBe('ACTIVE');
+    expect(found.expiresInMinutes).toBeGreaterThan(0);
+    // Decimal JSON muammosi yo'q — oddiy son qaytadi
+    expect(typeof found.discountValue).toBe('number');
+  });
+
+  it('include_expired=1 bilan o\'tgan kodlar TEKSHIRUV uchun ko\'rinadi (status=EXPIRED)', async () => {
+    const res = await api()
+      .get('/api/promo?include_expired=1')
+      .set('Authorization', auth(superAdminToken));
+    const found = res.body.data.find((p: any) => p.code === 'MUDDATIOTGAN');
+    expect(found).toBeTruthy();
+    expect(found.status).toBe('EXPIRED');
+    expect(found.expiresInMinutes).toBe(0);
+  });
+
+  it('hali boshlanmagan kod -> status=NOT_STARTED (va ko\'rinadi)', async () => {
+    await makePromo('KELGUSI', new Date(Date.now() + 7 * 86_400_000), {
+      startsAt: new Date(Date.now() + 3 * 86_400_000),
+    });
+    const res = await api().get('/api/promo').set('Authorization', auth(superAdminToken));
+    const found = res.body.data.find((p: any) => p.code === 'KELGUSI');
+    expect(found).toBeTruthy();
+    expect(found.status).toBe('NOT_STARTED');
+  });
+
+  it('muddati o\'tgan kod ishlatingicha BO\'LMAYDI (double-check)', async () => {
+    const res = await api().get('/api/promo/check?code=MUDDATIOTGAN');
+    expect(res.body.success).not.toBe(true);
+  });
+});

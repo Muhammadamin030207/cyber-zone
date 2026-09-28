@@ -167,10 +167,20 @@ services:
         sync: false
       - key: ANTHROPIC_MODEL
         value: claude-sonnet-4-5
+      # ---------- AI: OpenAI-compatible (ixtiyoriy, LEKIN BITTASI yetarli) ----------
+      # Bu eng universal yo'l: OpenAI, Groq, Together, OpenRouter, vLLM,
+      # LM Studio, Ollama — hammasi shu formatda. OPENAI_BASE_URL ni
+      # o'zgartirib bo'lib bo'ladi (masalan Ollama: http://127.0.0.1:11434/v1).
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_BASE_URL
+        value: https://api.openai.com/v1
       - key: AI_TEMPERATURE
         value: "0.7"
       - key: AI_MAX_TOKENS
-        value: "1000"
+        value: "2048"
 
       # ---------- Email (Brevo relay — 2525 port, STARTTLS) ----------
       # Render free web service 25/465/587 portlarini bloklaydi, shuning uchun

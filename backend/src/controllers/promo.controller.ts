@@ -55,17 +55,57 @@ function collectPersonalFields(body: any): {
   return { data: { isPersonal, recipientUserId, recipientPhone, recipientEmail } };
 }
 
+/**
+ * Promo-kodning HOLLIK (holati) — admin ro'yxati uchun.
+ * `isActive` bilan aralashmasligi kerak: kod `isActive=true` bo'lishi mumkin,
+ * lekin muddati o'tgan yoki boshlangan bo'lsa — allaqachon ishlatib bo'lmaydi.
+ */
+function promoStatus(p: { isActive: boolean; startsAt: Date; expiresAt: Date; usedCount: number; maxUses: number | null; usageScope: string }, now: Date): string {
+  if (now > p.expiresAt) return 'EXPIRED';
+  if (now < p.startsAt) return 'NOT_STARTED';
+  if (!p.isActive) return 'INACTIVE';
+  const unlimited = p.maxUses === null || p.usageScope === 'MULTI_USE';
+  if (!unlimited && p.maxUses !== null && p.usedCount >= p.maxUses) return 'USED_UP';
+  return 'ACTIVE';
+}
+
 // ============ GET /api/admin/promos — ADMIN: o'z promo-kodlari ============
+/**
+ * MUDDATI O'TGAN KODLAR RO'YXATDA KO'RINMAYDI (default).
+ * Sabab: admin panelida eskirgan kodlar aralashib, "nega ishlamayapti?"
+ * degan chalkashlik keltiradi — va xato bilan qayta ishlatilishi mumkin.
+ * Tarix/tekshiruv uchun `?include_expired=1` bilan ko'riladi (O'CHIRILMAYDI —
+ * hisob uchun saqlanadi).
+ */
 export const getMyPromos = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const room = await getMyRoom(req, res);
     if (room === undefined) return;
 
+    const now = new Date();
+    const includeExpired = ['1', 'true', 'yes'].includes(
+      String((req.query as Record<string, unknown>).include_expired || '').toLowerCase(),
+    );
+
     const promos = await prisma.promoCode.findMany({
-      where: room ? { roomId: room.id } : {},
+      where: {
+        ...(room ? { roomId: room.id } : {}),
+        ...(includeExpired ? {} : { expiresAt: { gte: now } }),
+      },
       orderBy: { createdAt: 'desc' },
     });
-    return ok(res, promos);
+
+    // Decimal -> oddiy son (frontend JSON'ni oldini oladi)
+    return ok(
+      res,
+      promos.map((p) => ({
+        ...p,
+        discountValue: Number(p.discountValue),
+        minBookingAmount: p.minBookingAmount === null ? null : Number(p.minBookingAmount),
+        status: promoStatus(p, now),
+        expiresInMinutes: Math.max(0, Math.floor((p.expiresAt.getTime() - now.getTime()) / 60000)),
+      })),
+    );
   } catch (err) {
     next(err);
   }

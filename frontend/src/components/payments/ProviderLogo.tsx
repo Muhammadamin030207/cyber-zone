@@ -66,6 +66,18 @@ export default function ProviderLogo({
       </svg>
     );
   }
+  if (m === 'TRANSFER') {
+    // Karta orqali o'tkazma — bank kartasi + o'tkazma o'qi
+    return (
+      <svg width={size} height={size} viewBox="0 0 32 32" role="img" aria-label="Karta orqali">
+        <rect x="1" y="1" width="30" height="30" rx="7" fill="#22d3ee" />
+        <rect x="5" y="9" width="22" height="14" rx="2" fill="white" />
+        <rect x="5" y="12" width="22" height="3.4" fill="#0e7490" />
+        <rect x="8" y="19" width="7" height="2" rx="1" fill="#22d3ee" />
+        <rect x="16.5" y="19" width="4.5" height="2" rx="1" fill="#94a3b8" />
+      </svg>
+    );
+  }
   const brand = BRAND_TEXT[m as keyof typeof BRAND_TEXT];
   if (!brand) return null;
   return (

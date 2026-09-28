@@ -13,8 +13,13 @@ import {
   mockSandboxPayment,
   getSandboxState,
   setSandboxState,
+  getMerchantCard,
+  submitTransferProof,
+  getDebts,
+  settleDebt,
 } from '../controllers/payment.controller';
 import { authenticate, authorize } from '../middlewares/auth';
+import { uploadPaymentReceipts } from '../middlewares/upload';
 
 const router = Router();
 
@@ -63,11 +68,46 @@ const paymentConfirmLimiter = createRedisRateLimiter({
   message: { success: false, message: "Juda ko'p tasdiqlash so'rovi. Birozdan so'ng qayta urinib ko'ring." },
 });
 
+// O'tkazma tasdig'i yuklash — fayl + DB yozuvi, limitlash kerak.
+const proofLimiter = createRedisRateLimiter({
+  windowMs: 60 * 1000,
+  limit: 5,
+  keyPrefix: 'rl:payment:proof',
+  keyGenerator: (req: any) => `${req.ip || 'unknown'}:${req.user?.userId || 'anon'}`,
+  message: { success: false, message: "Juda ko'p tasdiq so'rovi. Birozdan so'ng qayta urinib ko'ring." },
+});
+
 // SUPER_ADMIN: to'lov test (sandbox) rejimi boshqaruvi
 router.get('/admin/sandbox', authenticate, authorize('SUPER_ADMIN'), getSandboxState);
 router.put('/admin/sandbox', authenticate, authorize('SUPER_ADMIN'), setSandboxState);
 
 router.post('/create', authenticate, authorize('USER', 'ADMIN', 'SUPER_ADMIN'), paymentCreateLimiter, createPayment);
+// Dogaon kartasi (nusxalash uchun). AUTENTIFIKATSIYA MAJBURIY — karta raqami
+// ommaviy endpointda chiqmasligi kerak (skraper/bo'g'in himoyasi).
+router.get('/merchant-card', authenticate, getMerchantCard);
+
+// Kassa: qarzlar (overtime) ro'yxati
+router.get('/debts', authenticate, getDebts);
+
+// To'lovchi o'tkazma tasdig'i: oxirgi 4 raqam + ism + 1..3 ta chek
+router.post(
+  '/:id/proof',
+  authenticate,
+  authorize('USER', 'ADMIN', 'SUPER_ADMIN'),
+  proofLimiter,
+  uploadPaymentReceipts.array('receipts', 3),
+  submitTransferProof,
+);
+
+// ADMIN: kassada to'landi deb tasdiqlash (qarzni yopish)
+router.post(
+  '/:id/settle',
+  authenticate,
+  authorize('ADMIN', 'SUPER_ADMIN'),
+  paymentConfirmLimiter,
+  settleDebt,
+);
+
 router.get('/providers', getProviders);
 router.get('/history', authenticate, getPaymentHistory);
 router.get('/:id/status', authenticate, getPaymentByIdStatus);

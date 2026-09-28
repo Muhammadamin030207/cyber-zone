@@ -184,6 +184,7 @@ model User {
 
   uploadedEvidence  PaymentEvidence[] @relation("EvidenceUploader")
   reviewedEvidence  PaymentEvidence[] @relation("EvidenceReviewer")
+  settledPayments   Payment[]         @relation("PaymentSettler")
   bookingApprovals  Booking[]         @relation("BookingApprover")
   bookingRejections Booking[]         @relation("BookingRejecter")
 
@@ -206,11 +207,10 @@ model User {
   supportSent         SupportMessage[]     @relation("SupportSender")
   loyaltyTransactions LoyaltyTransaction[]
 
-  @@map("users")
   @@index([role])
   @@index([status])
   @@index([createdAt])
-
+  @@map("users")
 }
 
 // ============ XAVFSIZLIK VOQEALARI (AUDIT) ============
@@ -266,9 +266,8 @@ model ComputerRoom {
   chatMessages    ChatMessage[]
   supportMessages SupportMessage[]
 
-  @@map("computer_rooms")
   @@index([status, createdAt])
-
+  @@map("computer_rooms")
 }
 
 model Zone {
@@ -286,9 +285,8 @@ model Zone {
   computers Computer[]
   bookings  Booking[]
 
-  @@map("zones")
   @@index([roomId])
-
+  @@map("zones")
 }
 
 model Computer {
@@ -303,9 +301,8 @@ model Computer {
   zone     Zone      @relation(fields: [zoneId], references: [id], onDelete: Cascade)
   bookings Booking[]
 
-  @@map("computers")
   @@index([zoneId])
-
+  @@map("computers")
 }
 
 model Booking {
@@ -344,6 +341,11 @@ model Booking {
   sessionEndsAt         DateTime? @map("session_ends_at")
   // Sessiya avtomatik yopildimi (foydalanuvchi "check-out" bosmadimi)
   autoClosed            Boolean   @default(false) @map("auto_closed")
+  // KELMADI (no-show): to'lov qilingan, lekin sessiya boshlanmagan va vaqt o'tdi.
+  // Avval admin xabar beradi (telefon/xabar) — keyin QAROR: REFUNDED | FORFEITED.
+  noShowOutcome         String?   @map("no_show_outcome") // REFUNDED | FORFEITED
+  noShowHandledAt       DateTime? @map("no_show_handled_at")
+  noShowHandledById     String?   @map("no_show_handled_by_id")
   // Bronni band qilish muddati (to'lov kutilayotgan paytdan boshlab)
   holdExpiresAt         DateTime? @map("hold_expires_at")
 
@@ -464,6 +466,18 @@ model Payment {
   // admin va mijoz uchun ko'rinadi (GET /api/payments/debts).
   isDebt                Boolean          @default(false) @map("is_debt")
   dueAt                 DateTime?        @map("due_at")
+  // ===== QO'LDA O'TKAZMA (TRANSFER) TASDIQLOVI =====
+  // Foydalanuvchi o'z bank ilovasida o'tkazma qiladi va BU YERGA faqat
+  // XAVFSIZ ma'lumot yozadi: karta raqamining OXIRGI 4 raqami + egasi ismi.
+  // To'liq karta raqami (PAN) HECH QACHON bazaga yozilmaydi — PCI/xavfsizlik.
+  // Tekshiruv admin uchun bank hisobi orqali shu 4 raqam + ism bo'yicha.
+  proofCardLast4        String?          @map("proof_card_last4") // "4321"
+  proofCardholderName   String?          @map("proof_cardholder_name")
+  proofSubmittedAt      DateTime?        @map("proof_submitted_at")
+  // KASSADA TO'LASH: qarz (overtime) to'ldi deb admin tasdiqladi
+  settledAt             DateTime?        @map("settled_at")
+  settledById           String?          @map("settled_by_id")
+  settledBy             User?            @relation("PaymentSettler", fields: [settledById], references: [id], onDelete: SetNull)
   createdAt             DateTime         @default(now()) @map("created_at")
   updatedAt             DateTime         @default(now()) @updatedAt @map("updated_at")
 
@@ -542,9 +556,8 @@ model BarItem {
 
   room ComputerRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
-  @@map("bar_items")
   @@index([roomId, isAvailable])
-
+  @@map("bar_items")
 }
 
 model BarOrder {
@@ -563,9 +576,8 @@ model BarOrder {
   booking Booking?     @relation(fields: [bookingId], references: [id])
   user    User         @relation(fields: [userId], references: [id])
 
-  @@map("bar_orders")
   @@index([userId, createdAt])
-
+  @@map("bar_orders")
 }
 
 // ============ JONLI SUHBAT (Chat) ============
@@ -581,10 +593,9 @@ model ChatMessage {
   room ComputerRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
   user User         @relation(fields: [userId], references: [id])
 
-  @@map("chat_messages")
   @@index([roomId, createdAt])
   @@index([userId, isRead])
-
+  @@map("chat_messages")
 }
 
 // ===================== SUPPORT / MUROJAATLAR =====================
@@ -643,10 +654,9 @@ model Review {
   user User         @relation(fields: [userId], references: [id])
   room ComputerRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
-  @@map("reviews")
   @@index([roomId])
   @@index([userId, roomId])
-
+  @@map("reviews")
 }
 
 model Notification {
@@ -660,9 +670,8 @@ model Notification {
 
   user User @relation(fields: [userId], references: [id])
 
-  @@map("notifications")
   @@index([userId, createdAt])
-
+  @@map("notifications")
 }
 
 // ============ LOYALTY (Bonus ballar) ============

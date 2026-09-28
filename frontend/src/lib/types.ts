@@ -126,6 +126,9 @@ export interface Booking {
   sessionEndedAt?: string | null;
   sessionEndsAt?: string | null;
   autoClosed?: boolean;
+  // No-show: mijoz kelmagani, admin qarori kutilmoqda
+  noShowOutcome?: 'REFUND' | 'FORFEIT' | null;
+  noShowHandledAt?: string | null;
   holdExpiresAt?: string | null;
   actualDurationMinutes?: number | null;
   actualPrice?: number | string | null;
@@ -195,6 +198,13 @@ export interface Payment {
   paidAt?: string | null;
   isDebt?: boolean;
   dueAt?: string | null;
+  // Qo'lda o'tkazma tasdig'i — faqat karta raqamining OXIRGI 4 raqami + ism.
+  // To'liq karta raqami hech qachon saqlanmaydi.
+  proofCardLast4?: string | null;
+  proofCardholderName?: string | null;
+  proofSubmittedAt?: string | null;
+  // Kassada to'lash tasdig'i
+  settledAt?: string | null;
   metadata?: Record<string, unknown> | null;
 }
 

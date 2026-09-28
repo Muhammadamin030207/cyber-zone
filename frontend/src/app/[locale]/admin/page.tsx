@@ -7,8 +7,8 @@ import { useRouter } from '@/i18n/navigation';
 import {
   Settings, Monitor, Cpu, CalendarDays, BadgePercent, Newspaper, BarChart3, MessageSquare,
   Plus, Pencil, Trash2, Loader2, AlertCircle, Check, ShieldCheck, Users, Zap,
-  Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy, MessagesSquare, Info,
-} from 'lucide-react';
+  Save, X, ChevronDown, ChevronUp, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy, MessagesSquare, Info, Banknote, UserX,
+  } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/toast';
 import { confirmDialog, promptDialog } from '@/lib/confirm';
@@ -20,17 +20,19 @@ import BarAdmin from '@/components/admin/BarAdmin';
 import ChatAdmin from '@/components/admin/ChatAdmin';
 import SupportChat from '@/components/support/SupportChat';
 import SiteSettingsTab from '@/components/admin/SiteSettingsTab';
+import TillTab from '@/components/admin/TillTab';
 import Logo from '@/components/brand/Logo';
 
 const MapPicker = dynamic(() => import('@/components/rooms/MapPicker'), { ssr: false });
 
-type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'bar' | 'chat' | 'requests' | 'support' | 'promos' | 'news' | 'stats' | 'site';
+type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'till' | 'bar' | 'chat' | 'requests' | 'support' | 'promos' | 'news' | 'stats' | 'site';
 
 const TABS: { key: Tab; icon: any; label: string }[] = [
   { key: 'room', icon: Settings, label: 'Xona' },
   { key: 'zones', icon: Users, label: 'Zonalar' },
   { key: 'computers', icon: Monitor, label: 'Kompyuterlar' },
   { key: 'bookings', icon: CalendarDays, label: 'Bronlar' },
+  { key: 'till', icon: Banknote, label: 'Kassa' },
   { key: 'bar', icon: Gamepad2, label: 'Gaming Bar' },
   { key: 'chat', icon: MessageSquare, label: 'Chat' },
   { key: 'requests', icon: MessagesSquare, label: 'Murojaatlar' },
@@ -93,18 +95,20 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
-      <h1 className="text-3xl font-extrabold tracking-tight mb-6 flex items-center gap-3">
-        <span className="w-11 h-11 neo-card rounded-xl flex items-center justify-center"><Logo size={26} /></span> {t('title')}
+      <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-5 sm:mb-6 flex items-center gap-3">
+        <span className="w-10 h-10 sm:w-11 sm:h-11 neo-card rounded-xl flex items-center justify-center shrink-0"><Logo size={24} /></span>
+        <span className="min-w-0">{t('title')}</span>
       </h1>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1.5 mb-6 overflow-x-auto scrollbar-thin pb-2 px-1">
+      {/* Tabs — mobilda siljitiladi, chetlar yumshatiladi (chegara aniq ko'rinadi) */}
+      <div className="relative mb-5 sm:mb-6 -mx-4 sm:mx-0 px-4 sm:px-0">
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-2 snap-x snap-mandatory">
         {TABS.map((tb) => (
           <button
             key={tb.key}
             onClick={() => setTab(tb.key)}
             className={cn(
-              'flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all whitespace-nowrap hover:translate-y-[-1px]',
+              'flex shrink-0 snap-start items-center gap-1.5 px-3.5 sm:px-4 py-2.5 rounded-xl text-[13px] sm:text-sm font-medium border transition-all whitespace-nowrap',
               tab === tb.key
                 ? 'border-neon-cyan/40 bg-neon-cyan/10 text-neon-cyan shadow-[0_0_18px_-6px_var(--acc-a)] animate-pop'
                 : 'border-neon-cyan/10 text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/25 hover:bg-neon-cyan/5'
@@ -114,10 +118,11 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
             {tb.label}
           </button>
         ))}
+        </div>
       </div>
 
       {/* Content */}
-      {!room && tab !== 'room' && tab !== 'bar' && tab !== 'chat' && tab !== 'requests' && tab !== 'support' && tab !== 'site' && tab !== 'bookings' ? (
+      {!room && tab !== 'room' && tab !== 'bar' && tab !== 'chat' && tab !== 'requests' && tab !== 'support' && tab !== 'site' && tab !== 'bookings' && tab !== 'till' ? (
         <div className="text-center py-20">
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center bg-[var(--acc-b)]/10 border border-[var(--acc-b)]/25">
             <Logo size={38} />
@@ -135,6 +140,8 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
         <ComputersTab room={room} />
       ) : tab === 'bookings' ? (
         <BookingsTab room={room} />
+      ) : tab === 'till' ? (
+        <TillTab />
       ) : tab === 'bar' ? (
         <BarAdmin />
       ) : tab === 'chat' ? (
@@ -606,6 +613,50 @@ function BookingsTab({ room }: { room?: Room | null }) {
   // CONFIRMED | PARTIALLY_PAID | PAID. Depozit to'langan (PARTIALLY_PAID)
   // bronni tasdiqlash ASOSIY oqim — u ham ko'rsatilishi kerak.
   const SESSION_STARTABLE = new Set(['CONFIRMED', 'PARTIALLY_PAID', 'PAID']);
+  // O'tkazma tasdig'i yuborilgan, admin tasdiqlashidan kutayotgan to'lovlar.
+  const pendingProofs = (b: Booking) => (Array.isArray(b.payments) ? b.payments : []).filter(
+    (p) => p.method === 'TRANSFER' && p.proofSubmittedAt && !PAID_STATUSES.has(p.status),
+  );
+  const evidenceOf = (b: Booking, paymentId: string) =>
+    (Array.isArray(b.evidences) ? b.evidences : []).filter((e: any) => e.paymentId === paymentId);
+
+  // To'lovni PAID qilish — faqat CASH/TRANSFER uchun (backend ham shuni tekshiradi)
+  async function confirmPayment(paymentId: string) {
+    setUpdatingId(paymentId);
+    try {
+      await api.post(`/api/payments/${paymentId}/confirm`);
+      toastSuccess("To'lov tasdiqlandi — mijoz sessiyani boshlay oladi");
+      await load({ silent: true, page });
+    } catch (err) { toastError(getApiErrorMessage(err)); }
+    finally { setUpdatingId(null); }
+  }
+  // No-show: bron avtomatik yopilgan va sessiya HECH QACHON boshlanmagan
+  const isNoShow = (b: Booking) =>
+    Boolean(b.autoClosed) && !b.sessionStartedAt && b.status === 'COMPLETED' && b.approvalStatus === 'APPROVED';
+  const needsNoShowDecision = (b: Booking) => isNoShow(b) && !b.noShowOutcome;
+
+  /** No-show qarori: avansni qaytarish yoki ushlab qolish */
+  async function decideNoShow(b: Booking, action: 'refund' | 'forfeit') {
+    const isRefund = action === 'refund';
+    const reason = await promptDialog({
+      title: isRefund ? 'Avansni qaytarish' : 'Avansni ushlab qolish',
+      message: isRefund
+        ? 'Mijoz kelmaganini tasdiqladingiz. To\'langan summa mijozga qaytariladi.'
+        : 'Avans xonada qoladi. Mijozga bu haqida xabar beriladi.',
+      confirmLabel: isRefund ? 'Qaytarish' : 'Ushlab qolish',
+      danger: !isRefund,
+      input: { label: 'Sabab', placeholder: isRefund ? 'Masalan: kelmadi, 2 marta qo\'ng\'iroq qilindi' : 'Masalan: ogohlantirmagan', required: true, maxLength: 500 },
+    });
+    if (!reason) return;
+    setUpdatingId(b.id);
+    try {
+      await api.patch(`/api/bookings/admin/bookings/${b.id}/no-show`, { action, reason });
+      toastSuccess(isRefund ? 'Avans qaytarildi' : 'Avans ushlab qolindi');
+      await load({ silent: true, page });
+    } catch (err) { toastError(getApiErrorMessage(err)); }
+    finally { setUpdatingId(null); }
+  }
+
   const isClosed = (b: Booking) => b.status === 'CANCELLED' || b.status === 'COMPLETED';
   const canApprove = (b: Booking) => !isClosed(b) && b.approvalStatus !== 'APPROVED' && SESSION_STARTABLE.has(b.status);
 
@@ -635,7 +686,179 @@ function BookingsTab({ room }: { room?: Room | null }) {
           <p className="text-sm text-gray-500">Bronlar hozircha yo'q</p>
         </div>
       ) : (
-        <div className="overflow-x-auto table-scroll-mobile">
+        <>
+        {/* MOBIL / TABLET: kartochka ko'rinishi — gorizontal scroll yo'q */}
+        <div className="lg:hidden space-y-3">
+          {bookings.map((b) => {
+            const proofs = pendingProofs(b);
+            return (
+              <div key={b.id} className="rounded-2xl border border-white/10 surface p-4 space-y-3">
+                {/* Sarlavha */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-sm text-gray-100 flex items-center gap-2">
+                      <span className="w-7 h-7 rounded-lg grid place-items-center text-[10px] font-bold bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan shrink-0">
+                        {((b.user?.fullName || '?').trim().charAt(0) || '?').toUpperCase()}
+                      </span>
+                      <span className="truncate">{b.user?.fullName?.trim() || '—'}</span>
+                    </p>
+                    {b.user?.phone && <p className="text-xs text-gray-500 mt-1 ml-9">{b.user.phone}</p>}
+                  </div>
+                  <span className="shrink-0 text-sm font-bold text-neon-cyan">
+                    {formatPrice(b.finalPrice)}
+                  </span>
+                </div>
+
+                {/* Sana / vaqt / kompyuter */}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-xl bg-black/25 border border-white/5 px-2.5 py-2">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wide">Sana</p>
+                    <p className="text-gray-200 mt-0.5">{b.date ? formatDate(b.date) : '—'}</p>
+                  </div>
+                  <div className="rounded-xl bg-black/25 border border-white/5 px-2.5 py-2">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wide">Vaqt</p>
+                    <p className="text-gray-200 mt-0.5">{b.startTime || '—'}—{b.endTime || '—'}</p>
+                  </div>
+                  <div className="rounded-xl bg-black/25 border border-white/5 px-2.5 py-2 col-span-2">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wide">Kompyuter</p>
+                    <p className="text-gray-200 mt-0.5 truncate">{b.computer?.name || '—'}</p>
+                  </div>
+                </div>
+
+                {/* To'lov + holat */}
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  <span className="text-[11px] px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-gray-300">
+                    To'lov: <b className={paidPayments(b).length ? 'text-neon-green' : 'text-gray-500'}>
+                      {paidPayments(b).length ? `${formatPrice(paidTotal(b))} so'm` : 'yoki'}
+                    </b>
+                  </span>
+                  <span className="text-[11px] px-2 py-1 rounded-lg border border-white/10 text-gray-400">
+                    {paidMethods(b) || '—'}
+                  </span>
+                </div>
+
+                {/* Tasdiq holati + amallar */}
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/5">
+                  <span className={cn(
+                    'text-[11px] px-2 py-1 rounded-lg font-medium',
+                    APPROVAL_BADGE[b.approvalStatus || 'PENDING'] || 'bg-gray-500/15 text-gray-400'
+                  )}>
+                    {b.approvalStatus === 'APPROVED' ? 'Tasdiqlangan'
+                      : b.approvalStatus === 'REJECTED' ? 'Rad etilgan' : 'Kutilmoqda'}
+                  </span>
+                  {b.status === 'ACTIVE' && (
+                    <span className="text-[10px] px-2 py-1 rounded-lg bg-neon-green/10 border border-neon-green/25 text-neon-green">
+                      Sessiya faol
+                    </span>
+                  )}
+
+                  <div className="flex-1" />
+
+                  {updatingId === b.id ? (
+                    <Loader2 size={14} className="animate-spin text-neon-cyan" />
+                  ) : (
+                    <>
+                      {canApprove(b) && (
+                        <button onClick={() => reviewApproval(b.id, 'approve')}
+                          className="text-[11px] font-bold px-3 py-2 rounded-lg bg-neon-green/15 border border-neon-green/40 text-neon-green">
+                          Tasdiqlash
+                        </button>
+                      )}
+                      {canApprove(b) && (
+                        <button
+                          onClick={async () => {
+                            // Sabab MAJBURIY — backend `reason` bo'lmasa rad etadi.
+                            const reason = await promptDialog({
+                              title: 'Bronni rad etish',
+                              message: "Sababni yozing — foydalanuvchiga ko'rsatiladi.",
+                              confirmLabel: 'Rad etish',
+                              danger: true,
+                              input: { label: 'Sabab', placeholder: "Masalan: to'lov tasdiqlanmadi", required: true, maxLength: 500 },
+                            });
+                            if (reason) reviewApproval(b.id, 'reject', reason);
+                          }}
+                          className="text-[11px] font-bold px-3 py-2 rounded-lg bg-neon-red/15 border border-neon-red/40 text-neon-red"
+                        >
+                          Rad etish
+                        </button>
+                      )}
+                      {!isClosed(b) && (
+                        <button onClick={() => cancelBooking(b.id)}
+                          className="text-[11px] px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-gray-400">
+                          Bekor qilish
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* O'tkazma tasdig'i */}
+                {proofs.map((p) => {
+                  const evs = evidenceOf(b, p.id);
+                  return (
+                    <div key={`mproof-${p.id}`} className="rounded-xl border border-neon-cyan/25 bg-neon-cyan/[0.06] p-3 space-y-2">
+                      <p className="text-[11px] font-bold text-neon-cyan">
+                        O'tkazma tasdig'i · {formatPrice(p.amount)} · •••• {p.proofCardLast4 || '?'}
+                      </p>
+                      <p className="text-xs text-gray-200">
+                        Egasi: <b>{p.proofCardholderName || '—'}</b>
+                        {p.proofSubmittedAt && <span className="text-gray-500 text-[10px] ml-1.5">{formatDateTime(p.proofSubmittedAt)}</span>}
+                      </p>
+                      {evs.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {evs.map((e: any, i: number) => (
+                            <a key={e.id} href={e.fileUrl} target="_blank" rel="noreferrer"
+                              className="text-[10px] px-2 py-1 rounded border border-cyber-600 text-gray-300">Chek {i + 1} ↗</a>
+                          ))}
+                        </div>
+                      )}
+                      <button onClick={() => confirmPayment(p.id)} disabled={updatingId === p.id}
+                        className="w-full text-[11px] font-bold px-3 py-2.5 rounded-lg bg-neon-green/15 border border-neon-green/40 text-neon-green disabled:opacity-50">
+                        {updatingId === p.id ? 'Tasdiqlanmoqda…' : "To'lovni tasdiqlash"}
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {/* NO-SHOW: mijoz kelmadi — qaror kerak */}
+                {needsNoShowDecision(b) && (
+                  <div className="rounded-xl border border-amber-500/35 bg-amber-500/[0.08] p-3 space-y-2">
+                    <p className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
+                      <UserX size={13} /> No-show — mijoz kelmadi
+                    </p>
+                    <p className="text-[11px] text-gray-300 leading-relaxed">
+                      Avval mijoz bilan bog'laning. Kelmaganini tasdiqlasangiz
+                      to'langan summani qaytaring, aks holda ushlab qoling.
+                    </p>
+                    <div className="flex gap-2">
+                      <button onClick={() => decideNoShow(b, 'refund')}
+                        className="flex-1 text-[11px] font-bold px-2 py-2.5 rounded-lg bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan">
+                        Avansni qaytarish
+                      </button>
+                      <button onClick={() => decideNoShow(b, 'forfeit')}
+                        className="flex-1 text-[11px] font-bold px-2 py-2.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300">
+                        Ushlab qolish
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {/* No-show qarori berilgan */}
+                {isNoShow(b) && b.noShowOutcome && (
+                  <p className="text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-gray-400">
+                    No-show qarori:{' '}
+                    <b className={b.noShowOutcome === 'REFUND' ? 'text-neon-cyan' : 'text-amber-300'}>
+                      {b.noShowOutcome === 'REFUND' ? 'qaytarildi' : 'ushlab qolindi'}
+                    </b>
+                    {b.noShowHandledAt && <span className="text-gray-600"> · {formatDateTime(b.noShowHandledAt)}</span>}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* DESKTOP: jadval */}
+        <div className="hidden lg:block overflow-x-auto table-scroll-mobile">
           <table className="w-full min-w-[900px] text-sm table-hover">
             <thead>
               <tr className="text-gray-500 text-xs uppercase">
@@ -734,6 +957,7 @@ function BookingsTab({ room }: { room?: Room | null }) {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {total > PAGE_SIZE && (

@@ -149,11 +149,22 @@ export const config = {
     anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5',
     anthropicEndpoint: process.env.ANTHROPIC_ENDPOINT || 'https://api.anthropic.com',
 
+    // OpenAI-compatible provider (ixtiyoriy). Ko'p xizmatlar (OpenAI, Groq,
+    // Together, OpenRouter, LM Studio, Ollama va h.k.) shu formatda ishlaydi —
+    // bir kalit bilan ulanish uchun. OPENAI_API_KEY yo'q bo'lsa zanjirda
+    // butunlay o'tkazib yuboriladi.
+    openaiApiKey: process.env.OPENAI_API_KEY || '',
+    openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    // Ollama/Masalan: http://127.0.0.1:11434/v1
+    openaiBaseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+
     geminiApiKey: process.env.GEMINI_API_KEY || '',
     model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
     fallbackModel: process.env.GEMINI_FALLBACK_MODEL || 'gemini-flash-lite-latest',
     temperature: parseFloat(process.env.AI_TEMPERATURE || '0.7'),
-    maxTokens: parseInt(process.env.AI_MAX_TOKENS || '1000', 10),
+    // To'liq javob uchun yetarli limit (1000 token ba'zi savollarda kesilib
+    // qolardi). 2048 — tez va arzon, lekin javobni to'liq chiqaradi.
+    maxTokens: parseInt(process.env.AI_MAX_TOKENS || '2048', 10),
   },
   vip: {
     // VIP zona uchun bir bronning MAXIMAL davomiyligi (daqiqa). 60 = faqat

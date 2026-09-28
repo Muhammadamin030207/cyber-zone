@@ -1,25 +1,58 @@
+/** Nolni ajratish uchun noqilavors (U+00A0) — `Intl` bilan bir xil ko'rinadi. */
+const GROUP_SEP = '\u00A0';
+/** O'nlik ajratgichi — O'zbekistonda nuqta emas, vergul ishlatiladi. */
+const DECIMAL_SEP = ',';
+
+/**
+ * Summani qo'lda guruhlaydi, `Intl` ishlatmasdan.
+ *
+ * Sabab: `toLocaleString('uz-UZ')` ICU qurilmasiga bog'liq — serverda `small-icu`
+ * bo'lsa `1,234,567.89`, brauzerda `1 234 567,89` qaytaradi va bu SSR/klient
+ * gidratsiyasini buzadi. Qo'lda formatlash har qanday muhitda bir xil natija beradi.
+ * */
+function groupThousands(intPart: string): string {
+  return intPart.replace(/\B(?=(\d{3})+(?!\d))/g, GROUP_SEP);
+}
+
+/** Kasr sonlarni `uz-UZ` uslubida chiqaradi (vergul bilan, 0 dan 2 xona). */
 export function formatPrice(value: number | string | undefined | null): string {
   if (value === undefined || value === null) return '0';
-  const n = typeof value === 'string' ? parseFloat(value) : Number(value);
-  if (isNaN(n)) return '0';
-  return n.toLocaleString('uz-UZ').replace(/,/g, ' ');
+  const raw = typeof value === 'string' ? parseFloat(value) : Number(value);
+  if (!Number.isFinite(raw)) return '0';
+
+  const negative = raw < 0;
+  const fixed = Math.abs(raw).toFixed(2);
+  const [intPart, fracPart] = fixed.split('.');
+  // Nol kasrlari ko'rsatilmaydi (50 000,00 emas balki 50 000).
+  const frac = fracPart.replace(/0+$/, '');
+
+  const body = groupThousands(intPart) + (frac ? DECIMAL_SEP + frac : '');
+  return negative ? `\u2212${body}` : body;
 }
 
 export function formatPriceShort(value: number | string | undefined | null): string {
   const n = typeof value === 'string' ? parseFloat(value) : Number(value ?? 0);
-  if (isNaN(n)) return '0';
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} mln`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)} ming`;
-  return `${n}`;
+  if (!Number.isFinite(n)) return '0';
+  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} mln`;
+  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(0)} ming`;
+  return formatPrice(n);
 }
 
-export function formatDate(date: string | Date): string {
-  const d = new Date(date);
+function toDate(date: string | Date | null | undefined): Date | null {
+  if (!date) return null;
+  const d = date instanceof Date ? date : new Date(date);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export function formatDate(date: string | Date | null | undefined): string {
+  const d = toDate(date);
+  if (!d) return '—';
   return d.toLocaleDateString('uz-UZ', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export function formatDateTime(date: string | Date): string {
-  const d = new Date(date);
+export function formatDateTime(date: string | Date | null | undefined): string {
+  const d = toDate(date);
+  if (!d) return '—';
   return d.toLocaleString('uz-UZ', {
     year: 'numeric',
     month: 'short',

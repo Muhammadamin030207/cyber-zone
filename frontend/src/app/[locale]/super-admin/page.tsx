@@ -55,17 +55,19 @@ export default function SuperAdminPage({ params }: { params: Promise<{ locale: s
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
-      <h1 className="text-3xl font-extrabold tracking-tight mb-6 flex items-center gap-3">
-        <span className="w-11 h-11 neo-card rounded-xl flex items-center justify-center"><Logo size={26} /></span> {t('title')}
+      <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-5 sm:mb-6 flex items-center gap-3">
+        <span className="w-10 h-10 sm:w-11 sm:h-11 neo-card rounded-xl flex items-center justify-center shrink-0"><Logo size={24} /></span>
+        <span className="min-w-0">{t('title')}</span>
       </h1>
 
-      <div className="flex items-center gap-1.5 mb-6 overflow-x-auto scrollbar-thin pb-2 px-1">
+      <div className="relative mb-5 sm:mb-6 -mx-4 sm:mx-0 px-4 sm:px-0">
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-2 snap-x snap-mandatory">
         {TABS.map((tb) => (
           <button
             key={tb.key}
             onClick={() => setTab(tb.key)}
             className={cn(
-              'flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all whitespace-nowrap hover:translate-y-[-1px]',
+              'flex shrink-0 snap-start items-center gap-1.5 px-3.5 sm:px-4 py-2.5 rounded-xl text-[13px] sm:text-sm font-medium border transition-all whitespace-nowrap',
               tab === tb.key
                 ? 'border-yellow-400/40 bg-yellow-400/10 text-yellow-300 shadow-[0_0_18px_-6px_var(--acc-b)] animate-pop'
                 : 'border-neon-cyan/10 text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/25 hover:bg-neon-cyan/5'
@@ -75,6 +77,7 @@ export default function SuperAdminPage({ params }: { params: Promise<{ locale: s
             {tb.label}
           </button>
         ))}
+        </div>
       </div>
 
       {tab === 'overview' ? <OverviewTab /> : tab === 'users' ? <UsersTab /> : tab === 'rooms' ? <RoomsTab /> : tab === 'payments' ? <PaymentsTab /> : tab === 'support' ? <SupportChat mode="superadmin" channel="superadmin" scope="users" /> : tab === 'adminchat' ? <SupportChat mode="superadmin" channel="superadmin" scope="admins" /> : tab === 'adminpm' ? <SupportChat mode="superadmin" channel="admin" scope="all" /> : <BarAll />}
@@ -304,12 +307,48 @@ function UsersTab() {
         </div>
       )}
 
-      <div className="neo-card rounded-2xl overflow-x-auto table-scroll-mobile">
+      <div className="neo-card rounded-2xl lg:overflow-x-auto table-scroll-mobile">
         {loading ? (
           <div className="space-y-2 p-5">{[1, 2, 3].map((i) => <div key={i} className="h-14 rounded-xl bg-cyber-800 animate-pulse" />)}</div>
         ) : users.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-14">{t('noUsers')}</p>
         ) : (
+          <>
+          {/* MOBIL / TABLET: kartochka — gorizontal scroll yo'q */}
+          <div className="lg:hidden divide-y divide-white/5">
+            {users.map((u, i) => (
+              <div key={u.id} className="p-4 space-y-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-sm text-gray-100 truncate">{u.fullName}</p>
+                    <p className="text-xs text-gray-400 truncate mt-0.5">{u.email}</p>
+                    {u.phone && <p className="text-xs text-gray-500 mt-0.5">{u.phone}</p>}
+                  </div>
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <span className={cn('px-2 py-0.5 rounded text-[11px] font-medium', ROLE_BADGE[u.role])}>{u.role}</span>
+                    <span className={cn('px-2 py-0.5 rounded text-[11px] font-medium', u.status === 'ACTIVE' ? 'bg-neon-green/15 text-neon-green' : 'bg-red-500/15 text-red-400')}>{u.status}</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-gray-500">Ro'yxatdan: {u.createdAt ? formatDate(u.createdAt) : '—'}</p>
+                {u.id !== me?.id && (
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => toggleStatus(u)}
+                      className={cn('text-[11px] font-bold px-3 py-2 rounded-lg border flex-1',
+                        u.status === 'ACTIVE' ? 'border-neon-red/40 text-neon-red bg-neon-red/10' : 'border-neon-green/40 text-neon-green bg-neon-green/10')}>
+                      {u.status === 'ACTIVE' ? 'Bloklash' : 'Faollashtirish'}
+                    </button>
+                    <button onClick={() => remove(u)}
+                      className="text-[11px] font-bold px-3 py-2 rounded-lg border border-neon-red/40 text-neon-red bg-neon-red/10">
+                      O'chirish
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* DESKTOP: jadval */}
+          <div className="hidden lg:block overflow-x-auto table-scroll-mobile">
           <table className="w-full min-w-[760px] text-sm table-hover">
             <thead>
               <tr className="text-gray-500 text-xs uppercase">
@@ -357,6 +396,8 @@ function UsersTab() {
               ))}
             </tbody>
           </table>
+          </div>
+          </>
         )}
       </div>
     </div>
@@ -735,7 +776,36 @@ function PaymentsTab() {
       ) : !payments?.length ? (
         <p className="text-gray-500 text-center py-16">To'lovlar hali yo'q</p>
       ) : (
-        <div className="neo-card rounded-2xl overflow-x-auto table-scroll-mobile">
+        <div className="neo-card rounded-2xl overflow-hidden">
+          {/* MOBIL / TABLET: kartochka */}
+          <div className="lg:hidden divide-y divide-white/5">
+            {payments.map((p) => (
+              <div key={p.id} className="p-4 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="font-semibold text-sm text-gray-100 truncate min-w-0">
+                    {p.user?.fullName || p.user?.email || '—'}
+                  </p>
+                  <p className="font-bold text-neon-cyan text-sm shrink-0">{formatPrice(p.amount)} so'm</p>
+                </div>
+                <p className="text-xs text-gray-500">{p.booking?.room?.name || '—'}</p>
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  <span className="text-[11px] px-2 py-0.5 rounded bg-white/5 border border-white/10 text-gray-400">
+                    {p.type === 'ADVANCE' ? 'Avans (30%)' : 'Qoldiq (70%)'}
+                  </span>
+                  <span className="text-[11px] px-2 py-0.5 rounded bg-white/5 border border-white/10 text-gray-400">
+                    {p.method || '—'}
+                  </span>
+                  <span className={cn('px-2 py-0.5 rounded text-[11px] font-medium', statusStyle[p.status] || 'bg-gray-500/15 text-gray-400')}>
+                    {p.status}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-600">{formatDate(p.createdAt)}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* DESKTOP: jadval */}
+          <div className="hidden lg:block overflow-x-auto table-scroll-mobile">
           <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="text-left text-xs text-gray-500 border-b border-neon-cyan/10">
@@ -764,6 +834,7 @@ function PaymentsTab() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

@@ -267,6 +267,15 @@ app.get('/api/ready', async (_req, res) => {
   checks.webauthn = checks.redis === 'ok' ? 'ok' : 'unavailable';
   checks.totpEncryption = totpKeyHealthy() ? 'ok' : 'misconfigured';
   checks.email = isEmailConfigured() ? 'ok' : 'not_configured';
+  // AI: hech bir provider kaliti yo'q bo'lsa — 'not_configured'. Readinessni
+  // BUZMAYDI (sayt ishlaydi), lekin monitoring uchun aniq ko'rinadi.
+  const aiProviders = [
+    config.ai.anthropicApiKey && 'anthropic',
+    config.ai.geminiApiKey && 'gemini',
+    config.ai.openaiApiKey && 'openai-compatible',
+  ].filter(Boolean);
+  checks.ai = aiProviders.length > 0 ? 'ok' : 'not_configured';
+  (checks as Record<string, unknown>).aiProviders = aiProviders;
   checks.jwt = isJwtSecretHealthy() ? 'ok' : 'weak';
 
   res.status(ready ? 200 : 503).json({
@@ -300,6 +309,22 @@ app.use(errorHandler);
 httpServer.listen(config.port, () => {
   console.log(`🚀 Cyber-ZONE API ${config.port}-portda ishlamoqda`);
   console.log(`   Frontendlar: ${config.frontendUrls.join(', ')}`);
+
+  // AI yordamchi holati — "barcha savollarga javob bermadi" degan muammoning
+  // eng tez tekshiriladigan sababi kalitning yo'qligi. Render logida ko'rinadi.
+  const liveAi = config.ai.anthropicApiKey
+    ? `Claude (${config.ai.anthropicModel})`
+    : config.ai.geminiApiKey
+      ? `Gemini (${config.ai.model})`
+      : null;
+  if (liveAi) {
+    console.log(`   🤖 AI yordamchi: ${liveAi}`);
+  } else {
+    console.warn(
+      '   ⚠️  AI yordamchi KALITSIZ ishlayapti — faqat oddiy qoidalar asosidagi javoblar beriladi.' +
+        ' ANTHROPIC_API_KEY yoki GEMINI_API_KEY ni env\'ga qo\'ying (Render dashboard → Environment).'
+    );
+  }
 
   // Kengaytirilgan (multi-instance) rejim: Socket.IO xabarlari Redis orqali
   // barcha instansialarga tarqatiladi — bitta serverda chiqish, boshqada

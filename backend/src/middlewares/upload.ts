@@ -97,3 +97,12 @@ export const uploadPaymentEvidence = multer({
     else cb(new Error('Faqat chek screenshot (JPG/PNG/WEBP) yoki PDF yuklash mumkin'));
   },
 });
+// To'lovchidan so'ralgan 3 ta chek (galereyadan) — bir so'rovda.
+export const uploadPaymentReceipts = multer({
+  storage: evidenceStorage,
+  limits: { fileSize: 8 * 1024 * 1024, files: 3 }, // har biri 8MB, JAMI 3 ta
+  fileFilter: (_req, file, cb) => {
+    if (EVIDENCE_EXT[file.mimetype]) cb(null, true);
+    else cb(new Error('Faqat chek screenshot (JPG/PNG/WEBP) yoki PDF yuklash mumkin'));
+  },
+});

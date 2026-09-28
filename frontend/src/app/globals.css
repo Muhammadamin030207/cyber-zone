@@ -1169,3 +1169,100 @@ html[data-theme="halloween"] .halloween-decor {
 .clip-glow:hover {
   filter: drop-shadow(0 0 18px color-mix(in srgb, var(--acc-a) 70%, transparent)) brightness(1.07);
 }
+/* ============================================================
+   RESPONSIVE UX v2 — mobil/tablet ergonomika
+   Maqsad: hech qanday gorizontal scroll YO'Q, barmoq maqsadlari
+   qulay (>=44px), matn sig'maydi, tabletda ham bo'sh joy bor.
+   ============================================================ */
+
+/* 1) Butun ilova gorizontal siljishi taqiqlanadi (bitta elementdan
+      tashqari — qamrash, ochiq dropdown, xarita) */
+@media (max-width: 1023px) {
+  body { overflow-x: hidden; }
+}
+
+/* 2) Barmoq uchun minimal touch target (Apple/WordPress & WCAG 2.5.5 tavsiyasi)
+
+       MUHIM: bu qoida butun ilovaga keng tarqalmasligi kerak. Ilgari
+       `@media (hover: none)` — ya'ni katta sensorli ekran (1440px+ laptop/
+       monitor) ham shu qoidaga tushardi va har bir tugma 44px'ga majburlanardi.
+       Endi faqat telefon/tablet kengliklarida qo'llaniladi.
+
+       Kompakt ikonkali tugmalar kichraytirilishi kerak bo'lsa, ularga
+       `.tap-opt-out` klassini qo'yishadi (pastda). Avvalgi `[class*="p-0"]`
+       tanlovi esa ISHONCHSIZ edi: u `p-0.5` va `top-0` kabi tasodifiy
+       klasslarni ham mos kelib, keraksiz tugmalarni chetlab o'tkazardi. */
+@media (max-width: 767px), (hover: none) and (max-width: 1023px) {
+  button,
+  a[role="button"] {
+    min-height: 44px;
+  }
+  /* Checkbox/radio ni haqiqiy tegish maydoni kengaytiriladi, lekin ular
+     vizual o'lchamini saqlashi uchun faqat pading'i oshiriladi. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: 24px;
+    min-width: 24px;
+  }
+  /* Kompakt ikonkali tugmalar: kichraytirish kerak bo'lsa shu klass qo'yiladi. */
+  .tap-opt-out {
+    min-height: 0;
+  }
+  /* Kichik yopish/nuqta tugmalari — zichlik buzilmasligi uchun biroz kichikroq. */
+  button[aria-label="O'chirish"],
+  button[aria-label="Yopish"] {
+    min-height: 36px;
+  }
+}
+
+/* 3) Uzun so'z / email / ID sig'may qolmasin */
+@media (max-width: 1023px) {
+  h1, h2, h3, h4 {
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  /* Jadval kataklari kichrayganda matn kesilmasin */
+  table td, table th {
+    overflow-wrap: anywhere;
+  }
+}
+
+/* 4) Tablet (768–1023px): konteyner kengligi va bo'sh joy */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .neo-card,
+  .surface {
+    border-radius: 1.25rem;
+  }
+  /* ESLATMA: ilgari shu yerda `.grid-cols-1 { grid-template-columns: repeat(2, ...) }`
+     bilan Tailwind utility'si butun ilova bo'ylab qayta belgilanardi. Bu
+     xavfli edi: keyinchalik yoziladigan har bir `grid-cols-1` (chat ro'yxati,
+     stepler kabi) tabletda KO'PROK qilib chiqib ketardi — sezilarli, lekin
+     topish qiyin buzilish. Endi 2-ustunli joylashuv kerak bo'lgan
+     komponentlar o'z class'ida `md:grid-cols-2` yozadi (login/register/profile). */
+}
+
+/* 5) Keng ekran (>=1536px): matn o'qish chegarasi — juda uzun qatorlardan qaytish */
+@media (min-width: 1536px) {
+  .container-page,
+  main > div { max-width: 1560px; }
+}
+
+/* 6) Xavfsiz zona (notch / home indicator) — pastdagi elementlar tegilmasin */
+@supports (padding: max(0px)) {
+  .pb-safe { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+  .pt-safe { padding-top: max(0.75rem, env(safe-area-inset-top)); }
+}
+
+/* 7) Focus ring — klaviatura uchun (tab bilan sayfada yurish) */
+@media (prefers-reduced-motion: no-preference) {
+  :focus-visible {
+    outline: 2px solid var(--neon-cyan, #22d3ee);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+/* 8) Skeleton shimmer — tabletda sekinroq (kam GPU kuch) */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .animate-pulse { animation-duration: 2.4s; }
+}

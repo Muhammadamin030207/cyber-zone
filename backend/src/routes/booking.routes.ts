@@ -11,6 +11,7 @@ import {
   endBookingSession,
   getSessionInfo,
   reviewBookingApproval,
+  decideNoShow,
 } from '../controllers/booking.controller';
 import { authenticate, authorize } from '../middlewares/auth';
 
@@ -36,5 +37,8 @@ router.get('/admin/bookings', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), g
 router.patch('/admin/bookings/:id/status', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), updateBookingStatus);
 // To'lov/chek ko'rilgach — bron tasdiqlash yoki rad etish (YAGONA yo'l)
 router.patch('/admin/bookings/:id/approval', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), reviewBookingApproval);
+
+// No-show qarori: kelmagan mijoz uchun avansni QAYTARISH yoki USHLAB QOLISH
+router.patch('/admin/bookings/:id/no-show', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), decideNoShow);
 
 export default router;

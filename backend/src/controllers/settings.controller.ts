@@ -13,9 +13,27 @@ export const SITE_SETTING_KEYS = [
   'payment_info',
   'cancellation_policy',
   'how_to_book',
+  // Dogaon (merchant) karta ma'lumotlari — qo'lda o'tkazma to'lov uchun
+  'payment_card_number',
+  'payment_card_holder',
+  'payment_card_bank',
+  'payment_card_note',
 ] as const;
 
 export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[number];
+
+/**
+ * Ommaviy (public) GET'da KO'RINMAYDIGAN kalitlar.
+ * Karta raqami hamma uchun ochiq bo'lsa — bot skraper yig'ib oladi va so'rov
+ * bo'g'ini ochiladi. Faqat AUTENTIFIKATSIYALangan foydalanuvchi (baroni bor
+ * foydalanuvchi) uni ko'radi — GET /api/payments/merchant-card orqali.
+ */
+export const PRIVATE_SITE_SETTING_KEYS: readonly string[] = [
+  'payment_card_number',
+  'payment_card_holder',
+  'payment_card_bank',
+  'payment_card_note',
+];
 
 export const SITE_SETTING_MAX_LENGTH: Record<SiteSettingKey, number> = {
   faq: 12000,
@@ -26,12 +44,19 @@ export const SITE_SETTING_MAX_LENGTH: Record<SiteSettingKey, number> = {
   contact_phone: 200,
   contact_email: 200,
   address: 500,
+  payment_card_number: 40,
+  payment_card_holder: 120,
+  payment_card_bank: 120,
+  payment_card_note: 500,
 };
 
 // ============ GET /api/settings/site — PUBLIC: AI va UI konteksti uchun ============
 export async function getSiteSettings(_req: Request, res: Response) {
   try {
-    const rows = await prisma.siteSetting.findMany({ where: { key: { in: [...SITE_SETTING_KEYS] } } });
+    // Karta ma'lumotlari OMMAVIY RO'YXATGA KIRMAYDI (faqat authenticated endpoint).
+    const rows = await prisma.siteSetting.findMany({
+      where: { key: { in: SITE_SETTING_KEYS.filter((k) => !PRIVATE_SITE_SETTING_KEYS.includes(k)) } },
+    });
     const settings: Record<string, string> = {};
     for (const r of rows) settings[r.key] = r.value;
     return ok(res, { settings });

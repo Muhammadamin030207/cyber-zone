@@ -334,7 +334,7 @@ export async function closeNoShowSessions(
     for (const r of rows) {
       const b = await tx.booking.findUnique({
         where: { id: r.id },
-        include: { computer: { select: { id: true } } },
+        include: { computer: { select: { id: true } }, room: { select: { ownerId: true } } },
       });
       if (!b || b.sessionEndedAt) continue;
       const instants = slotInstants(b.date, b.startTime, b.endTime);
@@ -361,6 +361,19 @@ export async function closeNoShowSessions(
           type: 'booking',
         },
       });
+      // XONA ADMINIGA: mijoz bilan bog'lanib, avansni qaytarish yoki
+      // ushlab qolish qarorini qabul qilishi kerak (refundPoints emas —
+      // qaror admin qiladi, avtomatik pul qaytarilmaydi).
+      if (b.room?.ownerId) {
+        await tx.notification.create({
+          data: {
+            userId: b.room.ownerId,
+            title: 'No-show: qaror kerak',
+            message: 'Bemor kelmadi va bron yopildi. Mijoz bilan bog\'laning. Kelmaganini tasdiqlasangiz avansni qaytaring, aks holda ushlab qoling.',
+            type: 'booking',
+          },
+        });
+      }
       closed += 1;
     }
     return closed;
@@ -374,7 +387,7 @@ export async function closeNoShowSessions(
       sessionEndedAt: null,
       date: { lte: new Date(now.getTime() + 86_400_000) },
     },
-    select: { id: true, startTime: true, endTime: true, date: true, computerId: true },
+    select: { id: true, startTime: true, endTime: true, date: true, computerId: true, roomId: true },
     take: 100,
   });
 
@@ -396,6 +409,20 @@ export async function closeNoShowSessions(
     if (done.count === 0) continue;
     if (c.computerId) {
       await tx.computer.updateMany({ where: { id: c.computerId, status: 'OCCUPIED' }, data: { status: 'AVAILABLE' } });
+    }
+    // XONA ADMINIGA: no-show qarori kerak (qaytarish / ushlab qolish)
+    if (c.roomId) {
+      const room = await tx.computerRoom.findUnique({ where: { id: c.roomId }, select: { ownerId: true } });
+      if (room?.ownerId) {
+        await tx.notification.create({
+          data: {
+            userId: room.ownerId,
+            title: 'No-show: qaror kerak',
+            message: 'Bemor kelmadi va bron yopildi. Mijoz bilan bog\'laning. Kelmaganini tasdiqlasangiz avansni qaytaring, aks holda ushlab qoling.',
+            type: 'booking',
+          },
+        });
+      }
     }
     closed += 1;
   }

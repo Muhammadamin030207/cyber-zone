@@ -15,7 +15,7 @@ export default function ForgotPasswordPage({ params }: { params: Promise<{ local
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ message: string; devTempPassword?: string } | null>(null);
+  const [done, setDone] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
@@ -32,10 +32,14 @@ export default function ForgotPasswordPage({ params }: { params: Promise<{ local
     setDone(null);
     try {
       const { data } = await api.post('/api/auth/forgot-password', { email });
-      setDone({
-        message: data?.message || 'Vaqtinchalik parol emailingizga yuborildi',
-        devTempPassword: data?.data?.devTempPassword,
-      });
+      // Backend ba'zan `devTempPassword` qaytarsa ham uni hech qanday shaklda
+      // ko'rsatmaymiz — bu haqiqiy hisobga kirish kaliti, DOM'ga tushsa
+      // skrinshot/axcessibility daraxtida ochiq qoladi.
+      setDone(
+        typeof data?.message === 'string' && data.message.trim()
+          ? data.message
+          : 'Vaqtinchalik parol emailingizga yuborildi'
+      );
       setCooldown(RESEND_COOLDOWN);
     } catch (err) {
       setError(getApiErrorMessage(err));
@@ -66,16 +70,10 @@ export default function ForgotPasswordPage({ params }: { params: Promise<{ local
 
           {done ? (
             <div>
-              <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-neon-green/10 border border-neon-green/30 text-sm text-neon-green mb-4">
-                <CheckCircle2 size={16} className="shrink-0 mt-0.5" />
-                <span>{done.message}</span>
+              <div role="status" aria-live="polite" className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-neon-green/10 border border-neon-green/30 text-sm text-neon-green mb-4">
+                <CheckCircle2 size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{done}</span>
               </div>
-              {done.devTempPassword && (
-                <div className="px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 mb-4 break-all">
-                  <b>Dev (sinov) vaqtinchalik parol:</b>{' '}
-                  <code className="font-mono font-bold">{done.devTempPassword}</code>
-                </div>
-              )}
               <div className="mb-4 px-3 py-2.5 rounded-lg bg-neon-cyan/5 border border-neon-cyan/20 text-xs text-gray-300 leading-relaxed">
                 Kirishda so&apos;ralgan yangi parol oynasida xohlagan parolingizni o&apos;rnating.
                 Bitta parol faqat bitta kirishda ishlatiladi.
@@ -104,8 +102,8 @@ export default function ForgotPasswordPage({ params }: { params: Promise<{ local
           ) : (
             <form onSubmit={(e) => submit(e)} className="space-y-4">
               {error && (
-                <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
-                  <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                <div role="alert" className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
                   <span>{error}</span>
                 </div>
               )}
