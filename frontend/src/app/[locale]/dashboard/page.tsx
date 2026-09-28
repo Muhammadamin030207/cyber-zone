@@ -290,7 +290,9 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
                     )}
                     {b.status === 'CONFIRMED' && (
                       <div className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-neon-cyan/30 text-neon-cyan text-sm font-medium">
-                        <Wallet size={14} /> 30% to'landi
+                        {/* Foiz brondan — 30% deb yozib bo'lmaydi
+                            (admin boshqa foizni belgilashi mumkin). */}
+                        <Wallet size={14} /> {Number(b.depositPercent) || 30}% to&apos;landi
                       </div>
                     )}
                     {['PENDING', 'PENDING_PAYMENT'].includes(b.status) && (

@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter, Orbitron } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
-import { getTranslations, getMessages } from 'next-intl/server';
+import { getMessages } from 'next-intl/server';
 import '../globals.css';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
@@ -12,19 +12,55 @@ import HalloweenDecor from '@/components/layout/HalloweenDecor';
 import ChatWidget from '@/components/layout/ChatWidget';
 import ToastContainer from '@/components/ui/ToastContainer';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import StructuredData from '@/components/seo/StructuredData';
+import { getSiteUrl } from '@/lib/site';
 
 const inter = Inter({ subsets: ['latin', 'latin-ext'] });
 const orbitron = Orbitron({ subsets: ['latin'], weight: ['400', '700', '900'] });
 
 type Props = { children: React.ReactNode; params: Promise<{ locale: string }> };
 
+const TITLE = 'CYBER-ZONE — Kompyuter klubi va zonalar | Toshkent';
+const DESCRIPTION =
+  'Toshkentdagi kompyoter klubi platformasi: zonalarni xaritada ko\'ring, o\'rin bron qiling va onlayn to\'lov qiling. Cyber-ZONE — kiber o\'yin maydoni.';
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale } = await params;
-  const t = await getTranslations({ locale, namespace: 'home' });
+  const siteUrl = getSiteUrl();
+
   return {
-    title: 'Cyber-ZONE — Kompyuter klub platformasi',
-    description: t('heroSubtitle'),
+    metadataBase: new URL(siteUrl),
+    title: TITLE,
+    description: DESCRIPTION,
     manifest: '/manifest.json',
+    keywords: [
+      'kompyuter klubi',
+      'gaming zone',
+      'Toshkent',
+      'cyber zone',
+      'internet klub',
+      'kompyuter bron qilish',
+      'PlayStation',
+      'cyber arena',
+    ],
+    authors: [{ name: 'CYBER-ZONE' }],
+    creator: 'CYBER-ZONE',
+    alternates: {
+      canonical: `${siteUrl}/${locale}`,
+      languages: {
+        uz: `${siteUrl}/uz`,
+        ru: `${siteUrl}/ru`,
+        en: `${siteUrl}/en`,
+        'x-default': `${siteUrl}/uz`,
+      },
+    },
+    // Ichki sahifalar o'zlari `noindex` beradi — bu butun sayt uchun
+    // indekslashni yoqmaydi.
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: { index: true, follow: true, 'max-image-preview': 'large', 'max-snippet': -1 },
+    },
     appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Cyber-ZONE' },
     icons: {
       icon: [
@@ -35,9 +71,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       apple: [{ url: '/icons/apple-touch-icon.png', type: 'image/png', sizes: '180x180' }],
     },
     openGraph: {
-      title: 'Cyber-ZONE — Kompyuter klub platformasi',
-      description: t('heroSubtitle'),
+      title: TITLE,
+      description: DESCRIPTION,
       type: 'website',
+      locale,
+      alternateLocale: ['uz_UZ', 'ru_RU', 'en_US'],
+      url: `${siteUrl}/${locale}`,
+      siteName: 'CYBER-ZONE',
+      images: [{ url: '/icons/icon-512.png', width: 512, height: 512, alt: 'CYBER-ZONE' }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: TITLE,
+      description: DESCRIPTION,
+      images: ['/icons/icon-512.png'],
     },
   };
 }
@@ -85,6 +132,7 @@ export default async function RootLayout({ children, params }: Props) {
         <NextIntlClientProvider locale={locale} messages={messages}>
           <AuthInit />
           <HalloweenDecor />
+          <StructuredData />
           <Header />
           <PageTransition>{children}</PageTransition>
           <Footer />
