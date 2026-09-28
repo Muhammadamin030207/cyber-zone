@@ -106,6 +106,54 @@ function pickCard(rec: CardRecord | undefined): MerchantCard | null {
 }
 
 /**
+ * Kartani usul bo'yicha YECHADI (zaxira zanjiri):
+ *   aniq usul (`UZUM`) -> `DEFAULT` -> eski `payment_card_*` -> `UZCARD`.
+ *
+ * `UZCARD` (UzCard) egasining "asosiy" bank kartasi sanaladi — shuning uchun
+ * alohida karta bo'lmagan boshqa barcha usullar (PAYME, CLICK, PAYNET, HUMO,
+ * TRANSFER...) shu kartaga o'tkazadi. Bu egasi oldindan belgilagan qoida:
+ * Uzum to'lovlari VISA kartaga, qolgan hamma usullar — UzCard egasiga.
+ * Agar admin kelajakda biror usulga O'Z karta qo'shsa — u aniq usul sifatida
+ * ustun keladi (zanjirning birinchi bo'g'ini).
+ */
+function resolveFor(
+  key: string,
+  byMethod: Record<string, CardRecord>,
+  map: Record<string, string>
+): MerchantCard | null {
+  if (key && key !== 'DEFAULT') {
+    const exact = pickCard(byMethod[key]);
+    if (exact) return exact;
+  }
+
+  const fallback = pickCard(byMethod.DEFAULT);
+  if (fallback) return fallback;
+
+  // Eski (legacy) sozlamalar — yangi JSON bo'sh bo'lsa.
+  const number = (map.payment_card_number || '').trim();
+  if (number) {
+    return {
+      number,
+      numberFormatted: formatCardNumber(number),
+      holder: (map.payment_card_holder || '').trim(),
+      bank: (map.payment_card_bank || '').trim(),
+      note: (map.payment_card_note || '').trim(),
+      appUrl: '',
+    };
+  }
+
+  // Umumiy zaxira: UzCard — boshqa usullar uchun asosiy qabul karta.
+  return pickCard(byMethod.UZCARD);
+}
+
+/**
+ * Chekoutda rasmiy ko'rsatiladigan to'lov usullari — karta qaysi usul uchun
+ * mavjud bo'lsa. Aniq usul kartasi bo'lmagan usullar umumiy (UzCard/DEFAULT)
+ * kartaga tushadi, shu sabab ekronda usulsiz "karta bor" holati qolmaydi.
+ */
+const KNOWN_CARD_METHODS = ['UZUM', 'PAYME', 'CLICK', 'PAYNET', 'UZCARD', 'HUMO', 'VISA', 'TRANSFER'];
+
+/**
  * Barcha SOZLANGAN kartalar — usul (katta harfda) -> karta.
  * Faqat raqami to'ldirilgan kartalar qaytariladi.
  * Chekout sahifasi shu ro'yxat bo'yicha to'lov usullarini qurushi uchun.
@@ -119,9 +167,9 @@ export async function listConfiguredCards(): Promise<Record<string, MerchantCard
 
   const byMethod = parseCardMap(map.payment_cards_by_method);
   const out: Record<string, MerchantCard> = {};
-  for (const [key, rec] of Object.entries(byMethod)) {
-    const card = pickCard(rec);
-    if (card) out[key.toUpperCase()] = card;
+  for (const key of KNOWN_CARD_METHODS) {
+    const card = resolveFor(key, byMethod, map);
+    if (card) out[key] = card;
   }
 
   // Eski `payment_card_*` sozlamalari — yangi usul karta xaritasi bo'lsa ham
@@ -145,10 +193,10 @@ export async function listConfiguredCards(): Promise<Record<string, MerchantCard
 /**
  * Usulga mos karta.
  *
- * Tartib: aniq usul (`UZUM`) -> `DEFAULT` -> eski `payment_card_*`.
- * Aynan shu usul uchun karta yo'q bo'lsa `null` QAYTMAYDI — zaxiraga
- * tushadi: aks holda foydalanuvchi "karta yo'q" deb xato ko'radi, holbuki
- * umumiy karta bor.
+ * Tartib: aniq usul (`UZUM`) -> `DEFAULT` -> eski `payment_card_*` -> `UZCARD`
+ * (umumiy qabul karta). Aynan shu usul uchun karta yo'q bo'lsa ham `null`
+ * QAYTMAYDI — zaxiraga tushadi: aks holda foydalanuvchi "karta yo'q" deb
+ * xato ko'rardi, holbuki umumiy karta bor.
  */
 export async function resolveMerchantCard(method: string | null | undefined): Promise<MerchantCard | null> {
   const key = (method || '').trim().toUpperCase();
@@ -159,25 +207,5 @@ export async function resolveMerchantCard(method: string | null | undefined): Pr
   const map: Record<string, string> = {};
   for (const r of rows) map[r.key] = r.value;
 
-  const byMethod = parseCardMap(map.payment_cards_by_method);
-
-  if (key && key !== 'DEFAULT') {
-    const exact = pickCard(byMethod[key]);
-    if (exact) return exact;
-  }
-
-  const fallback = pickCard(byMethod.DEFAULT);
-  if (fallback) return fallback;
-
-  // Eski (legacy) sozlamalar — yangi JSON bo'sh bo'lsa.
-  const number = (map.payment_card_number || '').trim();
-  if (!number) return null;
-  return {
-    number,
-    numberFormatted: formatCardNumber(number),
-    holder: (map.payment_card_holder || '').trim(),
-    bank: (map.payment_card_bank || '').trim(),
-    note: (map.payment_card_note || '').trim(),
-    appUrl: '',
-  };
+  return resolveFor(key, parseCardMap(map.payment_cards_by_method), map);
 }

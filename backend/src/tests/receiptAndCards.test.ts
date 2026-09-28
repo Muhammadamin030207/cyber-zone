@@ -203,8 +203,8 @@ describe('listConfiguredCards — chekout usullar ro\'yxati uchun', () => {
   const rows = (rec: Record<string, string>) =>
     Object.entries(rec).map(([key, value]) => ({ key, value }));
 
-  it('faqat raqami to\'ldirilgan usullarni qaytaradi', async () => {
-    mockedSettings.mockResolvedValueOnce(
+  it('aniq kartasi bo\'lmagan usullar umumiy (UzCard) kartaga tushadi', async () => {
+    mockedSettings.mockResolvedValue(
       rows({
         payment_cards_by_method: JSON.stringify({
           UZUM: { number: '4111111111111111', holder: 'VISA' },
@@ -214,8 +214,15 @@ describe('listConfiguredCards — chekout usullar ro\'yxati uchun', () => {
       })
     );
     const cards = await listConfiguredCards();
-    expect(Object.keys(cards).sort()).toEqual(['UZCARD', 'UZUM']);
+    // UZUM o'z kartasi; PAYME aniq kartaga ega emas -> UzCard zaxiraga tushadi.
     expect(cards.UZUM.number).toBe('4111111111111111');
+    expect(cards.PAYME.number).toBe('5614000000001234');
+    expect(cards.CLICK?.number).toBe('5614000000001234');
+    expect(cards.UZCARD.number).toBe('5614000000001234');
+    // Raqami bo'lmagan (faqat ism) yozuv hech qanday usulga chiqmaydi.
+    expect(Object.values(cards).some((c) => c.number === '')).toBe(false);
+    expect((await resolveMerchantCard('PAYME'))?.number).toBe('5614000000001234');
+    expect((await resolveMerchantCard('TRANSFER'))?.number).toBe('5614000000001234');
   });
 
   it('bo\'sh bo\'lsa bo\'sh obyekt qaytaradi', async () => {
