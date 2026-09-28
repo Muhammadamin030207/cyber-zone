@@ -1,5 +1,4 @@
 import prisma from '../lib/prisma';
-import { randomInt } from 'node:crypto';
 
 /**
  * CHEK (RECEIPT) RAQAMI — inson o'qiydigan qisqa to'lov identifikatori.
@@ -7,56 +6,64 @@ import { randomInt } from 'node:crypto';
  * Nima uchun kerak:
  * Mijoz bank ilovasida to'laydi, keyin chek (screenshot) yuboradi. Admin
  * bank hisobida shu to'lovni izlaydi. Agar biz UUID yuborsak, mijoz
- * telefon orqali 32 ta belgini o'qiy olmaydi. Shuning uchun har bir
- * to'lovga `CZ-XXXXXXXX` shaklida qisqa raqam beriladi:
+ * telefon orqali 32 ta belgini o'qiy olmaydi.
  *
- *   - `CZ-`     — prefiks (Cyber-Zone). Natija hech qanday boshqa
- *                 identifikatorda (UUID) aralashmaydi.
- *   - `XXXXXXXX` — Crockford Base32 (0-9, A-Z, `I L O U` chiqarib
- *                 tashlangan) — telefon orqali aytganda chalkashmaydi
- *                 (`1`/`I`, `0`/`O` chalkashuvi yo'q).
+ * Format (mijoz talabi bo'yicha): `CZ-20260928-000123`
  *
- * Nima uchun tasodifiy, balki tartibli emas: qisqa raqam sequential
- * bo'lsa, mijoz boshqaning to'lovini «sinab» ko'rish uchun raqamlarni
- * ketma-ket urib ko'rishi mumkin. Tasodifiy raqam buni sekinlashtiradi
- * (32^8 ≈ 1.1 × 10^12 variant), unique index esa takrorlanishni DB
- * darajasida rad etadi.
+ *   - `CZ-`         — prefiks (Cyber-Zone).
+ *   - `YYYYMMDD`    — to'lov kuni (Toshkent vaqti bo'yicha).
+ *   - `NNNNNN`      — kunlik tartib raqami (000001 dan), 6 ta raqam.
+ *
+ * Nima uchun tartibli: admin va mijoz bir-biriga raqamni aytayotganda
+ * kunduzgi tartib raqamni topish oson. Unique index takrorlanishni DB
+ * darajasida rad etadi, parallel yaratishda P2002 konflikti qayta sanash
+ * bilan hal qilinadi.
  */
 
-/** Crockford Base32 — chalkashuv chiqarilgan belgilar (I, L, O, U) yo'q. */
-const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-
-const PREFIX = 'CZ-';
-const LENGTH = 8;
-/** Bir urinishda tekshiriladigan variant soni (unique conflict qaytarisiga). */
-const MAX_ATTEMPTS = 5;
-
-/** `CZ-7K2M9QX4` shaklidagi tasodifiy raqam (DB'da band emas — faqat taklif). */
-export function generateReceiptNumber(): string {
-  let out = '';
-  for (let i = 0; i < LENGTH; i++) {
-    out += ALPHABET[randomInt(ALPHABET.length)];
-  }
-  return `${PREFIX}${out}`;
+/** Toshkent vaqtida `YYYYMMDD` (Kun belgilashda UTC emas, mahalliy vaqt muhim). */
+export function tashkentLocalDateKey(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tashkent',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  return `${get('year')}${get('month')}${get('day')}`;
 }
 
+/** `CZ-20260928-` — kunlik prefiks (izlash/boshlash uchun). */
+export function receiptPrefixFor(now: Date = new Date()): string {
+  return `CZ-${tashkentLocalDateKey(now)}-`;
+}
+
+/** `CZ-20260928-000123` — kunlik tartib raqamidan raqam qurish. */
+export function buildReceiptNumber(seq: number, now: Date = new Date()): string {
+  return `${receiptPrefixFor(now)}${String(seq).padStart(6, '0')}`;
+}
+
+/** Harbir urinishdagi bandlikni tekshirish uchun. */
+const MAX_ATTEMPTS = 8;
+
 /**
- * Band bo'lmagan chek raqamini topib qaytaradi.
+ * Band bo'lmagan chek raqamini (kunlik navbatdagi tartib raqamni) qaytaradi.
  *
- * `randomInt` kriptografik tasodifiy manbadan o'qiydi — taxmin qilib
- * bo'lmaydigan tarzda. Alemizki (unique) `P2002` xatosi kelsa, yangi
- * variant sinab beriladi.
+ * Kunning oxirgi chek raqamidan keyingisini izlaydi. Ikkita parallel to'lov
+ * bir xil raqamni «olib qolsa», ikkinchisi unique (P2002) xatosiga
+ * ulanmaydi — `findUnique` tekshiruvi tufayli keyingi bo'sh raqamga o'tadi.
  */
-export async function reserveReceiptNumber(): Promise<string> {
+export async function reserveReceiptNumber(now: Date = new Date()): Promise<string> {
+  const prefix = receiptPrefixFor(now);
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const candidate = generateReceiptNumber();
+    const count = await prisma.payment.count({ where: { receiptNumber: { startsWith: prefix } } });
+    const candidate = buildReceiptNumber(count + 1, now);
     const taken = await prisma.payment.findUnique({
       where: { receiptNumber: candidate },
       select: { id: true },
     });
     if (!taken) return candidate;
   }
-  // 5 ta urinishda ham band bo'lsa — bu deyarli imkonsiz (1/(1.1e12)^5).
-  // Kutilmasak xato tushamiz: chek raqamisiz to'lov yaratish yaxshiroq.
+  // Parallel to'lovlar juda ko'p (8 tasi bir vaqtda) bo'lsa — xato.
+  // Chek raqamisiz to'lov yaratishdan yaxshiroq.
   throw new Error('RECEIPT_NUMBER_EXHAUSTED');
 }

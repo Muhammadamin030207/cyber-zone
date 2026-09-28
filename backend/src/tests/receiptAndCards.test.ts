@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { generateReceiptNumber, reserveReceiptNumber } from '../utils/receiptNumber';
-import { resolveMerchantCard, formatCardNumber } from '../utils/merchantCards';
+import { buildReceiptNumber, reserveReceiptNumber, receiptPrefixFor, tashkentLocalDateKey } from '../utils/receiptNumber';
+import { resolveMerchantCard, listConfiguredCards, formatCardNumber } from '../utils/merchantCards';
 
 /**
  * CHEK RAQAMI VA DOGAON KARTALARI — qisqa identifikator va usulga
@@ -15,7 +15,7 @@ import { resolveMerchantCard, formatCardNumber } from '../utils/merchantCards';
 vi.mock('../lib/prisma', () => ({
   default: {
     siteSetting: { findMany: vi.fn() },
-    payment: { findUnique: vi.fn() },
+    payment: { findUnique: vi.fn(), count: vi.fn() },
   },
 }));
 
@@ -23,6 +23,7 @@ import prisma from '../lib/prisma';
 
 const mockedSettings = prisma.siteSetting.findMany as unknown as ReturnType<typeof vi.fn>;
 const mockedPayment = prisma.payment.findUnique as unknown as ReturnType<typeof vi.fn>;
+const mockedCount = prisma.payment.count as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -32,51 +33,55 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('generateReceiptNumber', () => {
-  it('prefix va 8 belgidan iborat', () => {
-    const r = generateReceiptNumber();
-    expect(r).toMatch(/^CZ-[0-9A-Z]{8}$/);
+describe('buildReceiptNumber — CZ-YYYYMMDD-NNNNNN', () => {
+  it('sana va 6 raqamli tartib raqam shaklida', () => {
+    const r = buildReceiptNumber(123, new Date('2026-09-28T12:00:00Z'));
+    expect(r).toMatch(/^CZ-\d{8}-\d{6}$/);
   });
 
-  it('chalkash chiqadigan belgilarni ISHLATMAYDI (Crockford Base32)', () => {
-    // I, L, O, U — telefon orqali aytganda 1/0 bilan chalkashadi.
-    // 5000 ta generatsiya bilan bu belgilar chiqmasligi isbotlanadi.
-    for (let i = 0; i < 5000; i++) {
-      const body = generateReceiptNumber().slice(3);
-      expect(body).not.toMatch(/[ILOU]/);
-    }
+  it('oldidagi nollar keltiriladi (000123)', () => {
+    expect(buildReceiptNumber(123, new Date('2026-09-28T12:00:00Z'))).toBe(`CZ-20260928-000123`);
   });
 
-  it('bir-biridan farq qiladi (taxmin 5000 ta namunada takrorlanish yo\'q)', () => {
-    const seen = new Set<string>();
-    for (let i = 0; i < 5000; i++) seen.add(generateReceiptNumber());
-    // 32^8 ≈ 1.1e12 kombinatsiya — 5000 ta namuna deyarli kafolatli unikal.
-    expect(seen.size).toBe(5000);
+  it('1 -> 000001, 999999 -> 999999 (chegara)', () => {
+    expect(buildReceiptNumber(1, new Date('2026-09-28T12:00:00Z'))).toBe('CZ-20260928-000001');
+    expect(buildReceiptNumber(999999, new Date('2026-09-28T12:00:00Z'))).toBe('CZ-20260928-999999');
+  });
+
+  it('prefiks kundalik farq qiladi', () => {
+    expect(receiptPrefixFor(new Date('2026-09-28T12:00:00Z'))).not.toBe(receiptPrefixFor(new Date('2026-09-29T12:00:00Z')));
+  });
+
+  it('Toshkent vaqti (UTC+5) bo\'yicha sana oladi', () => {
+    // 2026-09-28 22:30 UTC == 2026-09-29 03:30 Toshkentda
+    expect(tashkentLocalDateKey(new Date('2026-09-28T22:30:00Z'))).toBe('20260929');
   });
 });
 
 describe('reserveReceiptNumber', () => {
-  it('band bo\'lmagan raqamni qaytaradi', async () => {
+  it('kunning navbatdagi raqamini qaytaradi (count+1)', async () => {
+    mockedCount.mockResolvedValueOnce(5);
     mockedPayment.mockResolvedValueOnce(null);
-    const r = await reserveReceiptNumber();
-    expect(r).toMatch(/^CZ-[0-9A-Z]{8}$/);
-    expect(mockedPayment).toHaveBeenCalledTimes(1);
+    const r = await reserveReceiptNumber(new Date('2026-09-28T12:00:00Z'));
+    expect(r).toBe('CZ-20260928-000006');
   });
 
-  it('band bo\'lsa boshqa variantni sinaydi', async () => {
+  it('band bo\'lsa keyingi raqamni sinaydi (qayta sanash)', async () => {
     // Birinchi urinish band, ikkinchisi bo'sh.
+    mockedCount.mockResolvedValueOnce(5);
     mockedPayment
       .mockResolvedValueOnce({ id: 'band' })
       .mockResolvedValueOnce(null);
-    const r = await reserveReceiptNumber();
-    expect(r).toMatch(/^CZ-[0-9A-Z]{8}$/);
-    expect(mockedPayment).toHaveBeenCalledTimes(2);
+    mockedCount.mockResolvedValueOnce(5);
+    const r = await reserveReceiptNumber(new Date('2026-09-28T12:00:00Z'));
+    expect(r).toMatch(/^CZ-20260928-\d{6}$/);
   });
 
-  it('5 urinish ham band bo\'lsa xato tashlaydi (checksiz to\'lov yaratilmaydi)', async () => {
+  it('8 urinish ham band bo\'lsa xato tashlaydi (checksiz to\'lov yaratilmaydi)', async () => {
+    mockedCount.mockResolvedValue(0);
     mockedPayment.mockResolvedValue({ id: 'band' });
-    await expect(reserveReceiptNumber()).rejects.toThrow('RECEIPT_NUMBER_EXHAUSTED');
-    expect(mockedPayment).toHaveBeenCalledTimes(5);
+    await expect(reserveReceiptNumber(new Date('2026-09-28T12:00:00Z'))).rejects.toThrow('RECEIPT_NUMBER_EXHAUSTED');
+    expect(mockedPayment).toHaveBeenCalledTimes(8);
   });
 });
 
@@ -191,5 +196,30 @@ describe('resolveMerchantCard — usulga bog\'lanish', () => {
       })
     );
     expect((await resolveMerchantCard('UZUM'))?.appUrl).toBe('https://payme.uz');
+  });
+});
+
+describe('listConfiguredCards — chekout usullar ro\'yxati uchun', () => {
+  const rows = (rec: Record<string, string>) =>
+    Object.entries(rec).map(([key, value]) => ({ key, value }));
+
+  it('faqat raqami to\'ldirilgan usullarni qaytaradi', async () => {
+    mockedSettings.mockResolvedValueOnce(
+      rows({
+        payment_cards_by_method: JSON.stringify({
+          UZUM: { number: '4111111111111111', holder: 'VISA' },
+          PAYME: { holder: 'Faqat ism' },
+          UZCARD: { number: '5614000000001234', holder: 'UZCARD' },
+        }),
+      })
+    );
+    const cards = await listConfiguredCards();
+    expect(Object.keys(cards).sort()).toEqual(['UZCARD', 'UZUM']);
+    expect(cards.UZUM.number).toBe('4111111111111111');
+  });
+
+  it('bo\'sh bo\'lsa bo\'sh obyekt qaytaradi', async () => {
+    mockedSettings.mockResolvedValueOnce(rows({ payment_cards_by_method: '{}' }));
+    expect(await listConfiguredCards()).toEqual({});
   });
 });

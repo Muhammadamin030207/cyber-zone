@@ -59,6 +59,8 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
   const [error, setError] = useState<string | null>(null);
   // §13: moslashuvchan (custom) davomiylik — 0.5 soat qadamida, chips + qo'lda kiritish
   const [customH, setCustomH] = useState('');
+  // UNLIMITED sessiya: taymer yo'q — sarflangan vaqt bo'yicha hisob, admin yopadi.
+  const [useUnlimited, setUseUnlimited] = useState(false);
 
   // Tanlangan zona render paytida YECHILADI (effect emas): sana almashsa
   // eski zona mavjudlik ro'yxatidan "yo'qoladi" va birinchi zona qo'llanadi.
@@ -234,6 +236,9 @@ async function submit() {
         startTime,
         endTime,
         durationHours,
+        // UNLIMITED: bron hamon intervalni ushlab turadi (hold), LEKIN sessiya
+        // taymer bilan yopilmaydi — Sarflangan vaqt bo'yicha hisoblanadi.
+        ...(useUnlimited ? { sessionType: 'UNLIMITED' } : {}),
         // Ikkinchi marta bosish / refresh takroriy bron yaratmasligi uchun idempotentlik kaliti
         idempotencyKey: newIdempotencyKey('booking'),
       };
@@ -459,6 +464,24 @@ async function submit() {
             </button>
             <span className="text-[11px] text-gray-500">0.5–24 soat</span>
           </div>
+          {/* UNLIMITED sessiya: taymer yo'q — sarflangan vaqt bo'yicha
+              hisob (server `sessionType` ni tasdiqlaydi). Саna/endTime
+              kompyuterni ushlab turish oynasi bo'lib qoladi. */}
+          <label className="flex items-start gap-2.5 mb-3 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={useUnlimited}
+              onChange={(e) => setUseUnlimited(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-[#ff7a1a]"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-gray-200">Cheksiz sessiya</span>
+              <span className="block text-[11px] text-gray-500 leading-relaxed">
+                Vaqt chegarasi yo&apos;q — taymer yopmaydi, sarflangan vaqt bo&apos;yicha
+                avtomatik hisoblanadi (min 1 soat). Sessiyani admin yoki siz yakunlaysiz.
+              </span>
+            </span>
+          </label>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">

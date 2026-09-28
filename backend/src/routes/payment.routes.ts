@@ -14,6 +14,7 @@ import {
   getSandboxState,
   setSandboxState,
   getMerchantCard,
+  getMerchantCards,
   submitTransferProof,
   getDebts,
   settleDebt,
@@ -85,6 +86,8 @@ router.post('/create', authenticate, authorize('USER', 'ADMIN', 'SUPER_ADMIN'), 
 // Dogaon kartasi (nusxalash uchun). AUTENTIFIKATSIYA MAJBURIY — karta raqami
 // ommaviy endpointda chiqmasligi kerak (skraper/bo'g'in himoyasi).
 router.get('/merchant-card', authenticate, getMerchantCard);
+// BARCHA sozlangan kartalar — chekout usullar ro'yxatini shundan quradi.
+router.get('/merchant-cards', authenticate, getMerchantCards);
 
 // Kassa: qarzlar (overtime) ro'yxati
 router.get('/debts', authenticate, getDebts);

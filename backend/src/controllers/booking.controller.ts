@@ -133,8 +133,16 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
     // o'tgan bronlar availability'da allaqachon bo'sh hisoblanadi
     // (activeBookingsForDay: holdExpiresAt).
 
-    const { roomId, zoneId, computerId, date, startTime, durationHours, notes, promoCode, usePoints, idempotencyKey } = req.body;
+    const { roomId, zoneId, computerId, date, startTime, durationHours, notes, promoCode, usePoints, idempotencyKey, sessionType } = req.body;
     let endTime = req.body.endTime as string | undefined;
+
+    // Sessiya turi: TIMED (taymer, avtomatik yopilish) yoki UNLIMITED
+    // (cheksiz — endTime yo'q, vaqt bo'yicha hisob, admin user yopadi).
+    const sessionTypeNorm = String(sessionType || 'TIMED').toUpperCase();
+    if (!['TIMED', 'UNLIMITED'].includes(sessionTypeNorm)) {
+      return badRequest(res, 'sessionType faqat TIMED yoki UNLIMITED bo\'lishi mumkin', 'INVALID_SESSION_TYPE');
+    }
+    const isUnlimited = sessionTypeNorm === 'UNLIMITED';
 
     if (!roomId || !zoneId || !date || !startTime) {
       return badRequest(res, 'roomId, zoneId, date, startTime majburiy');
@@ -387,6 +395,10 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
             startTime,
             endTime: endTime as string,
             durationHours: duration,
+            // UNLIMITED: bron kun bo'yi kompyuterni ushlab turadi, lekin
+            // SESSIYA taymer bilan yopilmaydi — sarflangan vaqt bo'yicha
+            // hisoblanadi va admin/user yopadi.
+            sessionType: (isUnlimited ? 'UNLIMITED' : 'TIMED') as any,
             totalPrice: pricing.baseTotal,
             discountAmount: pricing.discountPromo,
             finalPrice: finalTotal,
@@ -591,11 +603,13 @@ function canManageBooking(booking: { userId: string; room: { ownerId: string } |
 /** Jonli sessiya holati — frontend shundan timer va "Boshlash" tugmasini boshqaradi. */
 async function sessionState(now: Date, booking: any) {
   const gate = startSessionGate(booking, now);
+  const unlimited = booking.sessionType === 'UNLIMITED';
   const startMinutes = parseTime(booking.startTime) ?? 0;
   const endMinutes = parseTime(booking.endTime) ?? startMinutes + 60;
   const bookedStart = gate.bookedStart ?? localInstant(booking.date, startMinutes);
   const bookedEnd = gate.bookedEnd ?? localInstant(booking.date, endMinutes);
-  const sessionEndsAt = booking.sessionEndsAt ?? bookedEnd;
+  // UNLIMITED: timer yo'q — `sessionEndsAt` NULL, countdown ham bo'lmaydi.
+  const sessionEndsAt = unlimited ? null : (booking.sessionEndsAt ?? bookedEnd);
 
   const zonePrice = booking.zone?.pricePerHour;
   const minBill = booking.minBillingMinutes ?? 60;
@@ -622,15 +636,17 @@ async function sessionState(now: Date, booking: any) {
   );
   const totalPaid = round2(paidPayments.reduce((s: number, p: any) => s + round2(toNumber(p.amount)), 0));
   const prepaidValue = round2(totalPaid + toNumber(booking.pointsUsed || 0));
-  const remainingMs = sessionEndsAt.getTime() - now.getTime();
+  const remainingMs = unlimited ? null : (sessionEndsAt!.getTime() - now.getTime());
 
   return {
     state: booking.status === 'ACTIVE' && booking.sessionStartedAt ? 'active' : booking.sessionEndedAt ? 'ended' : 'idle',
     serverTime: now.toISOString(),
     bookedStart: bookedStart.toISOString(),
     bookedEnd: bookedEnd.toISOString(),
-    sessionEndsAt: sessionEndsAt.toISOString(),
-    autoCloseInMs: booking.status === 'ACTIVE' ? Math.max(0, remainingMs) : 0,
+    sessionType: booking.sessionType ?? 'TIMED',
+    unlimited,
+    sessionEndsAt: sessionEndsAt ? sessionEndsAt.toISOString() : null,
+    autoCloseInMs: booking.status === 'ACTIVE' && !unlimited ? Math.max(0, remainingMs ?? 0) : 0,
     approvalStatus: booking.approvalStatus,
     approvedAt: booking.approvedAt,
     rejectionReason: booking.rejectionReason ?? null,
@@ -640,7 +656,7 @@ async function sessionState(now: Date, booking: any) {
     elapsedMinutes,
     billedHours,
     remainingMs,
-    overdueMs: remainingMs < 0 ? -remainingMs : 0,
+    overdueMs: remainingMs !== null && remainingMs < 0 ? -remainingMs : 0,
     actualPrice,
     prepaidValue,
     totalPaid,
@@ -682,7 +698,9 @@ export const startBookingSession = async (req: AuthRequest, res: Response, next:
 
     // Taymer chegarasini yozib qo'yamiz — worker shu vaqtda sessiyani
     // O'Z-O'ZICHIGA yopadi va kompyuterni bo'shatadi.
-    const sessionEndsAt = gate.bookedEnd;
+    // UNLIMITED: timer YO'Q (`NULL`) — worker hech qachon avtomatik yopmaydi.
+    const unlimited = booking.sessionType === 'UNLIMITED';
+    const sessionEndsAt = unlimited ? null : gate.bookedEnd;
 
     const updated = await prisma.$transaction(async (tx) => {
       const claimed = await tx.booking.updateMany({
@@ -697,7 +715,7 @@ export const startBookingSession = async (req: AuthRequest, res: Response, next:
     });
 
     io.emit('booking_status_changed', { roomId: booking.roomId, bookingId: booking.id, type: 'ACTIVE' });
-    io.to(`user:${booking.userId}`).emit('session_started', { bookingId: booking.id, sessionEndsAt: sessionEndsAt.toISOString() });
+    io.to(`user:${booking.userId}`).emit('session_started', { bookingId: booking.id, sessionEndsAt: sessionEndsAt ? sessionEndsAt.toISOString() : null });
     void cacheDel(`avail:${booking.roomId}:*`);
 
     const state = await sessionState(now, { ...booking, ...updated });

@@ -138,6 +138,7 @@ export interface Booking {
   sessionEndedAt?: string | null;
   sessionEndsAt?: string | null;
   autoClosed?: boolean;
+  sessionType?: 'TIMED' | 'UNLIMITED';
   // No-show: mijoz kelmagani, admin qarori kutilmoqda
   noShowOutcome?: 'REFUND' | 'FORFEIT' | null;
   noShowHandledAt?: string | null;
@@ -188,6 +189,8 @@ export interface CreateBookingPayload {
   endTime: string;
   durationHours: number;
   idempotencyKey: string;
+  /** UNLIMITED — cheksiz sessiya: taymer yo'q, vaqt bo'yicha hisob (server ruxsatida). */
+  sessionType?: 'TIMED' | 'UNLIMITED';
   computerId?: string;
   promoCode?: string;
   usePoints?: boolean;
@@ -204,7 +207,7 @@ export interface BookingSessionState {
   billedMinutes: number;
   /** Server hisoblangan qo'pay to'langan soatlar (to'liq kasr). */
   billedHours?: number;
-  remainingMs: number;
+  remainingMs: number | null;
   overdueMs: number;
   actualPrice: number | null;
   prepaidValue: number;
@@ -218,6 +221,9 @@ export interface BookingSessionState {
   canStart?: boolean;
   /** Bosib bo'lmaydigan sabab kodi (masalan BOOKING_NOT_APPROVED). */
   startBlockedBy?: string | null;
+  /** Sessiya turi — UNLIMITED bo'lsa taymer yo'q (countdown ko'rsatilmaydi). */
+  sessionType?: 'TIMED' | 'UNLIMITED';
+  unlimited?: boolean;
 }
 
 export interface Payment {

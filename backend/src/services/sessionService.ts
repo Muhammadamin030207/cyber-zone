@@ -115,14 +115,20 @@ export function startSessionGate(booking: {
   startTime: string;
   endTime: string;
   date: Date;
+  sessionType?: string;
   sessionStartedAt?: Date | null;
   sessionEndedAt?: Date | null;
 }, now: Date): StartGate {
+  const unlimited = booking.sessionType === 'UNLIMITED';
   const instants = slotInstants(booking.date, booking.startTime, booking.endTime);
   const fallbackStart = new Date(booking.date.getTime());
   const fallbackEnd = new Date(booking.date.getTime() + 3600_000);
   const bookedStart = instants?.start ?? fallbackStart;
-  const bookedEnd = instants?.end ?? fallbackEnd;
+  // UNLIMITED: endTime cheklovi yo'q — ish kuni oxirigacha (yoki +24 soat)
+  // ochiq deb qaraladi; asl yopish sessiya sarflangan vaqt bo'yicha bo'ladi.
+  const bookedEnd = unlimited
+    ? new Date(bookedStart.getTime() + 24 * 3_600_000)
+    : (instants?.end ?? fallbackEnd);
 
   if (booking.sessionEndedAt || booking.status === 'COMPLETED') {
     return { ok: false, code: 'SESSION_ALREADY_ENDED', message: 'Sessiya allaqachon yakunlangan', bookedStart, bookedEnd };
@@ -136,7 +142,8 @@ export function startSessionGate(booking: {
   if (now.getTime() < bookedStart.getTime()) {
     return { ok: false, code: 'SESSION_EARLY', message: `Sessiya ${minutesToHHMM(parseTime(booking.startTime) ?? 0)} dan keyin boshlanadi`, bookedStart, bookedEnd };
   }
-  if (now.getTime() >= bookedEnd.getTime()) {
+  // UNLIMITED sessiyada "vaqt tugadi" bo'lmaydi — faqat admin/user yopadi.
+  if (!unlimited && now.getTime() >= bookedEnd.getTime()) {
     return { ok: false, code: 'SESSION_WINDOW_CLOSED', message: 'Bron vaqti tugadi — kompyuter bo\'shatildi', bookedStart, bookedEnd };
   }
   return { ok: true, bookedStart, bookedEnd };

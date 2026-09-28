@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import {
   Loader2, CheckCircle2, Wallet, Banknote, AlertCircle,
   ArrowRight, BadgePercent, Clock, MapPin, Monitor, ChevronLeft, RefreshCw, FlaskConical,
+  Copy, Check, ExternalLink, Info,
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -16,13 +17,16 @@ import SplashLoader from '@/components/ui/SplashLoader';
 import ProviderLogo from '@/components/payments/ProviderLogo';
 import TransferPanel, { type MerchantCard } from '@/components/payments/TransferPanel';
 
-type PayMethod = 'PAYME' | 'CLICK' | 'UZUM' | 'PAYNET' | 'CASH' | 'TRANSFER';
+type PayMethod = 'PAYME' | 'CLICK' | 'UZUM' | 'PAYNET' | 'UZCARD' | 'HUMO' | 'VISA' | 'CASH' | 'TRANSFER';
 
 const PROVIDER_UI: Record<string, { label: string; sub: string }> = {
   PAYME: { label: 'Payme', sub: 'Telefon ilovasi' },
   CLICK: { label: 'Click', sub: 'Tez va oson' },
   UZUM: { label: 'Uzum', sub: 'Raqamli bank' },
   PAYNET: { label: 'Paynet', sub: 'To\'lov terminali' },
+  UZCARD: { label: 'UzCard', sub: 'Mobil ilova' },
+  HUMO: { label: 'Humo', sub: 'Bank kartasi' },
+  VISA: { label: 'Visa', sub: 'Xalqaro karta' },
   CASH: { label: 'Kassada', sub: 'Naqd pulda to\'lash' },
   // Qo'lda o'tkazma: hech qanday provayder/ilova kerak emas — bank ilovasida
   // o'zingiz o'tkazasiz, chekni shu yerga yuklasangiz bo'ladi.
@@ -58,9 +62,11 @@ interface ProviderInfo {
  * ishlaydi, shuning uchun frontend'da qo'shiladi.
  */
 const OFFLINE_METHODS: ProviderInfo[] = [
-  { method: 'TRANSFER', label: 'Karta orqali', available: true },
   { method: 'CASH', label: 'Kassada', available: true },
 ];
+
+/** Qo'lda o'tkazma (karta) usullari — karta sozlangan bo'lsa ko'rsatiladi. */
+const CARD_METHODS = ['UZUM', 'PAYME', 'CLICK', 'PAYNET', 'UZCARD', 'HUMO', 'VISA', 'TRANSFER'] as const;
 
 export default function CheckoutPage({ params }: { params: Promise<{ locale: string; id: string }> }) {
   void params;
@@ -75,6 +81,13 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [sandbox, setSandbox] = useState(false);
   const [method, setMethod] = useState<PayMethod>('CASH');
+  /**
+   * BARCHA sozlangan dogaon kartalar — usul (UZUM, PAYME...) -> karta.
+   * Chekout usullar ro'yxati SHUNDAN quriladi: karta sozlangan usul har
+   * doim tanlanadi va karta DARHOL ko'rsatiladi (to'lov yaratilishini
+   * kutmaydi). Endi "karta sozlangan-u lekin ko'rsatilmayapti" bo'lmaydi.
+   */
+  const [cardsByMethod, setCardsByMethod] = useState<Record<string, MerchantCard>>({});
   /**
    * TO'LOV FOIZI — mijoz xohlagan foizda yoki to'liq to'lashi mumkin.
    * `null` = minimal depozit (brondagi `depositPercent`). Server pastga
@@ -110,7 +123,25 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
       })
       // Xato yashirilmaydi: onlayn usullar yo'qligi foydalanuvchi uchun muhim.
       .catch(() => { setProviders([]); setProvidersError(true); });
+
+    // BARCHA sozlangan dogaon kartalar — usullar ro'yxati shundan quramiz.
+    api
+      .get('/api/payments/merchant-cards')
+      .then(({ data }) => setCardsByMethod((data.data?.cards as Record<string, MerchantCard>) || {}))
+      .catch(() => setCardsByMethod({}));
   }, []);
+
+  /**
+   * Karta rezolyutsiyasi — backend `resolveMerchantCard` oqimi bilan bir xil:
+   * aniq usul -> DEFAULT -> null. Chekout usuli selectable bo'lishi uchun
+   * shu usul yoki DEFAULT karta bo'lishi kerak.
+   */
+  const cardFor = useCallback((m: string): MerchantCard | null => {
+    const key = m.toUpperCase();
+    if (cardsByMethod[key]) return cardsByMethod[key];
+    if (key !== 'DEFAULT' && cardsByMethod['DEFAULT']) return cardsByMethod['DEFAULT'];
+    return null;
+  }, [cardsByMethod]);
 
   // Bronni qayta yuklash (to'lov tasdiqlanganda yoki chek yuborilganda).
   // `useCallback` — polling effect'ining dependency'siga kirishi uchun
@@ -222,15 +253,17 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
         ...(payPercent !== null ? { depositPercent: payPercent } : {}),
       });
       const d = data.data;
-      if (m === 'TRANSFER' || d?.manual === true) {
-        // Hech qanday redirect yo'q — shu sahifada karta + chek formasi ochiladi
+      if (cardFor(m) || d?.manual === true) {
+        // Hech qanday redirect yo'q — shu sahifada karta + chek formasi ochiladi.
+        // Karta oldindan yuklangan `cardFor(m)` dan, keyin server javobidagi
+        // (authoritative) `merchantCard` bilan almashiladi.
         setTransferPayment({
           id: d.payment.id,
           status: d.payment.status,
           amount: d.payment.amount,
           receiptNumber: d.payment.receiptNumber ?? null,
         });
-        setCard(d.merchantCard || null);
+        setCard((d.merchantCard as MerchantCard | null) || cardFor(m));
       } else if (m === 'CASH' || (data.data?.method === 'CASH')) {
         setCashNotified(true);
       } else if (d?.checkoutUrl) {
@@ -254,38 +287,75 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
     return () => clearInterval(t);
   }, [transferPayment, reloadBooking, verified, booking?.status]);
 
-  // Backend ham CASH/TRANSFER qaytarsa takrorlanib qolmasligi uchun method bo'yicha
-  // birlashtiramiz — aks holda React `key` takrorlanadi va tanlov noto'g'ri ishlaydi.
-  // Hook barcha `return`'lardan OLDIN turishi shart — aks holda hook tartibi buziladi.
-  const dedupMethods = useMemo(() => {
-    const byMethod = new Map<string, ProviderInfo>();
-    for (const p of [...providers, ...OFFLINE_METHODS]) {
-      if (!byMethod.has(p.method)) byMethod.set(p.method, p);
+  // Tanlash mumkin bo'lgan usullar:
+  //   1) Karta sozlangan usullar (qo'lda o'tkazma) — ALWAYS mavjud.
+  //   2) Real ermasdan ulangan provayderlar (gateway) — bularga redirect.
+  //   3) Kassada (naqd).
+  // Provayder "not_configured" bo'lishi endi kartani yashirmaydi — karta bor
+  // bo'lsa usul tanlanadi. (Eski xatolik: admin UZUM kartasini saqlagan,
+  // lekin UZUM provider sozlanmagani uchun usul disabled bo'lib chiqardi.)
+  const methodList = useMemo(() => {
+    const list: ProviderInfo[] = [];
+    const seen = new Set<string>();
+    for (const m of CARD_METHODS) {
+      if (cardFor(m)) {
+        list.push({ method: m, label: PROVIDER_UI[m]?.label || m, available: true });
+        seen.add(m);
+      }
     }
-    return Array.from(byMethod.values());
-  }, [providers]);
+    for (const p of providers) {
+      if (seen.has(p.method)) continue;
+      if (p.available) {
+        list.push(p);
+        seen.add(p.method);
+      }
+    }
+    for (const p of OFFLINE_METHODS) {
+      if (!seen.has(p.method)) {
+        list.push(p);
+        seen.add(p.method);
+      }
+    }
+    return list;
+  }, [providers, cardFor]);
+
+  // Dastlabki tanlov: karta sozlangan usul bo'lmasa — kassada.
+  useEffect(() => {
+    setMethod((prev) => {
+      if (methodList.some((p) => p.method === prev)) return prev;
+      const firstCard = methodList.find((p) => p.method !== 'CASH' && cardFor(p.method));
+      return (firstCard?.method as PayMethod) || 'CASH';
+    });
+  }, [methodList, cardFor]);
 
   /**
-   * To'lov foizi variantlari. Faqat brondan yuqoriga taklif etiladi —
-   * server ham shundan pastga cheklaydi, shuning uchun 10% kabi variantlar
-   * ko'rsatilmasligi kerak (ular rad etilardi).
+   * To'lov foizi variantlari — 10% dan 100% gacha har 10% da, PLUS custom.
+   * Tanlangan foiz minimal depozitdan (bronda) PAST bo'lsa server uni yuqoriga
+   * to'g'rilaydi (`Math.max(minPercent, ...)`) — bu yerda ham xuddi shu
+   * qiymat ko'rsatiladi va mijozga izoh beriladi.
    */
   const percentOptions = useMemo(() => {
     const base = Math.max(1, Math.trunc(Number(booking?.depositPercent) || 30));
-    const values = new Set<number>([base]);
-    for (const v of [30, 50, 70, 100]) if (v > base) values.add(v);
-    return [...values]
+    const values: number[] = [];
+    for (let v = 10; v <= 100; v += 10) values.push(v);
+    if (!values.includes(base)) values.push(base);
+    return values
       .sort((a, b) => a - b)
       .map((value) => ({ value, label: value === 100 ? "To'liq" : `${value}%` }));
   }, [booking?.depositPercent]);
+  /** «Boshqa» (custom) foiz rejimi. */
+  const [customPercentOpen, setCustomPercentOpen] = useState(false);
+  const [customPercent, setCustomPercent] = useState('');
 
   /** Hozir tanlangan foiz (tanlanmasa — brondagi minimal). */
+  const parsedCustom = Math.trunc(Number(customPercent));
   const selectedPercent = Math.max(
     Math.trunc(Number(booking?.depositPercent) || 30),
-    payPercent ?? 0
+    customPercentOpen ? (Number.isInteger(parsedCustom) && parsedCustom >= 1 ? parsedCustom : 0) : (payPercent ?? 0)
   );
   /** Tanlangan foiz bo'yicha to'lov summasi (server hisobi bilan bir xil). */
   const payAmount = Math.round(Number(booking?.finalPrice) * (selectedPercent / 100));
+  const customBelowMin = customPercentOpen && selectedPercent === (Math.trunc(Number(booking?.depositPercent) || 30)) && parsedCustom < (Math.trunc(Number(booking?.depositPercent) || 30));
 
   if (loading) {
     return (
@@ -344,6 +414,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
   const hasOutstanding = !isVoid && remaining > 0;
 
   const methodUi = PROVIDER_UI[method];
+  /** Tanlangan usul uchun karta (faqat agar mapping bo'lsa). */
+  const selectedPreviewCard = cardFor(method);
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10 pb-24">
@@ -450,25 +522,25 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
             </div>
           )}
 
-          {/* TO'LOV FOIZI — minimal depozitdan boshlab, xohlagancha yoki to'liq.
-              Server pastga cheklaydi (brondan kam to'lash mumkin emas), shu
-              sabab bu yerda faqat brondan yuqori variantlar taklif etiladi. */}
+          {/* TO'LOV FOIZI — mijoz 10% dan 100% gacha tanlaydi yoki custom
+              kiritadi. Server pastga cheklaydi (brondan kam to'lash mumkin
+              emas) — shu sabab past foiz tanlansa izoh ko'rsatiladi. */}
           {!transferPayment && percentOptions.length > 1 && (
             <fieldset className="rounded-2xl border border-white/10 surface p-4 mb-5">
               <legend className="px-2 text-xs text-gray-400 flex items-center gap-1.5">
                 <BadgePercent size={12} aria-hidden="true" /> Qancha to&apos;lamoqchisiz?
               </legend>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
+              <div className="grid grid-cols-5 gap-2 mt-1">
                 {percentOptions.map((opt) => {
-                  const selected = (payPercent ?? depositPercent) === opt.value;
+                  const selected = !customPercentOpen && (payPercent ?? depositPercent) === opt.value;
                   return (
                     <button
                       key={opt.value}
                       type="button"
-                      onClick={() => setPayPercent(opt.value === depositPercent ? null : opt.value)}
+                      onClick={() => { setCustomPercentOpen(false); setCustomPercent(''); setPayPercent(opt.value === depositPercent ? null : opt.value); }}
                       aria-pressed={selected}
                       className={cn(
-                        'px-3 py-2.5 rounded-xl border text-sm font-semibold transition-colors',
+                        'px-2 py-2.5 rounded-xl border text-sm font-semibold transition-colors',
                         selected
                           ? 'border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan'
                           : 'border-white/10 hover:border-white/25 text-gray-300'
@@ -479,19 +551,56 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
                   );
                 })}
               </div>
+              <div className="flex items-center gap-2 mt-2.5">
+                <button
+                  type="button"
+                  onClick={() => { setCustomPercentOpen((v) => !v); setPayPercent(null); }}
+                  aria-pressed={customPercentOpen}
+                  className={cn(
+                    'px-3 py-2 rounded-lg border text-sm font-semibold transition-colors',
+                    customPercentOpen
+                      ? 'border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan'
+                      : 'border-white/10 hover:border-white/25 text-gray-400'
+                  )}
+                >
+                  Boshqa (custom)
+                </button>
+                {customPercentOpen && (
+                  <div className="flex items-center gap-2 flex-1">
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      inputMode="numeric"
+                      value={customPercent}
+                      onChange={(e) => setCustomPercent(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                      placeholder="10–100"
+                      aria-label="To'lov foizi (maskimal 100)"
+                      className="px-3 py-2 rounded-lg border border-white/15 bg-white/5 text-sm w-24 outline-none focus:border-neon-cyan/60"
+                    />
+                    <span className="text-xs text-gray-400">%</span>
+                  </div>
+                )}
+              </div>
+              {customPercentOpen && customPercent !== '' && !(Number.isInteger(parsedCustom) && parsedCustom >= 1 && parsedCustom <= 100) && (
+                <p className="mt-2 text-[11px] text-amber-400">Foiz 1–100 orasida bo&apos;lishi kerak</p>
+              )}
               <p className="mt-2.5 text-[11px] text-gray-500">
                 {formatPrice(payAmount)} so&apos;m to&apos;laysiz
-                {selectedPercent > depositPercent && (
+                {customBelowMin && (
+                  <> — minimal depozit {depositPercent}% — server avtomatik to&apos;g&apos;rilaydi</>
+                )}
+                {!customBelowMin && selectedPercent > depositPercent && (
                   <> — qolgan {100 - selectedPercent}% keyin, joyda to&apos;lanadi</>
                 )}
-                {selectedPercent === 100 && <> — bitta to&apos;lovda hammasi yopiladi</>}
+                {selectedPercent === 100 && (<> — bitta to&apos;lovda hammasi yopiladi</>)}
               </p>
             </fieldset>
           )}
 
           {/* To'lov usulini tanlash — bitta tanlash guruhi (radio semantics) */}
           <div role="radiogroup" aria-label="To'lov usuli" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 mb-5">
-            {dedupMethods.map((p) => {
+            {methodList.map((p) => {
               const ui = PROVIDER_UI[p.method];
               const disabled = !p.available;
               const selected = method === p.method;
@@ -547,32 +656,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
                 onDone={() => { void reloadBooking(); }}
               />
             </div>
-          ) : method === 'TRANSFER' ? (
-            <div className="rounded-2xl border border-neon-cyan/25 bg-neon-cyan/[0.06] p-4 sm:p-5 mb-5">
-              <div className="flex items-start gap-3">
-                <span className="grid place-items-center w-10 h-10 rounded-xl bg-neon-cyan/15 border border-neon-cyan/25 shrink-0">
-                  <ProviderLogo method="TRANSFER" size={22} />
-                </span>
-                <div className="min-w-0">
-                  <h3 className="font-bold text-sm text-white">Karta orqali o&apos;tkazma</h3>
-                  <p className="text-xs text-gray-300 mt-1 leading-relaxed">
-                    Bank ilovangizda ko&apos;rsatiladigan raqamga pul o&apos;tkazasiz, keyin chek
-                    (screenshot) shu yerga yuklaysiz. Istalgan bank ishlaydi — hech qanday
-                    to&apos;lov xizmati kerak emas.
-                  </p>
-                  <ul className="text-[11px] text-gray-400 mt-2 space-y-1 list-disc pl-4">
-                    <li>Avval pastdagi tugma bilan to&apos;lovni yarating</li>
-                    <li>
-                      {/* Bank nomi API'dan keladi — provayderni matnga yozib qo'yamaymiz. */}
-                      {(card?.bank || 'Ko\'rsatilgan')}{' '}
-                      karta raqamiga {formatPrice(advance)} so&apos;mdan o&apos;tkazing
-                    </li>
-                    <li>Chekni (1–3 ta rasm) shu yerga yuklang</li>
-                    <li>Admin bankda tekshirib tasdiqlaydi</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
+          ) : selectedPreviewCard ? (
+            <CardPreviewCard card={selectedPreviewCard} method={method} amount={payAmount} />
           ) : method !== 'CASH' ? (
             <div className="neo-card rounded-2xl p-5 mb-5 flex items-center gap-4">
               <span className="p-1.5 shrink-0"><ProviderLogo method={method} size={36} /></span>
@@ -603,7 +688,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
 
           <button
             onClick={() => startPay(method)}
-            disabled={paying || polling || Boolean(transferPayment) || (method !== 'CASH' && method !== 'TRANSFER' && !(providers.find((p) => p.method === method)?.available))}
+            disabled={paying || polling || Boolean(transferPayment) || (method !== 'CASH' && !cardFor(method) && !(providers.find((p) => p.method === method)?.available))}
             className="w-full py-3.5 rounded-xl neon-btn flex items-center justify-center gap-2 font-bold disabled:opacity-40"
           >
             {paying ? (
@@ -614,8 +699,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
               <>
                 {method === 'CASH'
                   ? 'Kassada to\'layman'
-                  : method === 'TRANSFER'
-                    ? <>Karta raqamini ko&apos;rsatish: {formatPrice(advance)} so&apos;m</>
+                  : cardFor(method)
+                    ? <>To&apos;lovni boshlash: {formatPrice(payAmount)} so&apos;m</>
                     : <>To&apos;lash: {formatPrice(advance)} so&apos;m</>}
                 <ArrowRight size={16} />
               </>
@@ -672,6 +757,108 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
           </Link>
         </>
       )}
+    </div>
+  );
+}
+/** To'lov usuli -> ilovaga o'tish havolasi (appUrl bo'sh bo'lsa zaxira). */
+const CARD_APP_URL: Record<string, string> = {
+  UZUM: 'https://www.uzumcheckout.uz',
+  PAYME: 'https://payme.uz',
+  CLICK: 'https://click.uz',
+  PAYNET: 'https://paynet.uz',
+  UZCARD: 'https://uzcard.uz',
+  HUMO: 'https://humo.uz',
+  TRANSFER: '',
+};
+
+/**
+ * Karta paneli — mijoz to'lov usulini tanlagach DARHOL ko'radi:
+ * raqam + nusxalash + bank/egasi + ilovaga o'tish + izoh. To'lovni
+ * yaratishni kutmaydi (eski xatolik — karta faqat to'lov yaratilgandan
+ * keyin chiqar edi, yoki umuman chiqmas edi).
+ */
+function CardPreviewCard({ card, method, amount }: { card: MerchantCard; method: string; amount: number }) {
+  const [copied, setCopied] = useState(false);
+  const ui = PROVIDER_UI[method];
+  const appUrl = card.appUrl || CARD_APP_URL[method];
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(card.number.replace(/\s+/g, ''));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard bloklangan — foydalanuvchi qo'lda ko'chiradi */
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/10 surface p-5 mb-5">
+      <div className="flex items-center justify-between mb-4 gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="grid place-items-center w-10 h-10 rounded-xl bg-white/5 border border-white/10 shrink-0">
+            <ProviderLogo method={method} size={22} />
+          </span>
+          <div className="min-w-0">
+            <h3 className="font-bold text-sm text-white truncate">{ui?.label || 'Karta'} orqali to&apos;lov</h3>
+            <p className="text-xs text-gray-500">To&apos;lov shu kartaga o&apos;tkaziladi</p>
+          </div>
+        </div>
+        <span className="shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg border border-neon-cyan/30 bg-neon-cyan/10 text-neon-cyan">
+          DOGAON KARTA
+        </span>
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/10 to-white/[0.02] p-5">
+        <div>
+          <div className="text-[11px] uppercase tracking-wider text-gray-400 font-semibold mb-1.5">Bank karta raqami</div>
+          <div className="text-xl sm:text-2xl font-black tracking-wider text-white tabular-nums">
+            {card.numberFormatted || card.number}
+          </div>
+          {card.holder && (
+            <div className="mt-2 text-sm font-semibold text-gray-200 uppercase tracking-wide">{card.holder}</div>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2 mt-4">
+          <button
+            type="button"
+            onClick={copy}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl neon-btn font-bold text-sm"
+          >
+            {copied ? <Check size={16} /> : <Copy size={16} />}
+            {copied ? 'Nusxalandi' : 'Raqamni nusxalash'}
+          </button>
+          {appUrl && (
+            <a
+              href={appUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-white/15 text-sm font-semibold text-gray-200 hover:border-white/35 hover:text-white transition-colors"
+            >
+              <ExternalLink size={15} />
+              {ui?.label || 'Ilovada'} o&apos;tib to&apos;lash
+            </a>
+          )}
+        </div>
+      </div>
+
+      {(card.bank || card.note) && (
+        <div className="mt-3 space-y-1">
+          {card.bank && <p className="text-xs text-gray-400"><span className="text-gray-500">Bank:</span> {card.bank}</p>}
+          {card.note && (
+            <p className="text-xs text-amber-300/90 flex items-start gap-1">
+              <Info size={13} className="mt-0.5 shrink-0" aria-hidden="true" /> {card.note}
+            </p>
+          )}
+        </div>
+      )}
+
+      <ul className="mt-4 space-y-1.5 text-xs text-gray-400 list-disc pl-4">
+        <li>Raqamni nusxalang yoki «{ui?.label || 'ilovada'} o&apos;tib to&apos;lash» tugmasini bosing</li>
+        <li>Kartaga <b className="text-gray-200">{formatPrice(amount)} so&apos;m</b> o&apos;tkazing</li>
+        <li>Pastdagi «To&apos;lovni boshlash» tugmasi orqali chek raqami olinadi, so&apos;ng chek (screenshot) yuklanadi</li>
+        <li>Admin bank hisobida tekshirib tasdiqlaydi — bron shundan keyin kuchga kiradi</li>
+      </ul>
     </div>
   );
 }

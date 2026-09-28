@@ -55,6 +55,9 @@ export async function closeExpiredSessions(now = new Date()): Promise<number> {
     WHERE status = 'ACTIVE'::"BookingStatus"
       AND session_ended_at IS NULL
       AND session_started_at IS NOT NULL
+      -- UNLIMITED sessiyalar taymer bilan yopilmaydi (session_ends_at NULL,
+      -- COALESCE'ga tushmasligi uchun session_type ham tekshiriladi).
+      AND COALESCE(session_type, 'TIMED') = 'TIMED'
       AND COALESCE(
         session_ends_at,
         date::timestamp + ((split_part(end_time, ':', 1)::int * 60 + split_part(end_time, ':', 2)::int) - 300) * interval '1 minute'

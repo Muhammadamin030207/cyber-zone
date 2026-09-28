@@ -5,7 +5,7 @@ import { AuthRequest } from '../types';
 import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/response';
 import { toNumber, round2, isValidAmount } from '../utils/money';
 import { resolveDepositPercent } from '../utils/pricing';
-import { resolveMerchantCard } from '../utils/merchantCards';
+import { resolveMerchantCard, listConfiguredCards } from '../utils/merchantCards';
 import { reserveReceiptNumber } from '../utils/receiptNumber';
 import { io } from '../lib/socket';
 import { Prisma } from '@prisma/client';
@@ -232,7 +232,8 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
       }
     }
 
-    const { method: normMethod, providerId, cash, manual } = normalizeMethod(method);
+    const normalized = normalizeMethod(method);
+    let { method: normMethod, providerId, cash, manual } = normalized;
     if (!cash && !manual && !providerId) {
       return badRequest(res, 'To\'lov metodi qo\'llab-quvvatlanmaydi');
     }
@@ -246,7 +247,16 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
         return badRequest(res, `Noma'lum to'lov metodi: ${method}`);
       }
       if (!isProviderAvailable(providerId)) {
-        return badRequest(res, provider.label + ' to\'lov xizmati hozircha mavjud emas. Iltimos, boshqa usulni tanlang (naqd pul).');
+        // Provayder GATEWAY sozlanmagan bo'lsa — lekin shu usul uchun DOGAON
+        // (merchant) kartasi sozlangan bo'lsa, qo'lda o'tkazma rejimiga tushamiz.
+        // Mijoz kartani nusxalaydi, ilovada o'tkazadi, chek yuboradi.
+        const fallbackCard = await resolveMerchantCard(method);
+        if (fallbackCard) {
+          provider = null;
+          manual = true;
+        } else {
+          return badRequest(res, provider.label + ' to\'lov xizmati hozircha mavjud emas. Iltimos, boshqa usulni tanlang (naqd pul).');
+        }
       }
     }
 
@@ -406,7 +416,7 @@ amount: Number(active.amount),
           metadata: (cash
             ? null
             : manual
-              ? { manualMethod: 'card_transfer', instruction: "Karta raqamiga o'tkazing, chek yuboring" }
+              ? { manualTransfer: true, manualMethod: 'card_transfer', method: (normMethod || 'TRANSFER'), instruction: "Karta raqamiga o'tkazing, chek yuboring" }
               : { providerMethod: providerId.toLowerCase() }) as any,
         },
       });
@@ -493,7 +503,7 @@ amount: Number(active.amount),
           action: 'payment_created',
           actorId: req.user!.userId,
           actorRole: req.user!.role as string,
-          metadata: { method: 'TRANSFER', percent, amount, cardConfigured: Boolean(merchantCard) },
+          metadata: { method: normMethod || 'TRANSFER', percent, amount, cardConfigured: Boolean(merchantCard) },
         });
       });
 
@@ -1113,6 +1123,24 @@ export const getMerchantCard = async (req: AuthRequest, res: Response, next: Nex
 };
 
 /**
+ * GET /api/payments/merchant-cards — BARCHA sozlangan dogaon kartalar.
+ *
+ * Chekout sahifasi to'lov usullari ro'yxatini shu ma'lumot asosida quradi:
+ * har bir usul (UZUM, PAYME, CLICK, PAYNET...) uchun karta sozlangan bo'lsa
+ * usul tanlanadi va karta DARHOL ko'rsatiladi (to'lov yaratilishini kutmay).
+ *
+ * AUTENTIFIKATSIYA MAJBURIY — karta raqamlari ommaviy chiqmaydi.
+ */
+export const getMerchantCards = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const cards = await listConfiguredCards();
+    return ok(res, { cards });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * POST /api/payments/:id/proof — To'lovchi o'tkazma tasdig'ini yuboradi.
  *
  * Qabul qilinadi:
@@ -1142,7 +1170,8 @@ export const submitTransferProof = async (req: AuthRequest, res: Response, next:
     if (!['PENDING', 'CREATED'].includes(payment.status)) {
       return badRequest(res, 'Bu to\'lov allaqachon tasdiqlangan yoki bekor qilingan');
     }
-    if (payment.method && payment.method !== 'TRANSFER') {
+    const manualTransfer = (payment.metadata as any)?.manualTransfer === true;
+    if (!manualTransfer && payment.method !== 'TRANSFER') {
       return badRequest(res, 'Bu to\'lov uchun o\'tkazma tasdig\'i talab qilinmaydi');
     }
 

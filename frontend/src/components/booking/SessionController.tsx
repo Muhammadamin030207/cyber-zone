@@ -36,6 +36,8 @@ export default function SessionController({
   const [busy, setBusy] = useState(true);
 
   const isActive = booking.status === 'ACTIVE' && !!booking.sessionStartedAt;
+  // UNLIMITED: taymer yo'q — countdown ko'rsatilmaydi, faqat o'tgan vaqt.
+  const unlimited = session?.unlimited === true || booking.sessionType === 'UNLIMITED';
 
   async function fetchSession(silent = false) {
     try {
@@ -127,7 +129,7 @@ export default function SessionController({
     isActive && startedAt && now > 0
       ? Math.floor((now - startedAt) / 1000)
       : (session?.elapsedMinutes || 0) * 60;
-  const remainingSec = isActive && session ? Math.floor(session.remainingMs / 1000) : 0;
+  const remainingSec = isActive && session && !unlimited ? Math.floor((session.remainingMs ?? 0) / 1000) : null;
   const minBill = booking.minBillingMinutes ?? 60;
 
   return (
@@ -143,7 +145,7 @@ export default function SessionController({
             : 'text-gray-400 border-white/10 bg-cyber-800/50'
         )}>
           {isActive && <span className="w-1.5 h-1.5 rounded-full bg-neon-green animate-pulse" />}
-          {isActive ? 'FAOL' : 'BOSHQA'}
+          {isActive ? (unlimited ? 'CHEKSIZ' : 'FAOL') : 'BOSHQA'}
         </span>
       </div>
 
@@ -156,19 +158,27 @@ export default function SessionController({
 
         {isActive ? (
           <div className="space-y-3">
-            <div className="flex items-end justify-between">
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">O&apos;tgan vaqt</p>
-                <p className="font-mono text-3xl font-extrabold text-neon-cyan leading-none tabular-nums">{fmtClock(elapsedSec)}</p>
+<div className="flex items-end justify-between">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">O&apos;tgan vaqt</p>
+                  <p className="font-mono text-3xl font-extrabold text-neon-cyan leading-none tabular-nums">{fmtClock(elapsedSec)}</p>
+                </div>
+                {unlimited ? (
+                  <div className="text-right text-xs text-gray-400">
+                    <p className="flex items-center justify-end gap-1"><Clock size={11} /> Cheksiz sessiya</p>
+                    <p className="font-mono text-sm font-bold tabular-nums text-neon-cyan">∞</p>
+                    <p className="text-[11px] text-gray-500">sarflangan vaqt bo&apos;yicha hisob</p>
+                  </div>
+                ) : (
+                  <div className="text-right text-xs text-gray-400">
+                    <p className="flex items-center justify-end gap-1"><Clock size={11} /> Qolgan (bron bo&apos;yicha)</p>
+                    <p className={cn('font-mono text-sm font-bold tabular-nums', (remainingSec ?? 0) > 0 ? 'text-gray-200' : 'text-yellow-400')}>
+                      {session && remainingSec !== null ? fmtClock(remainingSec) : '—'}
+                    </p>
+                    {remainingSec !== null && remainingSec < 0 && <p className="text-[11px] text-yellow-400">vaqt oshdi — qo&apos;shimcha hisob</p>}
+                  </div>
+                )}
               </div>
-              <div className="text-right text-xs text-gray-400">
-                <p className="flex items-center justify-end gap-1"><Clock size={11} /> Qolgan (bron bo&apos;yicha)</p>
-                <p className={cn('font-mono text-sm font-bold tabular-nums', remainingSec > 0 ? 'text-gray-200' : 'text-yellow-400')}>
-                  {session ? fmtClock(remainingSec) : '—'}
-                </p>
-                {remainingSec < 0 && <p className="text-[11px] text-yellow-400">vaqt oshdi — qo&apos;shimcha hisob</p>}
-              </div>
-            </div>
             {session && (
               <p className="text-[11px] text-gray-500">
                 Hisob: kamida {minBill} daqiqa. Joriy hisob: {' '}

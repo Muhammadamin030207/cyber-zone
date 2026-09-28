@@ -91,6 +91,57 @@ function parseCardMap(raw: string | undefined): Record<string, CardRecord> {
   }
 }
 
+/** `CardRecord` -> `MerchantCard` (raqam bo'sh bo'lsa null). */
+function pickCard(rec: CardRecord | undefined): MerchantCard | null {
+  const number = (rec?.number || '').trim();
+  if (!number) return null;
+  return {
+    number,
+    numberFormatted: formatCardNumber(number),
+    holder: (rec?.holder || '').trim(),
+    bank: (rec?.bank || '').trim(),
+    note: (rec?.note || '').trim(),
+    appUrl: sanitizeAppUrl(rec?.appUrl),
+  };
+}
+
+/**
+ * Barcha SOZLANGAN kartalar — usul (katta harfda) -> karta.
+ * Faqat raqami to'ldirilgan kartalar qaytariladi.
+ * Chekout sahifasi shu ro'yxat bo'yicha to'lov usullarini qurushi uchun.
+ */
+export async function listConfiguredCards(): Promise<Record<string, MerchantCard>> {
+  const rows = await prisma.siteSetting.findMany({
+    where: { key: { in: ['payment_cards_by_method', ...LEGACY_KEYS] } },
+  });
+  const map: Record<string, string> = {};
+  for (const r of rows) map[r.key] = r.value;
+
+  const byMethod = parseCardMap(map.payment_cards_by_method);
+  const out: Record<string, MerchantCard> = {};
+  for (const [key, rec] of Object.entries(byMethod)) {
+    const card = pickCard(rec);
+    if (card) out[key.toUpperCase()] = card;
+  }
+
+  // Eski `payment_card_*` sozlamalari — yangi usul karta xaritasi bo'lsa ham
+  // paritet uchun `DEFAULT` sifatida foydalanuvchiga ko'rinadi.
+  if (!out.DEFAULT) {
+    const legacyNumber = (map.payment_card_number || '').trim();
+    if (legacyNumber) {
+      out.DEFAULT = {
+        number: legacyNumber,
+        numberFormatted: formatCardNumber(legacyNumber),
+        holder: (map.payment_card_holder || '').trim(),
+        bank: (map.payment_card_bank || '').trim(),
+        note: (map.payment_card_note || '').trim(),
+        appUrl: '',
+      };
+    }
+  }
+  return out;
+}
+
 /**
  * Usulga mos karta.
  *
@@ -109,25 +160,13 @@ export async function resolveMerchantCard(method: string | null | undefined): Pr
   for (const r of rows) map[r.key] = r.value;
 
   const byMethod = parseCardMap(map.payment_cards_by_method);
-  const pick = (rec: CardRecord | undefined): MerchantCard | null => {
-    const number = (rec?.number || '').trim();
-    if (!number) return null;
-    return {
-      number,
-      numberFormatted: formatCardNumber(number),
-      holder: (rec?.holder || '').trim(),
-      bank: (rec?.bank || '').trim(),
-      note: (rec?.note || '').trim(),
-      appUrl: sanitizeAppUrl(rec?.appUrl),
-    };
-  };
 
   if (key && key !== 'DEFAULT') {
-    const exact = pick(byMethod[key]);
+    const exact = pickCard(byMethod[key]);
     if (exact) return exact;
   }
 
-  const fallback = pick(byMethod.DEFAULT);
+  const fallback = pickCard(byMethod.DEFAULT);
   if (fallback) return fallback;
 
   // Eski (legacy) sozlamalar — yangi JSON bo'sh bo'lsa.

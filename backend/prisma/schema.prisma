@@ -53,6 +53,11 @@ enum BookingStatus {
   CANCELLED // bekor qilingan
 }
 
+enum BookingSessionType {
+  TIMED // vaqt chegarasi bor — taymer tugagach avtomatik yopiladi
+  UNLIMITED // cheksiz — endTime yo'q, sessiya sarflangan vaqt bo'yicha hisoblanadi, admin yopadi
+}
+
 enum PaymentType {
   ADVANCE // oldindan (depozit)
   REMAINING // qoldiq
@@ -339,6 +344,11 @@ model Booking {
   // Taymer tugash vaqti — worker shu qiymat bo'yicha sessiyani O'Z-O'ZICHIGA
   // yopadi va kompyuterni bo'shatadi (server o'chganda ham startup'da tiklanadi).
   sessionEndsAt         DateTime? @map("session_ends_at")
+  // Sessiyaning davomiylik turi. UNLIMITED — endTime cheklovi yo'q: bron
+  // kun oxirigacha rezervlanadi, sessiya sarflangan vaqt bo'yicha
+  // hisoblanadi (min 1 soat) va admin yoki foydalanuvchi "check-out"
+  // bosganda yopiladi. Worker UNLIMITED sessiyani avtomatik YOPMAYDI.
+  sessionType           BookingSessionType @default(TIMED) @map("session_type")
   // Sessiya avtomatik yopildimi (foydalanuvchi "check-out" bosmadimi)
   autoClosed            Boolean   @default(false) @map("auto_closed")
   // KELMADI (no-show): to'lov qilingan, lekin sessiya boshlanmagan va vaqt o'tdi.

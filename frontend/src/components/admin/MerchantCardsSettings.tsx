@@ -22,10 +22,10 @@ type CardMap = Record<string, Partial<Record<CardKey, string>>>;
 
 /** Usul -> nechta raqamli karta (UI bo'sh joyni to'g'ri ko'rsatishi uchun). */
 const METHOD_META: { key: string; label: string; digits: number; hint: string }[] = [
-  { key: 'UZUM', label: 'Uzum', digits: 16, hint: 'Uzum ilovasi orqali to\'lov shu kartaga tushadi' },
-  { key: 'UZCARD', label: 'UzCard', digits: 16, hint: 'UzCard / Humo orqali to\'lov shu kartaga tushadi' },
-  { key: 'HUMO', label: 'Humo', digits: 16, hint: 'Uzum yoki boshqa usul bilan Humo kartaga' },
-  { key: 'VISA', label: 'Visa / boshqa', digits: 16, hint: 'Umumiy zaxira — Uzum, Payme, Click, Paynet uchun' },
+  { key: 'UZUM', label: 'Uzum', digits: 16, hint: 'Uzum orqali to\'lov shu kartaga tushadi (VISA)' },
+  { key: 'PAYME', label: 'Payme', digits: 16, hint: 'Payme orqali to\'lov shu kartaga tushadi' },
+  { key: 'CLICK', label: 'Click', digits: 16, hint: 'Click orqali to\'lov shu kartaga tushadi' },
+  { key: 'PAYNET', label: 'Paynet', digits: 16, hint: 'Paynet orqali to\'lov shu kartaga tushadi' },
   { key: 'DEFAULT', label: 'Barcha usullar uchun zaxira', digits: 16, hint: 'Yuqoridagilar bo\'sh bo\'lsa shu ishlatiladi' },
 ];
 
@@ -35,9 +35,9 @@ const METHOD_META: { key: string; label: string; digits: number; hint: string }[
  */
 const DEFAULT_APP_URL: Record<string, string> = {
   UZUM: 'https://www.uzumcheckout.uz',
-  UZCARD: 'https://uzcard.uz',
-  HUMO: 'https://humo.uz',
-  VISA: 'https://www.uzumcheckout.uz',
+  PAYME: 'https://payme.uz',
+  CLICK: 'https://click.uz',
+  PAYNET: 'https://paynet.uz',
   DEFAULT: '',
 };
 
