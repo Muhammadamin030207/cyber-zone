@@ -117,7 +117,7 @@ router.get('/:id/status', authenticate, getPaymentByIdStatus);
 router.post('/:id/confirm', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), paymentConfirmLimiter, confirmPayment);
 router.get('/:bookingId', authenticate, getPaymentStatus);
 
-// Super admin barcha to'lovlar
-router.get('/', authenticate, authorize('SUPER_ADMIN'), getAllPayments);
+// Admin (o'z xonasi) va Super admin barcha to'lovlar
+router.get('/', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), getAllPayments);
 
 export default router;

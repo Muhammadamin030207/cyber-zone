@@ -11,6 +11,8 @@ interface FieldDef {
   hint: string;
   textarea: boolean;
   max: number;
+  /** Toggle (checkbox) — qiymat 'on'/'off' sifatida saqlanadi. */
+  toggle?: boolean;
 }
 
 const FIELDS: FieldDef[] = [
@@ -22,6 +24,7 @@ const FIELDS: FieldDef[] = [
   { key: 'contact_phone', label: 'Aloqa telefoni', hint: '', textarea: false, max: 200 },
   { key: 'contact_email', label: 'Aloqa email', hint: '', textarea: false, max: 200 },
   { key: 'address', label: 'Manzil', hint: '', textarea: false, max: 500 },
+  { key: 'identity.faceCheckRequired', label: 'Kamerali yuz tekshiruvi (liveness)', hint: 'Yoniq: mijoz sessiyani boshlashdan oldin kamerada 3 marta ko\'z pirpirashi shart (o\'chirsangiz — kamera talabsiz).', textarea: false, max: 8, toggle: true },
 ];
 
 export default function SiteSettingsTab() {
@@ -90,24 +93,43 @@ export default function SiteSettingsTab() {
         {FIELDS.map((f) => (
           <label key={f.key} className="block">
             <span className="text-sm font-semibold mb-1.5 block">{f.label}</span>
-            {f.textarea ? (
-              <textarea
-                value={values[f.key] ?? ''}
-                onChange={(e) => setValues((p) => ({ ...p, [f.key]: e.target.value }))}
-                rows={4}
-                maxLength={f.max}
-                className="w-full rounded-xl border border-white/10 surface px-3 py-2.5 text-sm outline-none focus:border-neon-cyan/40 resize-y scrollbar-thin"
-                placeholder={f.hint}
-              />
+            {f.toggle ? (
+              <div className="flex items-center gap-3 rounded-xl border border-white/10 surface px-3 py-2.5">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={(values[f.key] ?? 'on') !== 'off'}
+                  onClick={() => setValues((p) => ({ ...p, [f.key]: (p[f.key] ?? 'on') === 'off' ? 'on' : 'off' }))}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${(values[f.key] ?? 'on') !== 'off' ? 'bg-neon-green/60' : 'bg-cyber-700'}`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${(values[f.key] ?? 'on') !== 'off' ? 'translate-x-6' : 'translate-x-1'}`}
+                  />
+                </button>
+                <span className="text-sm text-gray-300">
+                  {(values[f.key] ?? 'on') !== 'off' ? 'Yoniq' : 'O\'chiq'}
+                </span>
+              </div>
             ) : (
-              <input
-                value={values[f.key] ?? ''}
-                onChange={(e) => setValues((p) => ({ ...p, [f.key]: e.target.value }))}
-                type={f.key === 'contact_email' ? 'email' : 'text'}
-                maxLength={f.max}
-                className="w-full rounded-xl border border-white/10 surface px-3 py-2.5 text-sm outline-none focus:border-neon-cyan/40"
-                placeholder={f.hint}
-              />
+              f.textarea ? (
+                <textarea
+                  value={values[f.key] ?? ''}
+                  onChange={(e) => setValues((p) => ({ ...p, [f.key]: e.target.value }))}
+                  rows={4}
+                  maxLength={f.max}
+                  className="w-full rounded-xl border border-white/10 surface px-3 py-2.5 text-sm outline-none focus:border-neon-cyan/40 resize-y scrollbar-thin"
+                  placeholder={f.hint}
+                />
+              ) : (
+                <input
+                  value={values[f.key] ?? ''}
+                  onChange={(e) => setValues((p) => ({ ...p, [f.key]: e.target.value }))}
+                  type={f.key === 'contact_email' ? 'email' : 'text'}
+                  maxLength={f.max}
+                  className="w-full rounded-xl border border-white/10 surface px-3 py-2.5 text-sm outline-none focus:border-neon-cyan/40"
+                  placeholder={f.hint}
+                />
+              )
             )}
             <span className="block mt-1 text-[11px] text-gray-500">{f.hint}</span>
           </label>

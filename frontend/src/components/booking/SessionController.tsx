@@ -1,14 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import {
-  Play, Square, Timer, Clock, Loader2, AlertCircle, CheckCircle2, Wallet,
+  Play, Square, Timer, Clock, Loader2, AlertCircle, CheckCircle2, Wallet, Camera,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { confirmDialog } from '@/lib/confirm';
 import { toastSuccess } from '@/lib/toast';
 import type { Booking, BookingSessionState } from '@/lib/types';
 import { formatPrice, cn } from '@/lib/utils';
+
+// Kamerali liveness faqat mijoz qurilmasida ishlaydi — SSR'da chop etmaymiz.
+const FaceCheck = dynamic(() => import('./FaceCheck'), { ssr: false });
 
 function fmtClock(seconds: number): string {
   const s = Math.max(0, seconds);
@@ -34,10 +38,14 @@ export default function SessionController({
   // server qiymatini (`session.elapsedMinutes`) ko'rsatadi — bu ham aniqroq.
   const [now, setNow] = useState<number>(0);
   const [busy, setBusy] = useState(true);
+  const [showFace, setShowFace] = useState(false);
 
   const isActive = booking.status === 'ACTIVE' && !!booking.sessionStartedAt;
   // UNLIMITED: taymer yo'q — countdown ko'rsatilmaydi, faqat o'tgan vaqt.
   const unlimited = session?.unlimited === true || booking.sessionType === 'UNLIMITED';
+  // Kamerali yuz tekshiruvi: server esgi `faceCheckRequired` (SiteSetting) bo'yicha.
+  const faceRequired = session?.faceCheckRequired === true;
+  const faceVerified = session?.faceVerified === true;
 
   async function fetchSession(silent = false) {
     try {
@@ -73,6 +81,15 @@ export default function SessionController({
       message: 'Check-in? Kompyuter band qilinadi va hisob boshlanadi (min 1 soat).',
       confirmLabel: 'Boshlash',
     }))) return;
+    // Yuz tekshiruvi hali o'tilmagan va talab yoqilgan bo'lsa — kameraga yuboramiz.
+    if (faceRequired && !faceVerified) {
+      setShowFace(true);
+      return;
+    }
+    await doStart();
+  }
+
+  async function doStart() {
     setActing(true);
     setError(null);
     try {
@@ -211,6 +228,12 @@ export default function SessionController({
               {acting ? <Loader2 size={15} className="animate-spin" /> : <Play size={14} />}
               Sessiyani boshlash (check-in)
             </button>
+            {faceRequired && !faceVerified && !isActive && (
+              <p className="text-[11px] text-neon-amber flex items-center gap-1.5">
+                <Camera size={12} />
+                Avval kamerali yuz tekshiruvida 3 marta ko&apos;z pirpirating.
+              </p>
+            )}
             <p className="text-[11px] text-gray-500 flex items-center gap-1.5">
               <CheckCircle2 size={12} className="text-neon-green" />
               Check-in bilan kompyuter band qilinadi; hisob server tomonidan olib boriladi.
@@ -218,6 +241,20 @@ export default function SessionController({
           </div>
         )}
       </div>
+
+      <FaceCheck
+        open={showFace}
+        bookingId={booking.id}
+        onVerified={() => {
+          setShowFace(false);
+          void (async () => {
+            await fetchSession(true);
+            void refresh();
+            await doStart();
+          })();
+        }}
+        onClose={() => setShowFace(false)}
+      />
     </div>
   );
 }

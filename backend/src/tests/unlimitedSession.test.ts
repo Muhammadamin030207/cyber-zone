@@ -41,7 +41,7 @@ describe('startSessionGate — UNLIMITED', () => {
   it('boshlanmaganida ham TIMED kabi ishlaydi — rad etilmaydi', () => {
     const gate = startSessionGate(
       { ...base, sessionType: 'UNLIMITED', startTime: '09:00', endTime: '10:00' },
-      new Date('2026-09-28T12:00:00Z'),
+      new Date('2026-09-28T04:30:00Z'),
     );
     expect(gate.ok).toBe(true);
     expect(gate.bookedEnd.getTime()).toBeGreaterThan(gate.bookedStart.getTime() + 23 * 3600_000);
@@ -65,5 +65,40 @@ describe('startSessionGate — TIMED (eskisiga regress)', () => {
     );
     expect(gate.ok).toBe(false);
     expect(gate.code).toBe('SESSION_WINDOW_CLOSED');
+  });
+});
+
+describe('startSessionGate — yuz tekshiruvi (liveness)', () => {
+  it('talab yoqilgan bo\'lsa va yuz tekshirilmagan bo\'lsa FACE_NOT_VERIFIED', () => {
+    const gate = startSessionGate(
+      { ...base, startTime: '09:00', endTime: '10:00', faceCheckRequired: true, faceVerifiedAt: null },
+      new Date('2026-09-28T04:30:00Z'),
+    );
+    expect(gate.ok).toBe(false);
+    expect(gate.code).toBe('FACE_NOT_VERIFIED');
+  });
+
+  it('talab yoqilgan bo\'lsa-yu tekshiruv o\'tgan bo\'lsa ruxsat beradi', () => {
+    const gate = startSessionGate(
+      { ...base, startTime: '09:00', endTime: '10:00', faceCheckRequired: true, faceVerifiedAt: new Date('2026-09-28T11:00:00Z') },
+      new Date('2026-09-28T04:30:00Z'),
+    );
+    expect(gate.ok).toBe(true);
+  });
+
+  it('talab o\'chirilgan bo\'lsa tekshiruvsiz ham ruxsat beradi', () => {
+    const gate = startSessionGate(
+      { ...base, startTime: '09:00', endTime: '10:00', faceCheckRequired: false, faceVerifiedAt: null },
+      new Date('2026-09-28T04:30:00Z'),
+    );
+    expect(gate.ok).toBe(true);
+  });
+
+  it('faceCheckRequired aniq berilmasa (eski chaqiruvlar) tekshiruv talab qilinmaydi', () => {
+    const gate = startSessionGate(
+      { ...base, startTime: '09:00', endTime: '10:00', faceVerifiedAt: null },
+      new Date('2026-09-28T04:30:00Z'),
+    );
+    expect(gate.ok).toBe(true);
   });
 });

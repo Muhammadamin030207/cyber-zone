@@ -224,6 +224,9 @@ export interface BookingSessionState {
   /** Sessiya turi — UNLIMITED bo'lsa taymer yo'q (countdown ko'rsatilmaydi). */
   sessionType?: 'TIMED' | 'UNLIMITED';
   unlimited?: boolean;
+  /** Kamerali yuz tekshiruvi (liveness) — "Boshlash"dan oldin o'tishi shartmi/yetkazildimi. */
+  faceCheckRequired?: boolean;
+  faceVerified?: boolean;
 }
 
 export interface Payment {

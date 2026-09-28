@@ -1045,20 +1045,25 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
   }
 };
 
-// ============ GET /api/payments — SUPER_ADMIN: barcha to'lovlar ============
+// ============ GET /api/payments — barcha to'lovlar (ADMIN o'z xonasi) ============
 export const getAllPayments = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { limit, offset, status, q, receiptNumber: receiptQuery } = req.query as {
       limit?: string;
       offset?: string;
       status?: string;
-      /** Umumiy qidiruv: chek raqami, ism yoki email. */
+      /** Umumiy qidiruv: chek raqami, ism, email yoki telefon. */
       q?: string;
       /** Aniq chek raqami — bankda tekshirishda tez topish uchun. */
       receiptNumber?: string;
     };
     const where: any = {};
     if (status) where.status = status.toUpperCase();
+
+    // ADMIN faqat O'Z xonasining to'lovlarini ko'radi; SUPER_ADMIN hammasini.
+    if (req.user!.role !== 'SUPER_ADMIN') {
+      where.booking = { room: { ownerId: req.user!.userId } };
+    }
 
     // Chek raqami — aniq qidirish. Mijoz raqamni telefon orqali aytadi;
     // `contains` bilan kiritilgan bo'shliq/kichik-harf farqini kechiradi.
@@ -1071,20 +1076,52 @@ export const getAllPayments = async (req: AuthRequest, res: Response, next: Next
         { receiptNumber: { contains: term.toUpperCase() } },
         { user: { fullName: { contains: term, mode: 'insensitive' } } },
         { user: { email: { contains: term, mode: 'insensitive' } } },
+        { user: { phone: { contains: term, mode: 'insensitive' } } },
       ];
     }
 
-    const [payments, total, revenue] = await Promise.all([
-      prisma.payment.findMany({
-        where,
-        include: {
-          booking: { select: { id: true, finalPrice: true, status: true, room: { select: { name: true } } } },
-          user: { select: { id: true, fullName: true, email: true } },
+    const rows = await prisma.payment.findMany({
+      where,
+      include: {
+        booking: {
+          select: {
+            id: true,
+            date: true,
+            startTime: true,
+            endTime: true,
+            durationHours: true,
+            finalPrice: true,
+            depositPercent: true,
+            advanceAmount: true,
+            remainingAmount: true,
+            status: true,
+            approvalStatus: true,
+            room: { select: { name: true } },
+            zone: { select: { name: true } },
+            computer: { select: { name: true } },
+          },
         },
-        orderBy: { createdAt: 'desc' },
-        take: Number(limit) || 50,
-        skip: Number(offset) || 0,
-      }),
+        user: { select: { id: true, fullName: true, email: true, phone: true } },
+        evidences: { select: { id: true, fileUrl: true, mimeType: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: Number(limit) || 50,
+      skip: Number(offset) || 0,
+    });
+
+    const payments = rows.map((row) => ({
+      ...row,
+      amount: round2(toNumber(row.amount)),
+      booking: {
+        ...row.booking,
+        finalPrice: round2(toNumber(row.booking.finalPrice)),
+        advanceAmount: round2(toNumber(row.booking.advanceAmount)),
+        remainingAmount: round2(toNumber(row.booking.remainingAmount)),
+        durationHours: Number(row.booking.durationHours),
+      },
+    }));
+
+    const [total, revenue] = await Promise.all([
       prisma.payment.count({ where }),
       prisma.payment.aggregate({
         where: { status: { in: [...PAID_STATUSES] } },

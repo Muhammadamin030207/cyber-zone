@@ -22,6 +22,11 @@ export const SITE_SETTING_KEYS = [
   // uchun alohida karta: {"UZUM":{...},"UZCARD":{...},"DEFAULT":{...}}.
   // `payment_card_*` (legacy) saqlanadi — `DEFAULT` bo'sh bo'lsa u ishlatiladi.
   'payment_cards_by_method',
+  // Kamerali yuz tekshiruvi (liveness) talabi: 'on' (default) yoki 'off'.
+  // Sindiki buyruq: mijoz sessiyani boshlashdan oldin kamerada 3 marta ko'z
+  // pirpirashi shart. Kamera bo'lmagan holatlar (masalan tayyor binoda naqd
+  // qabul) uchun admin uni o'chirishi mumkin.
+  'identity.faceCheckRequired',
 ] as const;
 
 export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[number];
@@ -55,6 +60,7 @@ export const SITE_SETTING_MAX_LENGTH: Record<SiteSettingKey, number> = {
   payment_card_note: 500,
   // 6 usul x 3 maydon — JSON uchun joy.
   payment_cards_by_method: 4000,
+  'identity.faceCheckRequired': 8,
 };
 
 // ============ GET /api/settings/site — PUBLIC: AI va UI konteksti uchun ============

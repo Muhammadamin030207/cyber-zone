@@ -349,6 +349,13 @@ model Booking {
   // hisoblanadi (min 1 soat) va admin yoki foydalanuvchi "check-out"
   // bosganda yopiladi. Worker UNLIMITED sessiyani avtomatik YOPMAYDI.
   sessionType           BookingSessionType @default(TIMED) @map("session_type")
+  // Kamerali yuz tekshiruvi (liveness): mijoz kamerada 3 marta ko'z pirpirash
+  // bilan "men o'zimman" deb isbotlaydi, undan keyingina sessiyani boshlaydi.
+  // `faceVerifiedAt` — tekshiruvdan o'tgan vaqt, `faceVerifiedById` — kim
+  // (odatda bron egasi o'zi; ADMIN xam belgilashi mumkin). Ikki marta bittada
+  // yoziladi va qayta so'rov idempotent.
+  faceVerifiedAt DateTime?  @map("face_verified_at")
+  faceVerifiedById String?  @map("face_verified_by_id")
   // Sessiya avtomatik yopildimi (foydalanuvchi "check-out" bosmadimi)
   autoClosed            Boolean   @default(false) @map("auto_closed")
   // KELMADI (no-show): to'lov qilingan, lekin sessiya boshlanmagan va vaqt o'tdi.

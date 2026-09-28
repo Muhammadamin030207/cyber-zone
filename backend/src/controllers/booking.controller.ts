@@ -600,8 +600,15 @@ function canManageBooking(booking: { userId: string; room: { ownerId: string } |
   return false;
 }
 
+/** Yuz tekshiruvi (liveness) talab qilinadimi — `identity.faceCheckRequired` (default: ON). */
+async function faceCheckRequired(): Promise<boolean> {
+  const row = await prisma.siteSetting.findUnique({ where: { key: 'identity.faceCheckRequired' } });
+  return (row?.value || 'on') !== 'off';
+}
+
 /** Jonli sessiya holati — frontend shundan timer va "Boshlash" tugmasini boshqaradi. */
 async function sessionState(now: Date, booking: any) {
+  booking.faceCheckRequired = await faceCheckRequired();
   const gate = startSessionGate(booking, now);
   const unlimited = booking.sessionType === 'UNLIMITED';
   const startMinutes = parseTime(booking.startTime) ?? 0;
@@ -653,6 +660,8 @@ async function sessionState(now: Date, booking: any) {
     canStart: gate.ok,
     startBlockedBy: gate.ok ? null : gate.code ?? null,
     startBlockedMessage: gate.ok ? null : gate.message ?? null,
+    faceVerified: !!booking.faceVerifiedAt,
+    faceCheckRequired: booking.faceCheckRequired === true,
     elapsedMinutes,
     billedHours,
     remainingMs,
@@ -669,6 +678,36 @@ function localInstant(date: Date, minutes: number): Date {
   const tashkentMidnightUtc = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) - 5 * 3_600_000;
   return new Date(tashkentMidnightUtc + minutes * 60_000);
 }
+
+// ============ POST /api/bookings/:id/face-verified — kamerali liveness ============
+// Mijoz kamerada 3 marta ko'z pirpirash (liveness) tekshiruvidan o'tgach
+// FRONTEND shu yerga xabar beradi; `faceVerifiedAt` yoziladi va `startSessionGate`
+// sessiyani boshlashga ruxsat beradi. Idempotent, faqat qaytarilmagan bronlar.
+export const markFaceVerified = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const booking = await prisma.booking.findUnique({
+      where: { id: req.params.id },
+      include: { room: { select: { id: true, ownerId: true } } },
+    });
+    if (!booking) return notFoundMsg(res, 'Bron topilmadi');
+    if (!canManageBooking(booking, req.user!)) return forbidden(res, 'Bu bron sizniki emas');
+    if (booking.sessionStartedAt || booking.sessionEndedAt || booking.status === 'COMPLETED') {
+      return badRequest(res, 'Sessiya allaqachon boshlangan/yakunlangan', 'FACE_CHECK_TOO_LATE');
+    }
+
+    if (booking.faceVerifiedAt) {
+      return ok(res, { bookingId: booking.id, faceVerifiedAt: booking.faceVerifiedAt, alreadyVerified: true }, 'Yuz tekshiruvi allaqachon o\'tkazilgan');
+    }
+
+    const updated = await prisma.booking.update({
+      where: { id: booking.id },
+      data: { faceVerifiedAt: new Date(), faceVerifiedById: req.user!.userId },
+    });
+    return ok(res, { bookingId: booking.id, faceVerifiedAt: updated.faceVerifiedAt }, 'Yuz tekshiruvi o\'tkazildi');
+  } catch (err) {
+    next(err);
+  }
+};
 
 // ============ POST /api/bookings/:id/session/start — check-in ============
 // "Boshlash" faqat: (1) to'lov qoplangan, (2) ADMIN TASDIQLAGAN,
@@ -690,9 +729,9 @@ export const startBookingSession = async (req: AuthRequest, res: Response, next:
       return ok(res, { booking, session: state }, 'Sessiya allaqachon boshlangan');
     }
 
-    const gate = startSessionGate(booking, now);
+    const gate = startSessionGate({ ...booking, faceCheckRequired: await faceCheckRequired() }, now);
     if (!gate.ok) {
-      const status = gate.code === 'SESSION_ALREADY_ENDED' ? 400 : gate.code === 'BOOKING_NOT_APPROVED' ? 409 : 400;
+      const status = gate.code === 'SESSION_ALREADY_ENDED' ? 400 : gate.code === 'BOOKING_NOT_APPROVED' ? 409 : gate.code === 'FACE_NOT_VERIFIED' ? 403 : 400;
       return res.status(status).json({ success: false, message: gate.message, code: gate.code });
     }
 
