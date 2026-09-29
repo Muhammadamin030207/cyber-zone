@@ -6,9 +6,29 @@ dotenv.config();
 
 const prisma = new PrismaClient();
 
+/** Production'da demo/super-admin parolini kodga TUSHIRISH xavfsiz emas. */
+const isProductionSeed = process.env.NODE_ENV === 'production';
+
+/**
+ * `SUPER_ADMIN_PASSWORD` yo'q bo'lsa — default parol bilan super admin
+ * YARATMAYDI, xato bilan to'xtaydi. Aks holda har bir production deploy
+ * repo'da ochiq turgan `SuperAdmin123!` paroli bilan kirish mumkin bo'ladi.
+ */
+function requireSuperAdminPassword(): string {
+  const raw = (process.env.SUPER_ADMIN_PASSWORD || '').trim();
+  if (raw) return raw;
+  if (isProductionSeed) {
+    throw new Error(
+      'SUPER_ADMIN_PASSWORD environment variable majburiy. ' +
+        'Default parol bilan super admin yaratish production\'da xavfsiz emas.',
+    );
+  }
+  return 'SuperAdmin123!';
+}
+
 async function main() {
   const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'superadmin@cyberzone.uz';
-  const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD || 'SuperAdmin123!';
+  const superAdminPassword = requireSuperAdminPassword();
   const superAdminName = process.env.SUPER_ADMIN_NAME || 'Super Admin';
 
   console.log('🌱 Seeding boshlanmoqda...');
@@ -38,6 +58,13 @@ async function main() {
   }
 
   // ============ 2. DEMO ADMINLAR (2 ta) ============
+  // Production'da demo akkauntlar (ma'lum parollar bilan) YARATILMAYDI.
+  if (isProductionSeed) {
+    console.log('⏭️  Production rejimi — demo admin/user akkauntlari yaratib o\'tkazildi.');
+    console.log('✅ Seeding yakunlandi (faqat super admin).');
+    return;
+  }
+
   const adminsToCreate = [
     { email: 'admin@neon.uz', password: 'Admin123!', fullName: 'Neon Arena Admin', phone: '+998901112233' },
     { email: 'admin@pixel.uz', password: 'Admin123!', fullName: 'Pixel Cafe Admin', phone: '+998902223344' },

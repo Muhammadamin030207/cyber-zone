@@ -604,6 +604,9 @@ model BarOrder {
   user    User         @relation(fields: [userId], references: [id])
 
   @@index([userId, createdAt])
+  // Xona admini buyurtmalarni shu filtr bilan ko'radi va `createdAt` bo'yicha
+  // tartiblaydi (bar.controller.ts `getBarOrders`).
+  @@index([roomId, createdAt])
   @@map("bar_orders")
 }
 
@@ -648,6 +651,9 @@ model SupportMessage {
   @@index([senderId])
   @@index([recipientRole])
   @@index([roomId])
+  // O'qilmagan xabarlar soni shu filtr bilan olinadi
+  // (chat.controller.ts: `{ userId, isRead: false, senderId: { not } }`).
+  @@index([userId, isRead])
   @@map("support_messages")
 }
 
