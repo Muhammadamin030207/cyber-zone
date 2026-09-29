@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   Mail, UserRound, Save, Loader2, KeyRound, ShieldCheck, CalendarDays, LogOut, Coins,
-  Lock, Camera, Undo2,
+  Lock, Camera, Undo2, ChevronRight,
 } from 'lucide-react';
 import { useRouter, Link } from '@/i18n/navigation';
 import { useAuthStore } from '@/store/auth';
@@ -44,9 +44,6 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [oldPass, setOldPass] = useState('');
-  const [newPass, setNewPass] = useState('');
-  const [passSaving, setPassSaving] = useState(false);
 
   useEffect(() => {
     if (initialized && !user) router.replace('/login');
@@ -132,26 +129,6 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
       setUploading(false);
       URL.revokeObjectURL(objectUrl);
     }
-  }
-
-  async function changePass() {
-    if (newPass.length < 6) {
-      toastError("Yangi parol kamida 6 ta belgidan iborat bo'lishi kerak");
-      return;
-    }
-    setPassSaving(true);
-    try {
-      await api.put('/api/auth/change-password', { oldPassword: oldPass, newPassword: newPass });
-      // Backend barcha sessiyalarni bekor qiladi (tokenVersion++) — qayta login shart.
-      setOldPass('');
-      setNewPass('');
-      toastSuccess("Parol o'zgartirildi. Xavfsizlik uchun qaytadan kiring.");
-      await logout();
-      router.push('/login');
-    } catch (e) {
-      toastError(getApiErrorMessage(e, 'Parol almashishda xatolik'));
-    }
-    setPassSaving(false);
   }
 
   async function handleLogout() {
@@ -329,59 +306,27 @@ export default function ProfilePage({ params }: { params: Promise<{ locale: stri
           {/* Xavfsizlik sozlamalari */}
           <div className="flex items-center gap-2 pt-2">
             <ShieldCheck size={16} className="text-neon-cyan" />
-            <h2 className="text-sm font-bold uppercase tracking-wider text-gray-300">Xavfsizlik sozlamalari</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wider text-gray-300">Xavfsizlik</h2>
             <span className="flex-1 h-px bg-white/10" aria-hidden="true" />
           </div>
 
-          {/* Parol */}
-          <div className="neo-card rounded-2xl p-5 sm:p-6">
-            <h3 className="font-bold mb-4 flex items-center gap-2 text-base">
-              <KeyRound size={16} className="text-neon-magenta" /> Parolni o&apos;zgartirish
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="profile-oldPass" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5">Joriy parol</label>
-                <input
-                  id="profile-oldPass"
-                  type="password"
-                  value={oldPass}
-                  onChange={(e) => setOldPass(e.target.value)}
-                  placeholder="Joriy parol"
-                  autoComplete="current-password"
-                  className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-                />
-              </div>
-              <div>
-                <label htmlFor="profile-newPass" className="block text-xs uppercase tracking-wider text-gray-400 mb-1.5">Yangi parol</label>
-                <input
-                  id="profile-newPass"
-                  type="password"
-                  value={newPass}
-                  onChange={(e) => setNewPass(e.target.value)}
-                  placeholder="Yangi parol (kamida 6 belgi)"
-                  autoComplete="new-password"
-                  className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-                />
-              </div>
-              <button
-                onClick={changePass}
-                disabled={passSaving || !oldPass || !newPass}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-neon-magenta/30 text-neon-magenta font-bold text-sm hover:bg-neon-magenta/10 disabled:opacity-50"
-              >
-                {passSaving ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} />}
-                Parolni yangilash
-              </button>
-            </div>
-          </div>
-
-          {/* Ikki faktorli himoya (TOTP) */}
-          <TwoFactorSettings />
-
-          {/* Passkey / biometriya */}
-          <PasskeySettings />
-
-          {/* So'nggi xavfsizlik voqealari */}
-          <SecurityActivity />
+          {/* Xavfsizlik sozlamalari alohida sahifaga ko'chirildi
+              (/profile/security) — profil sahifasi juda uzun bo'lib ketgan edi
+              va parol / 2FA / passkey / tarix bir-birining ustiga tushgan edi.
+              Parolni o'zgartirish + 2FA + passkey + hodisalar shu sahifada. */}
+          <Link
+            href="/profile/security"
+            className="neo-card flex items-center gap-3 rounded-2xl p-4 transition-colors hover:border-neon-cyan/40"
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-neon-cyan/15 text-neon-cyan">
+              <ShieldCheck size={17} aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-gray-100">Xavfsizlik sozlamalari</span>
+              <span className="block text-xs text-gray-400">Parol, ikki bosqichli autentifikatsiya, passkey va kirish tarixi</span>
+            </span>
+            <ChevronRight size={16} className="shrink-0 text-gray-500" aria-hidden />
+          </Link>
 
           {/* Chiqish */}
           <button

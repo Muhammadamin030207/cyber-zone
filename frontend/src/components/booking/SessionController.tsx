@@ -149,6 +149,19 @@ export default function SessionController({
   const remainingSec = isActive && session && !unlimited ? Math.floor((session.remainingMs ?? 0) / 1000) : null;
   const minBill = booking.minBillingMinutes ?? 60;
 
+  // ====== UNLIMITED: joriy (yig'ilib borayotgan) hisob =====
+  // Cheksiz sessiyada mijoz BIR SOATLIK summani oldindan to'laydi, qolgani
+  // sarflangan vaqt bo'yicha hisoblanadi va sessiya yopilganda qarz qilib
+  // qoladi. Avval UI faqat "∞" ko'rsatardi — mijoz qancha to'lashini
+  // bilmasdi va sessiya oxirida kutilmagan hisob kelib chiqardi.
+  // `session.actualPrice` serverda SARFLANGAN VAQT bo'yicha har safar
+  // qayta hisoblanadi (jami to'lovdan TAYIN, ya'ni brutto), shuning uchun
+  // undan oldindan to'langan 1 soatni ayirib, "qolgan" qarzni ko'rsatamiz.
+  const accruedGross = session?.actualPrice ?? null;
+  const prepaid = session?.prepaidValue ?? 0;
+  const accruedDue =
+    unlimited && accruedGross !== null ? Math.max(0, Math.round((accruedGross - prepaid) / 100) * 100) : null;
+
   return (
     <div className="mt-4 rounded-xl border border-neon-cyan/25 bg-neon-cyan/5 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-neon-cyan/15">
@@ -201,6 +214,19 @@ export default function SessionController({
                 Hisob: kamida {minBill} daqiqa. Joriy hisob: {' '}
                 {session.actualPrice != null ? formatPrice(session.actualPrice) : '—'} so&apos;m.
               </p>
+            )}
+            {unlimited && accruedDue !== null && (
+              <div className="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2">
+                <p className="text-[11px] text-amber-300/90">
+                  Bir soat oldindan to&apos;langan. Sarflangan vaqt uchun qo&apos;shimcha{' '}
+                  <span className="font-mono font-bold text-amber-200">{formatPrice(accruedDue)}</span> so&apos;m
+                  {accruedDue > 0 ? (
+                    <> — sessiya yopilganda kassada to&apos;lanadi.</>
+                  ) : (
+                    <> (hozircha qarz yo&apos;q).</>
+                  )}
+                </p>
+              </div>
             )}
             <button
               onClick={end}

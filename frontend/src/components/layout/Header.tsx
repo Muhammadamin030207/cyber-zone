@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { Link, usePathname } from '@/i18n/navigation';
-import { LayoutDashboard, Crown, MessageSquare, UserRound } from 'lucide-react';
+import { LayoutDashboard, Crown, MessageSquare, UserRound, Wallet, Bot } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { useChatUnread } from '@/hooks/useChatUnread';
 import LanguageSwitcher from './LanguageSwitcher';
@@ -32,6 +32,7 @@ export default function Header() {
   const links = [
     { href: '/', label: t('home') },
     { href: '/rooms', label: t('rooms') },
+    { href: '/location', label: t('location') },
   ];
 
   const isActive = (href: string) =>
@@ -84,6 +85,19 @@ export default function Header() {
           {unread > 99 ? '99+' : unread}
         </span>
       )}
+    </Link>
+  );
+
+  const AiButton = (
+    <Link
+      href="/ai"
+      data-tip={t('ai')}
+      data-tip-top
+      aria-label={t('ai')}
+      aria-current={isActive('/ai') ? 'page' : undefined}
+      className={cn(iconBtn, isActive('/ai') ? 'border-neon-cyan/40 text-neon-cyan' : 'text-gray-200 hover:border-neon-cyan/40')}
+    >
+      <Bot size={16} aria-hidden />
     </Link>
   );
 
@@ -148,6 +162,17 @@ export default function Header() {
                   </Link>
                 )}
                 {chatButton}
+                {AiButton}
+                <Link
+                  href="/payments"
+                  data-tip={t('payments')}
+                  data-tip-top
+                  aria-label={t('payments')}
+                  aria-current={isActive('/payments') ? 'page' : undefined}
+                  className={cn(iconBtn, isActive('/payments') ? 'border-neon-cyan/40 text-neon-cyan' : 'text-gray-200')}
+                >
+                  <Wallet size={16} aria-hidden />
+                </Link>
                 {profileButton}
                 {user.role === 'USER' && (
                   <Link

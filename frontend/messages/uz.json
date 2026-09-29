@@ -9,7 +9,11 @@
     "chat": "Xabarlar",
     "admin": "Admin panel",
     "superAdmin": "Super admin",
-    "profile": "Profil"
+    "profile": "Profil",
+    "location": "Yaqin xonalar",
+    "ai": "AI yordamchi",
+    "payments": "To'lovlar",
+    "security": "Xavfsizlik"
   },
   "common": {
     "loading": "Yuklanmoqda...",
@@ -202,5 +206,76 @@
     "quickLinks": "Tezkor havolalar",
     "contact": "Bog'lanish",
     "rights": "Barcha huquqlar himoyalangan"
+  },
+  "location": {
+    "title": "Yaqin xonalar",
+    "subtitle": "Atrofingizdagi kompyuter klublarini toping",
+    "useMyLocation": "Joyimni aniqlash",
+    "radius": "Qidiruv radiusi",
+    "noGeolocation": "Brauzeringiz geolokatsiyani qo‘llab-quvvatlamaydi",
+    "geoDenied": "Joylashuvga ruxsat berilmadi",
+    "geoDeniedHint": "Ruxsat berilmasa, markaziy Toshkent koordinatalari bilan qidiriladi. Brauzer sozlamasidan ruxsatni yoqishingiz mumkin.",
+    "loading": "Yuklanmoqda…",
+    "found": "{count} ta xona topildi ({radius} km ichida)",
+    "empty": "Bu radiusda xona topilmadi",
+    "emptyHint": "Radiusni kattalashtirib ko‘ring yoki barcha xonalar ro‘yxatidan tanlang.",
+    "browseAll": "Barcha xonalar",
+    "details": "Batafsil",
+    "roomsSlug": "rooms",
+    "locale": "uz",
+    "loadFailed": "Xonalarni yuklab bo‘lmadi"
+  },
+  "ai": {
+    "title": "AI yordamchi",
+    "subtitle": "Savollaringizga javob bering va xona tanlashda yordam oling",
+    "authRequired": "AI yordamchidan foydalanish uchun tizimga kiring.",
+    "clear": "Tozalash",
+    "thinking": "Yozmoqda…",
+    "sendFailed": "Xabar yuborilmadi",
+    "loadFailed": "Yuklab bo‘lmadi",
+    "send": "Yuborish",
+    "inputLabel": "Xabaringiz",
+    "placeholder": "Masalan: Toshkentda qayerda o‘ynash yaxshi?",
+    "fallbackNotice": "Hozircha AI qoidaviy (oddiy) javoblar bilan ishlayapti — u haqiqiy LLM emas.",
+    "liveModel": "Faol model: {model}",
+    "emptyTitle": "Savol bering",
+    "emptyHint": "AI sizga xonalar, narxlar va bron qoidalari bo‘yicha yordam beradi.",
+    "examples": [
+      "Qanday xona tavsiya qilasan?",
+      "Bugungi bo‘sh vaqtlar bormi?",
+      "Passkey nima va uni qanday yoqaman?"
+    ]
+  },
+  "payments": {
+    "title": "To‘lovlar",
+    "subtitle": "To‘lov tarixi va qarzlar",
+    "authRequired": "To‘lovlar tarixini ko‘rish uchun tizimga kiring.",
+    "paidTotal": "To‘langan",
+    "debtTotal": "Qarz",
+    "debtHint": "Sessiyadan qolgan vaqt uchun qarz kassada to‘lanadi.",
+    "loading": "Yuklanmoqda…",
+    "empty": "Hali to‘lov yo‘q",
+    "browseRooms": "Xonalarni ko‘rish",
+    "loadFailed": "To‘lovlar tarixini yuklab bo‘lmadi",
+    "openBooking": "Bronni ochish",
+    "prev": "Oldingi",
+    "next": "Keyingi",
+    "locale": "uz"
+  },
+  "security": {
+    "title": "Xavfsizlik",
+    "subtitle": "Parol, ikki bosqichli autentifikatsiya va kirish tarixi",
+    "authRequired": "Xavfsizlik sozlamalarini ochish uchun tizimga kiring.",
+    "back": "Profilga qaytish",
+    "password": "Parol",
+    "currentPassword": "Joriy parol",
+    "newPassword": "Yangi parol",
+    "confirmPassword": "Yangi parolni tasdiqlash",
+    "changePassword": "Parolni yangilash",
+    "mismatch": "Parollar mos kelmadi",
+    "tooShort": "Parol kamida 8 ta belgidan iborat bo‘lishi kerak",
+    "changed": "Parol yangilandi",
+    "failed": "Parolni yangilab bo‘lmadi",
+    "locale": "uz"
   }
 }

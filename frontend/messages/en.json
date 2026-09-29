@@ -9,7 +9,11 @@
     "chat": "Messages",
     "admin": "Admin panel",
     "superAdmin": "Super admin",
-    "profile": "Profile"
+    "profile": "Profile",
+    "location": "Nearby",
+    "ai": "AI assistant",
+    "payments": "Payments",
+    "security": "Security"
   },
   "common": {
     "loading": "Loading...",
@@ -202,5 +206,76 @@
     "quickLinks": "Quick links",
     "contact": "Contact",
     "rights": "All rights reserved"
+  },
+  "location": {
+    "title": "Nearby venues",
+    "subtitle": "Find computer clubs around you",
+    "useMyLocation": "Use my location",
+    "radius": "Search radius",
+    "noGeolocation": "Your browser does not support geolocation",
+    "geoDenied": "Location access denied",
+    "geoDeniedHint": "Without permission we search from central Tashkent. You can allow location in browser settings.",
+    "loading": "Loading…",
+    "found": "Found {count} venues (within {radius} km)",
+    "empty": "No venues in this radius",
+    "emptyHint": "Try a larger radius or pick from the full list.",
+    "browseAll": "All venues",
+    "details": "Details",
+    "roomsSlug": "rooms",
+    "locale": "en",
+    "loadFailed": "Could not load venues"
+  },
+  "ai": {
+    "title": "AI assistant",
+    "subtitle": "Ask questions and get help choosing a venue",
+    "authRequired": "Sign in to use the AI assistant.",
+    "clear": "Clear",
+    "thinking": "Typing…",
+    "sendFailed": "Could not send",
+    "loadFailed": "Could not load",
+    "send": "Send",
+    "inputLabel": "Your message",
+    "placeholder": "e.g. Where is the best place to play in Tashkent?",
+    "fallbackNotice": "The AI currently replies with rule-based answers — it is not a real LLM.",
+    "liveModel": "Active model: {model}",
+    "emptyTitle": "Ask a question",
+    "emptyHint": "The assistant can help with venues, prices and booking rules.",
+    "examples": [
+      "Which venue do you recommend?",
+      "Any free slots today?",
+      "What is a passkey and how do I enable it?"
+    ]
+  },
+  "payments": {
+    "title": "Payments",
+    "subtitle": "Payment history and outstanding balance",
+    "authRequired": "Sign in to see your payment history.",
+    "paidTotal": "Paid",
+    "debtTotal": "Due",
+    "debtHint": "Balance for unused session time is settled at the counter.",
+    "loading": "Loading…",
+    "empty": "No payments yet",
+    "browseRooms": "Browse venues",
+    "loadFailed": "Could not load payment history",
+    "openBooking": "Open booking",
+    "prev": "Prev",
+    "next": "Next",
+    "locale": "en"
+  },
+  "security": {
+    "title": "Security",
+    "subtitle": "Password, two-factor authentication and login history",
+    "authRequired": "Sign in to open security settings.",
+    "back": "Back to profile",
+    "password": "Password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "changePassword": "Update password",
+    "mismatch": "Passwords do not match",
+    "tooShort": "Password must be at least 8 characters",
+    "changed": "Password updated",
+    "failed": "Could not update password",
+    "locale": "en"
   }
 }
