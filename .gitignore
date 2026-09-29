@@ -40,3 +40,6 @@ npm-debug.log*
 *.log
 npm-debug.log*
 logs/
+
+# Dev-only QA harness — production'ga chiqmaydi (iframe + cross-document reads)
+frontend/src/app/[locale]/qa/
