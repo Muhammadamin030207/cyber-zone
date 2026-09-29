@@ -102,6 +102,79 @@ describe("E2E: Qo'lda o'tkazma to'lov (karta oxirgi 4 + chek) + kassa", () => {
     expect(res.status).toBe(400);
   });
 
+  /**
+   * KONTAKT TESTI: mijoz (frontend) qanday nomlar bilan yuboradi.
+   *
+   * Bu test avval barcha e2e da backend'ning O'Z nomlari (`cardLast4` /
+   * `cardholderName`) ishlatilardi — shuning uchun frontend bilan ziddiyat
+   * sezilmasdi va oqim ishlashini yolg'on da'vo qilindi. Haqiqiy mijoz
+   * `TransferPanel.tsx` dan `proofCardLast4` / `proofCardholderName` yuboradi.
+   * Quyidagi test shu ANIQ kontraktni tekshiradi.
+   */
+  it('tasdiq: MIJOZ nomlari (proofCardLast4/proofCardholderName) -> 200', async () => {
+    const p = await makeTransferPayment();
+    const res = await api()
+      .post(`/api/payments/${p.id}/proof`)
+      .set('Authorization', userToken)
+      .set('X-Forwarded-For', nextIp())
+      .field('proofCardLast4', '4321')
+      .field('proofCardholderName', 'Aliyev Ali')
+      .attach('receipts', png(), { filename: 'frontend.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(200);
+    const row = await prisma.payment.findUnique({ where: { id: p.id } });
+    expect(row!.proofCardLast4).toBe('4321');
+    expect(row!.proofCardholderName).toBe('Aliyev Ali');
+    // Tasdiq PAID qilMAYDI — admin tasdiqlashi kerak.
+    expect(row!.status).toBe('PENDING');
+    expect(row!.paidAt).toBeNull();
+  });
+
+  it('tasdiq: ikkala nom birga kelganda mijoz nomi ustunlik qiladi', async () => {
+    const p = await makeTransferPayment();
+    const res = await api()
+      .post(`/api/payments/${p.id}/proof`)
+      .set('Authorization', userToken)
+      .set('X-Forwarded-For', nextIp())
+      .field('proofCardLast4', '1111')
+      .field('cardLast4', '2222')
+      .field('proofCardholderName', 'Karimov Kamol')
+      .field('cardholderName', 'Eski Ism')
+      .attach('receipts', png(), { filename: 'both.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(200);
+    const row = await prisma.payment.findUnique({ where: { id: p.id } });
+    expect(row!.proofCardLast4).toBe('1111');
+    expect(row!.proofCardholderName).toBe('Karimov Kamol');
+  });
+
+  it('tasdiq: eski nomlar orqaga moslik saqlanadi (cardLast4/cardholderName)', async () => {
+    const p = await makeTransferPayment();
+    const res = await api()
+      .post(`/api/payments/${p.id}/proof`)
+      .set('Authorization', userToken)
+      .set('X-Forwarded-For', nextIp())
+      .field('cardLast4', '3333')
+      .field('cardholderName', 'Eski Ism')
+      .attach('receipts', png(), { filename: 'legacy.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(200);
+    const row = await prisma.payment.findUnique({ where: { id: p.id } });
+    expect(row!.proofCardLast4).toBe('3333');
+  });
+
+  it('tasdiq: last4 maydoni yo\'q -> 400 INVALID_CARD_LAST4', async () => {
+    const p = await makeTransferPayment();
+    const res = await api()
+      .post(`/api/payments/${p.id}/proof`)
+      .set('Authorization', userToken)
+      .set('X-Forwarded-For', nextIp())
+      .field('proofCardholderName', 'Aliyev Ali')
+      .attach('receipts', png(), { filename: 'c.png', contentType: 'image/png' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_CARD_LAST4'); // xato kodi mijozga aniq
+  });
+
   it('tasdiq: oxirgi 4 raqam noto\'g\'ri formatda -> 400', async () => {
     const p = await makeTransferPayment();
     const res = await api()

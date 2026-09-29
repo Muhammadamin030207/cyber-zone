@@ -38,10 +38,25 @@ const webhookLimiter = rateLimit({
 // Provider webhook (provayder chaqiradi — authsiz, ammo provider-specific validatsiya)
 router.post('/webhook/:provider', webhookLimiter, webhookPayment);
 
-// SANDBOX mock gateway — doim mavjud, lekin ishlashi runtime sandbox holatiga
-// bog'liq (chaqirilganda tekshiriladi). Real "checkout" sahifasini simulyatsiya
-// qilib, imzolangan webhook yuboradi — "soxta PAID" yo'q.
-router.get('/mock/:provider', mockSandboxPayment);
+// Sandbox mock — `authenticate` QO'YILMAYDI (URL brauzerda ochiladi, header
+// yo'q). Himoya: runtime sandbox guard + `mock_key` + spam limiter.
+const mockLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.ip || 'unknown',
+  message: { success: false, message: 'Juda ko\'p sandbox so\'rov' },
+});
+
+// Sandbox mock gateway — maxsus `mock_key` bilan ochiladi (URL'da).
+// `authenticate` QO'YILMAYDI: bu URL brauzer orqali ochiladi (redirect),
+// ya'ni Authorization header yo'q. Himoya quyidagilarda:
+//   1) runtime `paymentsSandbox()` — production'da butunlay fail-closed (404)
+//   2) `mock_key` — server'dagi maxfiy kalit URL'siz ishlamaydi
+//   3) `mockLimiter` — spam cheklovi
+//   4) ichki webhook o'z imzosi bilan yuboriladi — "soxta PAID" imkonsiz
+router.get('/mock/:provider', mockLimiter, mockSandboxPayment);
 
 /**
  * To'lov yaratish (spec §4.0): moliyaviy amal. Global limit (120/min) yetarli
@@ -117,7 +132,11 @@ router.get('/:id/status', authenticate, getPaymentByIdStatus);
 router.post('/:id/confirm', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), paymentConfirmLimiter, confirmPayment);
 router.get('/:bookingId', authenticate, getPaymentStatus);
 
-// Admin (o'z xonasi) va Super admin barcha to'lovlar
-router.get('/', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), getAllPayments);
+// Barcha to'lovlar (platform bo'ylab qidiruv/eksport) — FAQAT SUPER_ADMIN.
+// Xona ADMIN'i o'z to'lovlarini `GET /api/payments/debts` ("Kassa" bo'limi)
+// orqali ko'radi: u allaqachon `room.ownerId` bo'yicha qat'iy scope'langan.
+// Bu ro'yxat esa boshqa xonalarning mijoz ismi/telefoni/cheqini ko'rsatardi,
+// shuning uchun ADMIN uchun yopiq.
+router.get('/', authenticate, authorize('SUPER_ADMIN'), getAllPayments);
 
 export default router;

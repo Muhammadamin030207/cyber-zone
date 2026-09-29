@@ -218,11 +218,34 @@ describe('listConfiguredCards — chekout usullar ro\'yxati uchun', () => {
     expect(cards.UZUM.number).toBe('4111111111111111');
     expect(cards.PAYME.number).toBe('5614000000001234');
     expect(cards.CLICK?.number).toBe('5614000000001234');
-    expect(cards.UZCARD.number).toBe('5614000000001234');
     // Raqami bo'lmagan (faqat ism) yozuv hech qanday usulga chiqmaydi.
     expect(Object.values(cards).some((c) => c.number === '')).toBe(false);
     expect((await resolveMerchantCard('PAYME'))?.number).toBe('5614000000001234');
     expect((await resolveMerchantCard('TRANSFER'))?.number).toBe('5614000000001234');
+  });
+
+  // §22: foydalanuvchi faqat PAYME / CLICK / PAYNET / UZUM (va kassada)
+  // usullarini ko'radi. UZCARD / HUMO / VISA — karta TURLARI, alohida
+  // to'lov usuli emas — shuning uchun ro'yxatga chiqmasligi kerak.
+  it('ro\'yxatda faqat to\'rtala ommaviy usul + TRANSFER bo\'ladi', async () => {
+    mockedSettings.mockResolvedValue(
+      rows({
+        payment_cards_by_method: JSON.stringify({
+          UZCARD: { number: '5614000000001234', holder: 'UZCARD' },
+          HUMO: { number: '9860000000000000', holder: 'HUMO' },
+          VISA: { number: '4111111111111111', holder: 'VISA' },
+          PAYME: { number: '5614000000009999', holder: 'PAYME' },
+          CLICK: { number: '5614000000008888', holder: 'CLICK' },
+          PAYNET: { number: '5614000000007777', holder: 'PAYNET' },
+          UZUM: { number: '5614000000006666', holder: 'UZUM' },
+        }),
+      })
+    );
+    const cards = await listConfiguredCards();
+    expect(Object.keys(cards).sort()).toEqual(['CLICK', 'PAYME', 'PAYNET', 'TRANSFER', 'UZUM']);
+    expect(cards.UZCARD).toBeUndefined();
+    expect(cards.HUMO).toBeUndefined();
+    expect(cards.VISA).toBeUndefined();
   });
 
   it('bo\'sh bo\'lsa bo\'sh obyekt qaytaradi', async () => {

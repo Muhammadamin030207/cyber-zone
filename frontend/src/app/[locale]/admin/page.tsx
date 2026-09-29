@@ -8,7 +8,7 @@ import {
   Settings, Monitor, CalendarDays, BadgePercent, Newspaper, BarChart3, MessageSquare,
   Plus, Pencil, Trash2, Loader2, AlertCircle, Check, ShieldCheck, Users, Zap,
   Save, X, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy, MessagesSquare, Info, Banknote, UserX,
-  CreditCard, Receipt,
+  CreditCard,
   } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -24,12 +24,11 @@ import SupportChat from '@/components/support/SupportChat';
 import SiteSettingsTab from '@/components/admin/SiteSettingsTab';
 import MerchantCardsSettings from '@/components/admin/MerchantCardsSettings';
 import TillTab from '@/components/admin/TillTab';
-import PaymentsTab from '@/components/admin/PaymentsTab';
 import Logo from '@/components/brand/Logo';
 
 const MapPicker = dynamic(() => import('@/components/rooms/MapPicker'), { ssr: false });
 
-type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'till' | 'payments' | 'cards' | 'bar' | 'chat' | 'requests' | 'support' | 'promos' | 'news' | 'stats' | 'site';
+type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'till' | 'cards' | 'bar' | 'chat' | 'requests' | 'support' | 'promos' | 'news' | 'stats' | 'site';
 
 const TABS: { key: Tab; icon: LucideIcon; label: string }[] = [
   { key: 'room', icon: Settings, label: 'Xona' },
@@ -37,7 +36,6 @@ const TABS: { key: Tab; icon: LucideIcon; label: string }[] = [
   { key: 'computers', icon: Monitor, label: 'Kompyuterlar' },
   { key: 'bookings', icon: CalendarDays, label: 'Bronlar' },
   { key: 'till', icon: Banknote, label: 'Kassa' },
-  { key: 'payments', icon: Receipt, label: 'To\'lovlar' },
   { key: 'cards', icon: CreditCard, label: 'To\'lov kartalari' },
   { key: 'bar', icon: Gamepad2, label: 'Gaming Bar' },
   { key: 'chat', icon: MessageSquare, label: 'Chat' },
@@ -147,8 +145,6 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
         <BookingsTab room={room} />
       ) : tab === 'till' ? (
         <TillTab />
-      ) : tab === 'payments' ? (
-        <PaymentsTab />
       ) : tab === 'cards' ? (
         <MerchantCardsSettings />
       ) : tab === 'bar' ? (

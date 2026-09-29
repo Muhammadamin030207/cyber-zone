@@ -17,16 +17,13 @@ import SplashLoader from '@/components/ui/SplashLoader';
 import ProviderLogo from '@/components/payments/ProviderLogo';
 import TransferPanel, { type MerchantCard } from '@/components/payments/TransferPanel';
 
-type PayMethod = 'PAYME' | 'CLICK' | 'UZUM' | 'PAYNET' | 'UZCARD' | 'HUMO' | 'VISA' | 'CASH' | 'TRANSFER';
+type PayMethod = 'PAYME' | 'CLICK' | 'UZUM' | 'PAYNET' | 'CASH' | 'TRANSFER';
 
 const PROVIDER_UI: Record<string, { label: string; sub: string }> = {
   PAYME: { label: 'Payme', sub: 'Telefon ilovasi' },
   CLICK: { label: 'Click', sub: 'Tez va oson' },
   UZUM: { label: 'Uzum', sub: 'Raqamli bank' },
   PAYNET: { label: 'Paynet', sub: 'To\'lov terminali' },
-  UZCARD: { label: 'UzCard', sub: 'Mobil ilova' },
-  HUMO: { label: 'Humo', sub: 'Bank kartasi' },
-  VISA: { label: 'Visa', sub: 'Xalqaro karta' },
   CASH: { label: 'Kassada', sub: 'Naqd pulda to\'lash' },
   // Qo'lda o'tkazma: hech qanday provayder/ilova kerak emas — bank ilovasida
   // o'zingiz o'tkazasiz, chekni shu yerga yuklasangiz bo'ladi.
@@ -65,8 +62,13 @@ const OFFLINE_METHODS: ProviderInfo[] = [
   { method: 'CASH', label: 'Kassada', available: true },
 ];
 
-/** Qo'lda o'tkazma (karta) usullari — karta sozlangan bo'lsa ko'rsatiladi. */
-const CARD_METHODS = ['UZUM', 'PAYME', 'CLICK', 'PAYNET', 'UZCARD', 'HUMO', 'VISA', 'TRANSFER'] as const;
+/**
+ * Qo'lda o'tkazma (karta) usullari — faqat §22 dagi to'rtala ommaviy usul
+ * plus umumiy o'tkazma. UZCARD / HUMO / VISA alohida "to'lov usuli" emas:
+ * ular karta TURLARI. Admin ularni karta ma'lumotida (bank nomi sifatida)
+ * saqlashi mumkin, lekin foydalanuvchi ularni tanlay olmaydi.
+ */
+const CARD_METHODS = ['PAYME', 'CLICK', 'PAYNET', 'UZUM', 'TRANSFER'] as const;
 
 export default function CheckoutPage({ params }: { params: Promise<{ locale: string; id: string }> }) {
   void params;
@@ -766,8 +768,6 @@ const CARD_APP_URL: Record<string, string> = {
   PAYME: 'https://payme.uz',
   CLICK: 'https://click.uz',
   PAYNET: 'https://paynet.uz',
-  UZCARD: 'https://uzcard.uz',
-  HUMO: 'https://humo.uz',
   TRANSFER: '',
 };
 

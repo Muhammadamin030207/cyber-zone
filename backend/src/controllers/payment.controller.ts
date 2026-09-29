@@ -190,9 +190,10 @@ function normalizeMethod(method: string): { method: string; providerId: string; 
   if (['PAYME', 'CLICK', 'UZUM', 'PAYNET'].includes(m)) {
     return { method: m, providerId: m, cash: false, manual: false };
   }
-  // Legacy nomlar -> provider'ga moslash
-  const legacy: Record<string, string> = { UZCARD: 'PAYME', HUMO: 'PAYME' };
-  if (legacy[m]) return { method: m, providerId: legacy[m], cash: false, manual: false };
+  // Noma'lum usul — hech qanday karta yoki provayderga yo'naltirilmaydi.
+  // (UZCARD/HUMO/VISA alohida usul emas: ular karta turi, §22. Ularni
+  // so'ramoqchi bo'lgan klient `PAYME`/`CLICK`/`PAYNET`/`UZUM`dan birini
+  // ishlatishi kerak — karta ma'lumotida bank nomi sifatida saqlanadi.)
   return { method: '', providerId: m, cash: false, manual: false };
 }
 
@@ -234,8 +235,14 @@ export const createPayment = async (req: AuthRequest, res: Response, next: NextF
 
     const normalized = normalizeMethod(method);
     let { method: normMethod, providerId, cash, manual } = normalized;
-    if (!cash && !manual && !providerId) {
-      return badRequest(res, 'To\'lov metodi qo\'llab-quvvatlanmaydi');
+    if (!cash && !manual && !normMethod) {
+      // Foydalanuvchiga faqat PAYME / CLICK / PAYNET / UZUM (va kassada) —
+      // boshqa hech narsa qabul qilinmaydi (§22).
+      return badRequest(
+        res,
+        'To\'lov usuli qo\'llab-quvvatlanmaydi. Payme, Click, Paynet yoki Uzumdan birini tanlang.',
+        'UNSUPPORTED_PAYMENT_METHOD',
+      );
     }
 
     let provider = null;
@@ -1060,10 +1067,10 @@ export const getAllPayments = async (req: AuthRequest, res: Response, next: Next
     const where: any = {};
     if (status) where.status = status.toUpperCase();
 
-    // ADMIN faqat O'Z xonasining to'lovlarini ko'radi; SUPER_ADMIN hammasini.
-    if (req.user!.role !== 'SUPER_ADMIN') {
-      where.booking = { room: { ownerId: req.user!.userId } };
-    }
+    // Scope: endpoint faqat SUPER_ADMIN'ga ochiq (route guard), lekin shart
+    // controller ichida ham qaytariladi — routega middleware qo'shilsa ham
+    // defense-in-depth buzilmaydi.
+    if (req.user!.role !== 'SUPER_ADMIN') return forbidden(res);
 
     // Chek raqami — aniq qidirish. Mijoz raqamni telefon orqali aytadi;
     // `contains` bilan kiritilgan bo'shliq/kichik-harf farqini kechiradi.
@@ -1212,14 +1219,19 @@ export const submitTransferProof = async (req: AuthRequest, res: Response, next:
       return badRequest(res, 'Bu to\'lov uchun o\'tkazma tasdig\'i talab qilinmaydi');
     }
 
-    const last4 = String(req.body?.cardLast4 ?? '').replace(/\D/g, '');
-    const holder = String(req.body?.cardholderName ?? '').trim().replace(/\s+/g, ' ');
+    // Kontrakt: `proofCardLast4` / `proofCardholderName` — frontend shu nomlarni
+    // yuboradi (TransferPanel.tsx). `cardLast4` / `cardholderName` — eski/e2e nomlar,
+    // orqaga moslik uchun qabul qilinadi. Ikkalasi bo'lmasa — 400.
+    const rawLast4 = req.body?.proofCardLast4 ?? req.body?.cardLast4 ?? '';
+    const rawHolder = req.body?.proofCardholderName ?? req.body?.cardholderName ?? '';
+    const last4 = String(rawLast4 ?? '').replace(/\D/g, '');
+    const holder = String(rawHolder ?? '').trim().replace(/\s+/g, ' ');
 
     if (!/^\d{4}$/.test(last4)) {
-      return badRequest(res, 'Karta raqamining oxirgi 4 ta raqamini kiriting (masalan: 4321)');
+      return badRequest(res, 'Karta raqamining oxirgi 4 ta raqamini kiriting (masalan: 4321)', 'INVALID_CARD_LAST4');
     }
     if (holder.length < 3 || holder.length > 120) {
-      return badRequest(res, 'Karta egasining ism-familiyasini to\'liq kiriting');
+      return badRequest(res, 'Karta egasining ism-familiyasini to\'liq kiriting', 'INVALID_CARDHOLDER');
     }
 
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
