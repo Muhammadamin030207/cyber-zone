@@ -138,14 +138,18 @@ export function startSessionGate(booking: {
   if (booking.approvalStatus !== 'APPROVED') {
     return { ok: false, code: 'BOOKING_NOT_APPROVED', message: 'Bron hali tasdiqlanmagan — admin tasdiqlashini kutilmoqda', bookedStart, bookedEnd };
   }
+  // To'lov holati yuz tekshiruvidan OLDIN tekshiriladi. Sabab: to'lanmagan
+  // bronda "kameraga qarang" degani ma'nosiz — mijoz avval to'lash, keyin
+  // yuzini ko'rsatishi kerak. Aks holda u 3 marta ko'z pirpiratib, oxirida
+  // ham "to'lanmagan" xatosini olardi (chalg'ituvchi UX).
+  if (!['PAID', 'PARTIALLY_PAID', 'CONFIRMED'].includes(booking.status)) {
+    return { ok: false, code: 'BOOKING_NOT_PAID', message: "Sessiyani boshlash uchun to'lovni amalga oshiring", bookedStart, bookedEnd };
+  }
   // Yuz tekshiruvi (liveness): shart yoqilgan bo'lsa, mijoz kamerada jonli
   // ko'z pirpirash orqali tekshiruvdan o'tishi SHART — aks holda boshqa birov
   // uning nomiga sessiya boshlay olmaydi. Bu mijozning O'ZI ekanini isbotlaydi.
   if (booking.faceCheckRequired === true && !booking.faceVerifiedAt) {
     return { ok: false, code: 'FACE_NOT_VERIFIED', message: "Yuz tekshiruvidan o'tilmagan — kameraga 3 marta ko'z pirpirating", bookedStart, bookedEnd };
-  }
-  if (!['PAID', 'PARTIALLY_PAID', 'CONFIRMED'].includes(booking.status)) {
-    return { ok: false, code: 'BOOKING_NOT_PAID', message: "Sessiyani boshlash uchun to'lovni amalga oshiring", bookedStart, bookedEnd };
   }
   if (now.getTime() < bookedStart.getTime()) {
     return { ok: false, code: 'SESSION_EARLY', message: `Sessiya ${minutesToHHMM(parseTime(booking.startTime) ?? 0)} dan keyin boshlanadi`, bookedStart, bookedEnd };

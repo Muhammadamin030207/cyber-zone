@@ -38,6 +38,14 @@ function spanOf(start: string, end: string): { start: number; end: number } {
   return { start: s, end: e };
 }
 
+/** Daqiqa -> "HH:MM" (1440 = 24:00 chegarasidan oshsa "23:59"). */
+function minutesToHHMM(total: number): string {
+  const clamped = Math.min(Math.max(0, Math.round(total)), 1439);
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
 export default function BookingWidget({ room, date, onDateChange, availability, availabilityLoading = false }: Props) {
   const t = useTranslations('booking');
   const router = useRouter();
@@ -78,8 +86,25 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
   // Yarim tundan oshuvchi oraliqlarni to'g'ri hisoblash (23:00 -> 00:00 = 1380..1440)
   const { start: startMin, end: endMin } = spanOf(startTime, endTime);
 
-  const durationHours = Math.max(0, (endMin - startMin) / 60);
-  const timeOk = durationHours > 0;
+  // UNLIMITED: mijoz tugash vaqtini TANGLAMAYDI. Kompyuterni ushlab turish
+  // oynasi xona yopilishigacha (yoki 24:00 gacha) cho'ziladi — backend ham
+  // shunday hisoblaydi. Eski `endTime` (masalan 18:00) unlimited uchun
+  // ma'nosiz va bo'shlikni tor qilib qo'yardi: 18:00 dan keyin ham kompyuter
+  // bo'sh bo'lsa ham "band" ko'rinardi.
+  const dayCloseMin = useMemo(() => {
+    const close = room.workingHours?.close;
+    if (close) return minutesOf(close);
+    return 24 * 60; // ish vaqti ko'rsatilmagan — kun oxirigacha
+  }, [room.workingHours?.close]);
+
+  const holdEndMin = useUnlimited
+    ? (startMin < dayCloseMin ? dayCloseMin : 24 * 60)
+    : endMin;
+
+  const durationHours = Math.max(0, (holdEndMin - startMin) / 60);
+  // UNLIMITED uchun "vaqt tanlanganmi" degan savol yo'q — faqat boshlanish
+  // vaqti xona ish vaqtiga to'g'ri kelishi kerak.
+  const timeOk = useUnlimited ? startMin < dayCloseMin : (endMin - startMin) > 0;
 
   // Serverdan kelgan bo'sh vaqt oynalari (freeWindows) — daqiqalarga, yarim tundan oshsa wraplanadi
   const byComputerWindows = useMemo(() => {
@@ -95,17 +120,17 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
   const freeInWindow = useMemo(() => {
     if (!selectedZone || !timeOk) return 0;
     return byComputerWindows.filter(
-      (c) => c.status === 'AVAILABLE' && c.windows.some((w) => w.start <= startMin && w.end >= endMin)
+      (c) => c.status === 'AVAILABLE' && c.windows.some((w) => w.start <= startMin && w.end >= holdEndMin)
     ).length;
-  }, [byComputerWindows, startMin, endMin, timeOk, selectedZone]);
+  }, [byComputerWindows, startMin, holdEndMin, timeOk, selectedZone]);
 
   // Tanlangan kompyuter ushbu oynada bo'shmi (manual tanlov uchun)
   const selectedComputerFree = useMemo(() => {
     if (autoPc || !effectiveComputerId) return true;
     const comp = byComputerWindows.find((c) => c.id === effectiveComputerId);
     if (!comp || comp.status !== 'AVAILABLE') return false;
-    return comp.windows.some((w) => w.start <= startMin && w.end >= endMin);
-  }, [autoPc, effectiveComputerId, byComputerWindows, startMin, endMin]);
+    return comp.windows.some((w) => w.start <= startMin && w.end >= holdEndMin);
+  }, [autoPc, effectiveComputerId, byComputerWindows, startMin, holdEndMin]);
 
   // Tanlangan boshlanish vaqtidan maksimal mumkin bo'lgan davomiylik
   const maxDurationHours = useMemo(() => {
@@ -124,8 +149,10 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
   const isToday = date === todayISO();
   const startInPast = isToday && minutesOf(startTime) < minutesOf(businessNowHHMM());
 
-  // Tanlangan davomiylik mavjud oynalardan oshib ketgan bo'lsa — foydalanuvchiga tushunarli ogohlantirish
-  const durationExceeds = timeOk && durationHours > maxDurationHours + 1e-9;
+  // Tanlangan davomiylik mavjud oynalardan oshib ketgan bo'lsa — foydalanuvchiga tushunarli ogohlantirish.
+  // UNLIMITED uchun "maksimal davomiylik" tushunchasi yo'q — faqat boshlanish
+  // vaqti muhim, shuning uchun bu tekshiruv o'chiriladi.
+  const durationExceeds = !useUnlimited && timeOk && durationHours > maxDurationHours + 1e-9;
 
   function applyDuration(hours: number) {
     const [sh, sm] = startTime.split(':').map(Number);
@@ -152,7 +179,12 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
 
   const DURATIONS = [1, 2, 3, 4, 6];
 
-  const baseTotal = pricePerHour * durationHours;
+  // UNLIMITED: narx har doim BIR soatlik. `durationHours` esa oqim
+  // "tanlangan endTime" dan keladi va unlimited uchun ma'nosiz — shuning
+  // uchun bazaviy summa 1 soatga tenglanadi (backend `duration = 1` bilan
+  // bir xil mantiq). Aks holda chegirma/ballar N soatlik summa ustida
+  // hisoblanib, mijozga barchasidan katta raqam ko'rsatilardi.
+  const baseTotal = pricePerHour * (useUnlimited ? 1 : durationHours);
 
   const discount = useMemo(() => {
     if (!promo || !promoApplied) return 0;
@@ -168,9 +200,19 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
   const pointsUsed = usePoints ? Math.min(pointsBalance, pointsCap) : 0;
 
   const finalTotal = Math.max(0, afterPromo - pointsUsed);
-  // Backend disclamer: round2 ✓ — frontend ham xuddi shunday yaxlitlaydi (parseInt truncate qilmasdan)
-  const advance = Math.round(finalTotal * 0.3);
-  const remaining = Math.max(0, finalTotal - advance);
+
+  // UNLIMITED: narx DOIM bir soatlik. Backend shuni bronga yozadi
+  // (`duration = 1`), qolgani sessiya tugagach haqiqiy sarflangan
+  // vaqt bo'yicha kassada yopiladi. §17.
+  //
+  // Chegirma va bonus ballar bir soatlik SUMMAga ham qo'llanadi — shuning
+  // uchun `finalTotal`ni ishlatamiz (backend `prepayFull` bilan `advance =
+  // finalTotal`, ya'ni 100% oldindan to'lanadi). Avval `pricePerHour * 0.3`
+  // ko'rsatilardi: mijoz 30% to'lab, "bir soat oldindan" degani yolg'on
+  // bo'lib chiqardi.
+  const displayTotal = finalTotal;
+  const advance = useUnlimited ? Math.round(finalTotal) : Math.round(finalTotal * 0.3);
+  const remaining = useUnlimited ? 0 : Math.max(0, displayTotal - advance);
 
   function checkPromo() {
     if (!promoCode.trim()) {
@@ -234,8 +276,12 @@ async function submit() {
         zoneId: effectiveZoneId,
         date,
         startTime,
-        endTime,
-        durationHours,
+        // UNLIMITED: "hold" oxiri — xona yopilishi (yoki 24:00). Sabab: bron
+        // kompyuterni shu oralig'ga ushlab turadi va boshqa bron bilan
+        // to'qnashuv shu oynada tekshiriladi. Davomiylik esa 1 soat
+        // (backend `duration = 1`), haqiqiy sarf session da hisoblanadi.
+        endTime: holdEndMin >= 1440 ? '23:59' : minutesToHHMM(holdEndMin),
+        durationHours: useUnlimited ? 1 : durationHours,
         // UNLIMITED: bron hamon intervalni ushlab turadi (hold), LEKIN sessiya
         // taymer bilan yopilmaydi — Sarflangan vaqt bo'yicha hisoblanadi.
         ...(useUnlimited ? { sessionType: 'UNLIMITED' } : {}),
@@ -399,7 +445,7 @@ async function submit() {
                   // canBook: kompyuter ish vaqtida bo'sh oynasi bu vaqt oralig'ini to'liq qoplashi kerak
                   const freeHere =
                     wc?.status === 'AVAILABLE' &&
-                    (wc.windows.some((w) => w.start <= startMin && w.end >= endMin) ?? false);
+                    (wc.windows.some((w) => w.start <= startMin && w.end >= holdEndMin) ?? false);
                   return {
                     id: c.id,
                     name: c.name,
@@ -417,6 +463,22 @@ async function submit() {
 
         {/* Vaqt */}
         <div>
+          {/* ====== UNLIMITED: duration / end-time inputlari YASHIRILADI ======
+              Cheksiz sessiyada vaqt chegarasi yo'q — foydalanuvchi faqat
+              BOSHLASH vaqtini tanlaydi. Davomiylik va tugash vaqti so'ralmaydi,
+              chunki ular mavjud emas: hisob haqiqiy sarflangan vaqt bo'yicha
+              yuradi va kassada yopiladi (§16). */}
+          {useUnlimited ? (
+            <div className="rounded-xl border border-[#ff7a1a]/25 bg-[#ff7a1a]/[0.06] px-3.5 py-3 mb-3">
+              <p className="text-sm font-semibold text-[#ff7a1a]">Cheksiz sessiya</p>
+              <p className="text-[11px] text-gray-400 leading-relaxed mt-1">
+                Davomiylik va tugash vaqti belgilanmaydi. Xona yopilgunicha
+                o&apos;tkazib yotishingiz mumkin — to&apos;lov har soat uchun
+                sarflangan vaqt bo&apos;yicha hisoblanadi.
+              </p>
+            </div>
+          ) : (
+          <>
           <div className="flex items-center justify-between mb-1.5">
             <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider">
               {t('duration')}
@@ -464,9 +526,6 @@ async function submit() {
             </button>
             <span className="text-[11px] text-gray-500">0.5–24 soat</span>
           </div>
-          {/* UNLIMITED sessiya: taymer yo'q — sarflangan vaqt bo'yicha
-              hisob (server `sessionType` ni tasdiqlaydi). Саna/endTime
-              kompyuterni ushlab turish oynasi bo'lib qoladi. */}
           <label className="flex items-start gap-2.5 mb-3 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -482,7 +541,7 @@ async function submit() {
               </span>
             </span>
           </label>
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${useUnlimited ? 'grid-cols-1' : 'grid-cols-2'}`}>
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
                 {t('startTime')}
@@ -494,6 +553,8 @@ async function submit() {
                 className={`glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none ${!timeOk ? 'border-red-500/50' : ''}`}
               />
             </div>
+            {/* UNLIMITED: end time mavjud emas — maydon butunlay yashiriladi */}
+            {!useUnlimited && (
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
                 {t('endTime')}
@@ -505,27 +566,30 @@ async function submit() {
                 className={`glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none ${!timeOk ? 'border-red-500/50' : ''}`}
               />
             </div>
+            )}
           </div>
-          {!timeOk && (
+          {!timeOk && !useUnlimited && (
             <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
               Tugash vaqti boshlanish vaqtidan keyin bo‘lishi kerak.
             </p>
           )}
-          {timeOk && durationExceeds && (
+          {timeOk && !useUnlimited && durationExceeds && (
             <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
               Bu davomiylik uchun vaqt yetarli emas — maksimal{' '}
               {maxDurationHours.toFixed(maxDurationHours % 1 === 0 ? 0 : 1)} soat.
             </p>
           )}
-          {timeOk && !durationExceeds && freeInWindow === 0 && (
+          {timeOk && !useUnlimited && !durationExceeds && freeInWindow === 0 && (
             <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
               Bu vaqt oralig‘ida bo‘sh kompyuter yo‘q — boshqa vaqtni tanlang.
             </p>
           )}
-          {timeOk && freeInWindow > 0 && autoPc && !durationExceeds && (
+          {timeOk && freeInWindow > 0 && autoPc && (
             <p className="text-xs text-gray-500 mt-1.5">
               Bu vaqtda {freeInWindow} ta bo‘sh kompyuter bor.
             </p>
+          )}
+          </>
           )}
         </div>
 
@@ -591,7 +655,15 @@ async function submit() {
         <div className="rounded-xl surface border border-white/10 p-4 space-y-2 text-sm">
           <div className="flex items-center justify-between text-gray-400">
             <span className="flex items-center gap-1.5"><Clock size={13} className="text-neon-cyan" /> {t('duration')}</span>
-            <span className="text-gray-300 font-medium">{durationHours.toFixed(1)} {t('hoursTotal')} · {startTime} — {endTime}</span>
+            {useUnlimited ? (
+              // Unlimited da tugash vaqti YO'Q — "soat" ko'rsatib, keyin
+              // "cheksiz" deb yolg'on vaqt chegarasi berish mumkin emas.
+              <span className="text-gray-300 font-medium">
+                {t('unlimited')} · boshlanish {startTime} · 1 soat oldindan to&apos;lov
+              </span>
+            ) : (
+              <span className="text-gray-300 font-medium">{durationHours.toFixed(1)} {t('hoursTotal')} · {startTime} — {endTime}</span>
+            )}
           </div>
           {date && (
             <div className="flex items-center justify-between text-gray-400">
@@ -622,13 +694,18 @@ async function submit() {
           </div>
           <div className="px-3 py-2 rounded-lg bg-neon-cyan/5 border border-neon-cyan/15 space-y-1">
             <div className="flex items-center justify-between text-neon-cyan font-medium">
-              <span>{t('advance')}</span>
+              <span>{useUnlimited ? t('advanceLabel') : t('advance')}</span>
               <span>{formatPrice(advance)} {t('sum')}</span>
             </div>
-            <div className="flex items-center justify-between text-gray-400">
-              <span>{t('remaining')}</span>
-              <span>{formatPrice(remaining)} {t('sum')}</span>
-            </div>
+            {!useUnlimited && (
+              <div className="flex items-center justify-between text-gray-400">
+                <span>{t('remaining')}</span>
+                <span>{formatPrice(remaining)} {t('sum')}</span>
+              </div>
+            )}
+            {useUnlimited && (
+              <p className="text-[11px] text-gray-400 leading-snug pt-1">{t('unlimitedAdvanceHint')}</p>
+            )}
           </div>
         </div>
 

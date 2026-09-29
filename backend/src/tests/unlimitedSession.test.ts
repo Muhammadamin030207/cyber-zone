@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { startSessionGate } from '../services/sessionService';
+import { computeBookingPrice } from '../utils/pricing';
+import { round2 } from '../utils/money';
 
 /**
  * SESSIYA GEYT (startSessionGate) — TIMED vs UNLIMITED.
@@ -100,5 +102,80 @@ describe('startSessionGate — yuz tekshiruvi (liveness)', () => {
       new Date('2026-09-28T04:30:00Z'),
     );
     expect(gate.ok).toBe(true);
+  });
+});
+
+/**
+ * To'lov holati yuz tekshiruvidan OLDIN tekshirilishi kerak. Aks holda
+ * to'lanmagan bronda mijoz "kameraga qarang" xatosini oladi, yuz
+ * tekshiruvini o'tkazadi, keyin yana "to'lanmagan" xatosini oladi.
+ */
+describe('startSessionGate — to\'lov yuz tekshiruvidan oldin', () => {
+  it('to\'lanmagan + yuz tekshirilmagan -> avval TO\'LOV xatosi (chalg\'itmaydi)', () => {
+    const gate = startSessionGate(
+      { ...base, status: 'PENDING', startTime: '09:00', endTime: '10:00', faceCheckRequired: true, faceVerifiedAt: null },
+      new Date('2026-09-28T04:30:00Z'),
+    );
+    expect(gate.ok).toBe(false);
+    expect(gate.code).toBe('BOOKING_NOT_PAID');
+  });
+
+  it('to\'langan + yuz tekshirilmagan -> endi yuz tekshiruvi xatosi', () => {
+    const gate = startSessionGate(
+      { ...base, status: 'PAID', startTime: '09:00', endTime: '10:00', faceCheckRequired: true, faceVerifiedAt: null },
+      new Date('2026-09-28T04:30:00Z'),
+    );
+    expect(gate.ok).toBe(false);
+    expect(gate.code).toBe('FACE_NOT_VERIFIED');
+  });
+});
+
+/**
+ * UNLIMITED narxlash: faqat 1 soat OLDINDAN to'lanadi — 30% emas.
+ * Spec: "user pays ONLY ONE HOUR IN ADVANCE". Qoldiq 0, keyingi soatlar
+ * `finalizeSession` da haqiqiy sarf bo'yicha qarz qilinadi.
+ */
+describe('computeBookingPrice — UNLIMITED (prepayFull)', () => {
+  it('1 soat = to\'liq narx oldindan to\'lanadi, qoldiq 0', () => {
+    const p = computeBookingPrice({ pricePerHour: 20000, durationHours: 1, prepayFull: true });
+    expect(p.baseTotal).toBe(20000);
+    expect(p.advance).toBe(20000);
+    expect(p.remaining).toBe(0);
+    expect(p.depositPercent).toBe(100);
+  });
+
+  it('promo chegirmasi bir soatlik SUMMAga qo\'llanadi', () => {
+    const p = computeBookingPrice({
+      pricePerHour: 20000, durationHours: 1, prepayFull: true,
+      promo: { discountType: 'PERCENTAGE', discountValue: 10 },
+    });
+    expect(p.baseTotal).toBe(20000);
+    expect(p.discountPromo).toBe(2000);
+    expect(p.finalTotal).toBe(18000);
+    // Chegirma keyin to'lanadi: 18 000 to'liq oldindan
+    expect(p.advance).toBe(18000);
+    expect(p.remaining).toBe(0);
+  });
+
+  it('bonus balllar ham 1 soatlik summa ustida (50% cap)', () => {
+    const p = computeBookingPrice({ pricePerHour: 20000, durationHours: 1, prepayFull: true, pointsToUse: 99999 });
+    expect(p.pointsUsed).toBe(10000); // 50% cap
+    expect(p.finalTotal).toBe(10000);
+    expect(p.advance).toBe(10000);
+    expect(p.remaining).toBe(0);
+  });
+
+  it('`advance + remaining === finalTotal` kafolati UNLIMITED uchun ham saqlanadi', () => {
+    for (const price of [15000, 20000, 33333, 123457]) {
+      const p = computeBookingPrice({ pricePerHour: price, durationHours: 1, prepayFull: true });
+      expect(round2(p.advance + p.remaining)).toBe(p.finalTotal);
+    }
+  });
+
+  it('TIMED oqim o\'zgarmaydi: 30% avans + 70% qoldiq', () => {
+    const p = computeBookingPrice({ pricePerHour: 20000, durationHours: 2 });
+    expect(p.baseTotal).toBe(40000);
+    expect(p.advance).toBe(12000);
+    expect(p.remaining).toBe(28000);
   });
 });

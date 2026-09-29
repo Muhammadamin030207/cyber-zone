@@ -99,13 +99,17 @@
     "price": "Narx",
     "discount": "Chegirma",
     "finalPrice": "Yakuniy narx",
-    "advance": "Oldindan to'lov (30%)",
+    "advance": "Oldindan to’lov (30%)",
     "remaining": "Qoldiq (70%)",
     "create": "Bron qilish",
     "created": "Bron yaratildi!",
     "freeComputers": "bo'sh kompyuter",
     "notAvailable": "Vaqt band yoki bo'sh kompyuter yo'q",
-    "sum": "so'm"
+    "sum": "so'm",
+    "unlimited": "Cheksiz",
+    "advanceLabel": "Oldindan to’lov",
+    "remainingLabel": "Qoldiq",
+    "unlimitedAdvanceHint": "Faqat 1 soat oldindan to’lanadi. Qo’shimcha sarflangan vaqt sessiya tugagach kassada qo‘lda to‘lanadi."
   },
   "auth": {
     "loading": "Yuklanmoqda...",

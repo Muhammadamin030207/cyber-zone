@@ -77,6 +77,36 @@ describe('E2E: Bron sessiyasi (check-in/check-out, min 1 soat billing)', () => {
     });
   }
 
+  /**
+   * Kamerali liveness (yuz tekshiruvi) — real oqimda `FaceCheck.tsx` ko'z
+   * pirpiratganini aniqlab shu endpoint'ga xabar beradi. Test ham xuddi shu
+   * qadamni bajaradi: server "tekshiruvni o'zi qildi" deb ishontirilmaydi.
+   */
+  async function passFaceCheck(bookingId: string) {
+    const res = await api()
+      .post(`/api/bookings/${bookingId}/face-verified`)
+      .set('Authorization', auth(userToken));
+    expect(res.status).toBe(200);
+  }
+
+  it('check-in: yuz tekshiruvi o\'tkazilmagan sessiya BLOKLANADI (FACE_NOT_VERIFIED)', async () => {
+    const booking = await makeConfirmed(2);
+    const res = await api().post(`/api/bookings/${booking.id}/session/start`).set('Authorization', auth(userToken));
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FACE_NOT_VERIFIED');
+    // Hech narsa o'zgarMAYdi: kompyuter band bo'lib qolmaydi
+    const pcAfter = await prisma.computer.findUnique({ where: { id: pc.id } });
+    expect(pcAfter!.status).toBe('AVAILABLE');
+  });
+
+  it('yuz tekshiruvi idempotent: qayta yuborilsa ham 200', async () => {
+    const booking = await makeConfirmed(2);
+    await passFaceCheck(booking.id);
+    const again = await api().post(`/api/bookings/${booking.id}/face-verified`).set('Authorization', auth(userToken));
+    expect(again.status).toBe(200);
+    expect(again.body.data.alreadyVerified).toBe(true);
+  });
+
   it('check-in: CONFIRMED bronni ACTIVE qiladi, kompyuterni OCCUPIED qiladi', async () => {
     const booking = await makeConfirmed(2);
     const sessionInfo = await api().get(`/api/bookings/${booking.id}/session`).set('Authorization', auth(userToken));
@@ -84,6 +114,7 @@ describe('E2E: Bron sessiyasi (check-in/check-out, min 1 soat billing)', () => {
     expect(sessionInfo.body.data.session.state).toBe('idle');
     expect(sessionInfo.body.data.session.serverTime).toBeTruthy();
 
+    await passFaceCheck(booking.id);
     const startRes = await api().post(`/api/bookings/${booking.id}/session/start`).set('Authorization', auth(userToken));
     expect(startRes.status).toBe(200);
     const { booking: b, session } = startRes.body.data;
@@ -97,6 +128,7 @@ describe('E2E: Bron sessiyasi (check-in/check-out, min 1 soat billing)', () => {
 
   it('check-out: min 1 soat hisoblanadi, qo\'shimcha qoldiq PENDING CASH bo\'ladi, kompyuter bo\'shaydi', async () => {
     const booking = await makeConfirmed(2);
+    await passFaceCheck(booking.id);
     await api().post(`/api/bookings/${booking.id}/session/start`).set('Authorization', auth(userToken));
 
     const endRes = await api().post(`/api/bookings/${booking.id}/session/end`).set('Authorization', auth(userToken));
@@ -125,6 +157,7 @@ describe('E2E: Bron sessiyasi (check-in/check-out, min 1 soat billing)', () => {
     await prisma.payment.create({
       data: { bookingId: booking.id, userId, amount: 60000, type: 'ADVANCE', method: 'PAYME', status: 'COMPLETED' },
     });
+    await passFaceCheck(booking.id);
     await api().post(`/api/bookings/${booking.id}/session/start`).set('Authorization', auth(userToken));
 
     const endRes = await api().post(`/api/bookings/${booking.id}/session/end`).set('Authorization', auth(userToken));
@@ -152,11 +185,108 @@ describe('E2E: Bron sessiyasi (check-in/check-out, min 1 soat billing)', () => {
         pointsUsed: 0, status: 'PENDING',
         // Tasdiqlangan, LEKIN to'lanmagan — shuning uchun startSessionGate
         // aynan BOOKING_NOT_PAID qaytarishi kerak (tasdiqlash emas).
+        // Yuz tekshiruvi ham o'tkazilgan: endi xato FAQAT to'lovdan kelib
+        // chiqishi kerak — aks holda ikkala shart chalkashib ketadi.
         approvalStatus: 'APPROVED',
+        faceVerifiedAt: new Date(),
       },
     });
     const res = await api().post(`/api/bookings/${booking.id}/session/start`).set('Authorization', auth(userToken));
     expect(res.status).toBe(400);
+    expect(res.body.code).toBe('BOOKING_NOT_PAID');
+  });
+});
+
+/**
+ * UNLIMITED bron — real API orqali (DB da qo'lda emas).
+ *
+ * Spec: cheksiz sessiyada mijoz FAQAT 1 soat oldindan to'laydi. Avvalgi
+ * implementatsiyada `duration` 1 qilinsa ham, `computeBookingPrice` 30%
+ * depozit qo'llar edi — ya'ni "1 soat" o'rniga 1 soatning uchdan biri
+ * talab qilinardi. Bu test shu xatoni ushlaydi.
+ */
+describe('E2E: UNLIMITED bron — faqat 1 soat oldindan to\'lov', () => {
+  let room: any;
+  let zone: any;
+  let userToken: string;
+  const HOUR = 20000;
+
+  beforeAll(async () => {
+    await reset();
+    const admin = await createUserDirect({ email: 'unl-admin@e2e.test', password: 'secret123', role: 'SUPER_ADMIN' });
+    const fixture = await createRoomFixture(admin!.id);
+    room = fixture.room;
+    zone = fixture.zone;
+    await prisma.computer.create({ data: { zoneId: zone.id, name: 'PC-U', status: 'AVAILABLE', specs: {} } });
+    userToken = await register('unl-user@e2e.test');
+  });
+
+  it('avans = bir soatning TO\'LIQ narxi, qoldiq = 0 (30% EMAS)', async () => {
+    const res = await api()
+      .post('/api/bookings')
+      .set('Authorization', auth(userToken))
+      .send({
+        roomId: room.id, zoneId: zone.id, date: '2026-12-15',
+        startTime: '09:00', sessionType: 'UNLIMITED',
+        idempotencyKey: 'unl-1',
+      });
+    expect(res.status).toBe(201);
+    const b = res.body.data;
+
+    expect(b.sessionType).toBe('UNLIMITED');
+    // Narx 1 soatlik (sabab: 1 soat oldindan to'lanadi)
+    expect(Number(b.totalPrice)).toBe(HOUR);
+    expect(Number(b.finalPrice)).toBe(HOUR);
+    // TO'LIQ 1 soat oldindan — 30% emas
+    expect(Number(b.advanceAmount)).toBe(HOUR);
+    expect(Number(b.remainingAmount)).toBe(0);
+    expect(Number(b.depositPercent)).toBe(100);
+    // duration ma'lumotga 1 yoziladi (keyingi hisob uchun)
+    expect(Number(b.durationHours)).toBe(1);
+  });
+
+  it('promo chegirmasi ham 1 soatlik summa ustida qo\'llanadi', async () => {
+    const admin2 = await createUserDirect({ email: 'unl-admin2@e2e.test', password: 'secret123', role: 'SUPER_ADMIN' });
+    const adminToken = await login('unl-admin2@e2e.test', 'secret123');
+    await api().post('/api/promo').set('Authorization', auth(adminToken)).send({
+      code: 'UNL10', discountType: 'PERCENTAGE', discountValue: 10, minBookingAmount: 100000, expiresAt: '2099-01-01',
+    });
+    void admin2;
+
+    // Minimal summa 100 000 — 1 soatlik (20 000) promoni olmaydi.
+    // Boshqa sana: birinchi testdagi UNLIMITED bron 09:00-23:00 ga kompyuterni
+    // ushlab turadi (fixture'da bitta PC bor) — sana moslashtirmasak
+    // ROOM_LIMIT olamiz va narx xatosi umuman tekshirilmay qoladi.
+    const res = await api()
+      .post('/api/bookings')
+      .set('Authorization', auth(userToken))
+      .send({
+        roomId: room.id, zoneId: zone.id, date: '2026-12-16',
+        startTime: '09:00', sessionType: 'UNLIMITED', promoCode: 'UNL10',
+        idempotencyKey: 'unl-2',
+      });
+    // 20 000 < 100 000 -> promo qabul qilinmaydi
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('PROMO_MIN_AMOUNT');
+  });
+
+  it('UNLIMITED uchun maxDuration limiti qo\'yilmaydi (xona yopishigacha)', async () => {
+    // 22:00 da boshlanish — 1 soatlik "fixed" oyna sig'maydi, lekin cheksiz
+    // sessiya uchun bu to'g'ri bo'lishi kerak (hold xona yopishigacha).
+    const res = await api()
+      .post('/api/bookings')
+      .set('Authorization', auth(userToken))
+      .send({
+        roomId: room.id, zoneId: zone.id, date: '2026-12-17',
+        startTime: '22:00', endTime: '23:00', sessionType: 'UNLIMITED',
+        idempotencyKey: 'unl-3',
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.data.sessionType).toBe('UNLIMITED');
+    // Hold xona yopishigacha cho'ziladi (frontend `holdEndMin` bilan bir xil)
+    expect(Number(res.body.data.advanceAmount)).toBe(HOUR);
+    // endTime serverda xona yopishiga (23:00) cho'zildi
+    expect(res.body.data.endTime).toBe('23:00');
   });
 });
 

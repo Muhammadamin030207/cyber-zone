@@ -20,6 +20,17 @@ export interface PricingInput {
    * uchun keyingi to'lovlar aynan shu foiz bo'yicha talab qilinadi.
    */
   depositPercent?: number;
+  /**
+   * UNLIMITED (cheksiz) sessiya: bir soatlik to'liq narx OLDINDAN to'lanadi
+   * (`advance === finalTotal`, `remaining === 0`). Keyingi soatlar sessiya
+   * yakunlanganda `finalizeSession` bo'yicha qarz qilib yoziladi.
+   *
+   * Nima uchun alohida flag: duration allaqon 1 ga tenglashtirilgan, lekin
+   * oddiy yo'l `DEPOSIT_PERCENT` (30%) ni qo'llar — ya'ni mijoz "1 soat
+   * oldindan" o'rniga 1 soatning 30% ini to'laydi, qolgani oqimga tushadi.
+   * Bu specyaga zid.
+   */
+  prepayFull?: boolean;
 }
 
 export interface PricingResult {
@@ -80,8 +91,10 @@ export function computeBookingPrice(input: PricingInput): PricingResult {
   // 3) Depozit / qoldiq — server konfiguratsiyasi (DEPOSIT_PERCENT, standart 30%).
   //    `advance + remaining === finalTotal` DOIM teng bo'lishi kafolatlanadi
   //    (qoldiq "qoldiq"dan hisoblanadi, alohida yuvilmaydi).
-  const depositPercent = resolveDepositPercent(input.depositPercent);
-  const advance = round2((finalTotal * depositPercent) / 100);
+  //    UNLIMITED: `prepayFull` — bir soatning to'liq narxi oldindan to'lanadi,
+  //    qoldiq 0; sarflangan qo'shimcha soatlar sessiya yakunida qarz bo'ladi.
+  const depositPercent = input.prepayFull ? 100 : resolveDepositPercent(input.depositPercent);
+  const advance = input.prepayFull ? finalTotal : round2((finalTotal * depositPercent) / 100);
   const remaining = round2(finalTotal - advance);
 
   return {

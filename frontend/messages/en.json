@@ -105,7 +105,11 @@
     "created": "Booking created!",
     "freeComputers": "free PCs",
     "notAvailable": "Time is busy or no free PCs",
-    "sum": "so'm"
+    "sum": "so'm",
+    "unlimited": "Unlimited",
+    "advanceLabel": "Prepayment",
+    "remainingLabel": "Remaining",
+    "unlimitedAdvanceHint": "Only 1 hour is prepaid. Extra time is settled at the till when the session ends."
   },
   "auth": {
     "loading": "Loading...",

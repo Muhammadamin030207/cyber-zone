@@ -27,10 +27,21 @@ import {
   freeWindowsInDay,
   toISODate,
   type SlotNorm,
+  type WorkingHoursNorm,
 } from '../utils/time';
 import { getPromoIdentityIds, isPromoRecipient } from '../utils/promoIdentity';
 
 const ACTIVE_BOOKING_STATUSES = ['PENDING', 'PENDING_PAYMENT', 'PARTIALLY_PAID', 'PAID', 'CONFIRMED', 'ACTIVE'] as BookingStatus[];
+
+/** Xona ish vaqtini oladi (UNLIMITED hold chegarasini shunga moslash uchun). */
+async function getRoomWorkingHours(roomId: string): Promise<WorkingHoursNorm | null> {
+  const r = await prisma.computerRoom.findUnique({
+    where: { id: roomId },
+    select: { workingHours: true },
+  });
+  if (!r) return null;
+  return normalizeWorkingHours(r.workingHours as { open?: string; close?: string } | null);
+}
 
 type BookingRow = { computerId: string | null; startTime: string; endTime: string; date: Date };
 
@@ -170,8 +181,42 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
     if (!dateInfo) return badRequest(res, 'Sana noto\'g\'ri');
     const { isoDate, date: bookingDate } = dateInfo;
 
-    // Yakuniy vaqt — backend avtoritet: durationHours berilsa endTime undan hisoblanadi
-    if (durationHours !== undefined && durationHours !== null && toNumber(durationHours) > 0) {
+    // ======== UNLIMITED: mijoz yuborgan davomiylik BUTUNLAY e'tiborsiz ========
+    // Cheksiz sessiyada vaqt chegarasi yo'q: foydalanuvchi qancha o'tirsa
+    // shuncha to'laydi. Bron kompyuterni KUN BO'YI ushlab turadi, shuning
+    // uchun band qilingan slot = ish kunining qolgan qismi. Narx esa
+    // BIR SOATLIK bo'ladi (§17) — qolgani sessiya tugagach kassada yopiladi.
+    // Bu yerda barchasi server tomonda qaror qilinadi: `durationHours` va
+    // `endTime` mijoz yuborgan bo'lsa ham qo'llanMAYDI.
+    let unlimitedHold: { open: number; close: number } | null = null;
+
+    if (isUnlimited) {
+      const wh0 = await getRoomWorkingHours(roomId);
+      // `getRoomWorkingHours` allaqchon NORMALIZATSHIY qilgan holda
+      // DAQIQALARDA qaytaradi ({ open: 540, close: 1380 }). Bu qiymatlarni
+      // yana `parseTime` orqali "HH:MM" deb o'qish — har doim `null` beradi
+      // ("540" vaqt emas), natijada `unlimitedHold` hech qachon to'g'ri
+      // ish vaqtini olmaydi va hold doim "00:00-23:59" ga tushadi.
+      // Bu holda `startMin >= closeMin0` ham `null` solishtiruvi tufayli
+      // `false` bo'lardi — xona yopilgandan keyingi bron ham noto'g'ri
+      // qaror qabul qilardi. Shu sababli to'g'ridan-to'g'ri raqam ishlatiladi.
+      const openMin0 = wh0?.open ?? 0;
+      const closeMin0 = wh0?.close ?? 24 * 60;
+      if (closeMin0 > openMin0) {
+        unlimitedHold = { open: openMin0, close: closeMin0 };
+        // Xona yopilgandan keyin boshlanayotgan cheksiz bron — keyingi
+        // ish kuniga (00:00 dan keyingi ochilishgacha) band qilinadi.
+        if (startMin >= closeMin0) {
+          endTime = '23:59';
+        } else {
+          endTime = minutesToHHMM(closeMin0);
+        }
+      } else {
+        unlimitedHold = { open: 0, close: 24 * 60 };
+        endTime = '23:59';
+      }
+    } else if (durationHours !== undefined && durationHours !== null && toNumber(durationHours) > 0) {
+      // Yakuniy vaqt — backend avtoritet: durationHours berilsa endTime undan hisoblanadi
       const durationMin = Math.round(toNumber(durationHours) * 60);
       if (durationMin <= 0) return badRequest(res, 'Davomiylik noto\'g\'ri', 'INVALID_DURATION');
       const endMin = startMin + durationMin;
@@ -210,7 +255,7 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
     // ============ VIP: faqat 1 soatlik bron (server avtoriteti) ============
     // VIP zonada bir bron 1 soatdan oshmasligi kerak. Frontend cheklasa ham,
     // bu yerda qayta tekshiriladi — "soat bo'yicha" to'lov shu mantiqaga asoslanadi.
-    if (zone.type === 'VIP') {
+    if (zone.type === 'VIP' && !isUnlimited) {
       const maxMinutes = config.vip.maxBookingMinutes;
       if (slot.end - slot.start > maxMinutes) {
         return badRequest(
@@ -222,7 +267,18 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
     }
 
     const wh = normalizeWorkingHours(room.workingHours as { open?: string; close?: string } | null);
-    if (!slotWithinWorkingHours(slot, wh)) {
+    if (isUnlimited) {
+      // Cheksiz bron uchun "slot" — kun oxirigacha, narxi 1 soat.
+      // Faqat boshlanish VAQTI ish vaqtiga sig'ishi kerak (tunda kirsangiz —
+      // xona yopiq bo'lsa, bron yaratilmaydi).
+      if (unlimitedHold && (startMin < unlimitedHold.open || startMin >= unlimitedHold.close)) {
+        return badRequest(
+          res,
+          `Cheksiz sessiya faqat ish vaqtida boshlanadi: ${minutesToHHMM(wh.open)} - ${minutesToHHMM(wh.close)}`,
+          'BOOKING_OUTSIDE_WORKING_HOURS',
+        );
+      }
+    } else if (!slotWithinWorkingHours(slot, wh)) {
       return badRequest(res, `Ish vaqti: ${minutesToHHMM(wh.open)} - ${minutesToHHMM(wh.close)}`, 'BOOKING_OUTSIDE_WORKING_HOURS');
     }
 
@@ -230,16 +286,21 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
     let promo = null;
     if (promoCode) {
       promo = await prisma.promoCode.findUnique({ where: { code: String(promoCode).toUpperCase() } });
-      if (!promo || !promo.isActive) return badRequest(res, 'Promo-kod topilmadi yoki nofaol');
+    if (!promo) return badRequest(res, 'Promokod topilmadi.', 'PROMO_NOT_FOUND');
+    // Nofaol kod "topilmadi" emas — kod bor, faqat admin o'chirgan. Xabarni
+    // ajratamiz: mijoz nima uchun ishlamayotganini tushsin.
+    if (!promo.isActive) return badRequest(res, 'Bu promokod nofaol.', 'PROMO_INACTIVE');
 
-      const now = new Date();
-      if (now < promo.startsAt || now > promo.expiresAt) return badRequest(res, 'Promo-kod muddati tugagan');
+    const now = new Date();
+    if (now < promo.startsAt || now > promo.expiresAt) {
+      return badRequest(res, "Promokodning muddati tugagan.", 'PROMO_EXPIRED');
+    }
 
       if (promo.maxUses !== null && promo.usageScope !== 'MULTI_USE' && promo.usedCount >= promo.maxUses) {
-        return badRequest(res, 'Promo-kod limiti tugagan');
+        return badRequest(res, 'Bu promokodning umumiy limiti tugagan.', 'PROMO_GLOBAL_LIMIT');
       }
       if (promo.roomId && promo.roomId !== roomId) {
-        return badRequest(res, 'Bu promo-kod boshqa xona uchun');
+        return badRequest(res, 'Bu promo-kod boshqa xona uchun', 'PROMO_WRONG_ROOM');
       }
     }
 
@@ -348,7 +409,15 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
         }
 
         // Narxni hisoblash — barchasi tiyingacha yaxlitlanadi (float xatolik yo'q)
-        const duration = toNumber(durationHours) || Math.round(((slot.end - slot.start) / 60) * 100) / 100;
+        //
+        // UNLIMITED: narx DOIM 1 soatlik. Mijoz qancha o'tirsa, sessiya
+        // tugagach `finalizeSession` → `computeSessionCharge` haqiqiy sarflangan
+        // soat bo'yicha qayta hisoblaydi va qoldiqni qarz qilib yozadi (§17).
+        // Bu yerda band qilingan interval (kun oxirigacha) — faqat kompyuterni
+        // ushlab turish uchun; narxga ta'sir qilmaydi.
+        const duration = isUnlimited
+          ? 1
+          : (toNumber(durationHours) || Math.round(((slot.end - slot.start) / 60) * 100) / 100);
 
         // Bonus ballarni tekshirish (1 ball = 1 so'm), sarflash transaktsiya ichida
         // Frontend boolean (usePoints) yuboradi — barcha mavjud bal taklif qilinadi,
@@ -369,6 +438,10 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
           durationHours: duration,
           promo,
           pointsToUse,
+          // UNLIMITED: faqat 1 soat oldindan to'lanadi — to'liq bir soatlik
+          // narx (chegirmalar keyin). Keyingi soatlar `finalizeSession`
+          // bo'yicha haqiqiy sarflangan vaqt uchun qarz qilinadi (§17).
+          prepayFull: isUnlimited,
         });
 
         if (promo && toNumber(promo.minBookingAmount) && pricing.baseTotal < toNumber(promo.minBookingAmount)) {
@@ -490,10 +563,32 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
       if (msg === 'COMPUTER_BUSY') return badRequest(res, 'Bu kompyuter hozirda band');
       if (msg === 'NO_FREE_COMPUTER') return badRequest(res, 'Ushbu vaqt uchun bo\'sh kompyuter yo\'q', 'ROOM_FULL');
       if (msg === 'INSUFFICIENT_POINTS') return badRequest(res, 'Bonus ballaringiz yetarli emas');
-      if (msg === 'MIN_AMOUNT_NOT_REACHED') return badRequest(res, 'Bu promo koddan foydalanish uchun minimal to\u2019lov 100 000 so\u2019m.');
-      if (msg === 'PROMO_LIMIT_REACHED') return badRequest(res, 'Bu promo-kod uchun ishlatish limiti tugagan');
-      if (msg === 'PERSONAL_PROMO_NOT_FOR_USER') return badRequest(res, 'Bu promo-kod shaxsiy va siz uchun emas');
-      if (msg === 'PERSONAL_PROMO_LIMIT_REACHED') return badRequest(res, 'Shaxsiy promo-kodingiz ishlatish limiti tugagan');
+      // Xatolar `code` bilan birga qaytariladi — frontend bir xil
+      // `PROMO_*` kodini turli yo'llarda ko'rib, xabarni chalkashtirmasin.
+      if (msg === 'MIN_AMOUNT_NOT_REACHED') {
+        const min = toNumber(promo?.minBookingAmount);
+        // `Intl` minglik ajratgich sifatida U+00A0 (no-break space) qo'yadi —
+        // u ko'rinadi, lekin `includes('100 000')` (oddiy bo'shliq) bilan
+        // topilmaydi, va ba'zi klientlarda satrni buzadi. Oddiy bo'shliqqa
+        // almashtiramiz: ko'rinish bir xil, matn esa barqaror qiyoslanadi.
+        const amount = min > 0 ? new Intl.NumberFormat('ru-RU').format(min).replace(/\u00a0/g, ' ') : '';
+        return badRequest(
+          res,
+          min > 0
+            ? `Bu promokod uchun minimal to\u2019lov ${amount} so\u2019m.`
+            : "Bu promokod uchun minimal to\u2019lov bajarilmadi.",
+          'PROMO_MIN_AMOUNT',
+        );
+      }
+      if (msg === 'PROMO_LIMIT_REACHED') {
+        return badRequest(res, "Bu promokodning foydalanish limiti tugagan.", 'PROMO_USER_LIMIT');
+      }
+      if (msg === 'PERSONAL_PROMO_NOT_FOR_USER') {
+        return badRequest(res, "Bu promo-kod shaxsiy va siz uchun emas.", 'PROMO_NOT_FOR_USER');
+      }
+      if (msg === 'PERSONAL_PROMO_LIMIT_REACHED') {
+        return badRequest(res, "Shaxsiy promo-kodingizning limiti tugagan.", 'PROMO_PERSONAL_LIMIT');
+      }
       if (msg.startsWith('CONFLICT_')) {
         const [, s, e] = msg.split('_');
         return badRequest(res, `Bu kompyuter ${s} - ${e} vaqtda band`, 'BOOKING_TIME_ALREADY_RESERVED');
