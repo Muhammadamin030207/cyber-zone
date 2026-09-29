@@ -347,6 +347,20 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
           if (usedByIdentity >= (promo.usageLimitPerUser ?? 1)) {
             throw new Error(promo.isPersonal ? 'PERSONAL_PROMO_LIMIT_REACHED' : 'PROMO_LIMIT_REACHED');
           }
+
+          // ======== GLOBAL KAFOLAT: maxUses =====
+          // `maxUses` faqat `/api/promo/me` ro'yxatida filtr qilib qo'yilgan
+          // edi — BRON yaratishda hech qanday tekshiruv YO'Q edi. Ya'ni kod
+          // "100 marta" deb belgilangan bo'lsa ham, 101-omildan boshlab hech
+          // kim uni ishlatmasligi nazorat qilinmasdi. Bu promo-marketing byudjeti
+          // uchun to'g'ridan-to'g'ri xavf.
+          // Endi limit transaktsiya ichida, promo bo'yicha lock ostida tekshiriladi.
+          if (promo.maxUses !== null && promo.maxUses !== undefined) {
+            const usedTotal = await tx.booking.count({
+              where: { promoCodeId: promo.id, status: { not: 'CANCELLED' } },
+            });
+            if (usedTotal >= promo.maxUses) throw new Error('PROMO_GLOBAL_LIMIT_REACHED');
+          }
         }
 
         if (computerId) {
@@ -588,6 +602,9 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
       }
       if (msg === 'PERSONAL_PROMO_LIMIT_REACHED') {
         return badRequest(res, "Shaxsiy promo-kodingizning limiti tugagan.", 'PROMO_PERSONAL_LIMIT');
+      }
+      if (msg === 'PROMO_GLOBAL_LIMIT_REACHED') {
+        return badRequest(res, "Bu promokod umumiy foydalanish chegarasiga yetdi.", 'PROMO_GLOBAL_LIMIT');
       }
       if (msg.startsWith('CONFLICT_')) {
         const [, s, e] = msg.split('_');

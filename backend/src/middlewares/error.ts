@@ -77,10 +77,21 @@ export function errorHandler(err: any, req: Request, res: Response, next: NextFu
 
   // Fayl yuklash (multer) xatolari — 400
   if (err?.name === 'MulterError') {
+    // Limit endpointga bog'liq: avatar 2MB, xona rasmi 5MB, chek/qabul 8MB.
+    // Oldin bitta qatorda "5MB" yozilgan edi — 2MB limiti bilan rad etilgan
+    // faylda mijozga noto'g'ri raqam ko'rsatilardi.
     const msg = err.code === 'LIMIT_FILE_SIZE'
-      ? 'Fayl hajmi 5MB dan oshmasligi kerak'
+      ? 'Fayl hajmi chegarasidan oshdi (rasm 5MB, hujjat 8MB)'
       : 'Fayl yuklashda xatolik yuz berdi';
     return body(400, msg, 'UPLOAD_FAILED');
+  }
+  // Multer 2.x: noto'g'ri/buzilgan multipart so'rovi `MulterError` EMAS —
+  // oddiy `Error`/`Error: Multipart: Boundary not found` shaklida keladi va
+  // ilgari 500 ga tushib, DoS (javobsiz xotira/soat) keltirardi
+  // (CVE-2025-47935 sinfi). Endi 400 qaytaramiz va hech qanday ichki
+  // detailni mijozga ko'rsatmaymiz.
+  if (err?.message && /multipart|boundary|stream\.not\.readable|Unexpected end of form/i.test(String(err.message))) {
+    return body(400, 'Fayl so\'rovi noto\'g\'ri yoki buzilgan', 'INVALID_UPLOAD');
   }
   if (err?.message && /yuklash mumkin|rasm/.test(err.message)) {
     return body(400, err.message, 'INVALID_FILE');

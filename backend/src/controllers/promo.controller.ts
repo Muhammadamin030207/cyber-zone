@@ -246,24 +246,23 @@ export const getMyPromosUser = async (req: AuthRequest, res: Response, next: Nex
               { isPersonal: true, recipientEmail: user?.email.toLowerCase() || '' },
             ],
           },
-          // Jami limit: cheksiz yoki MULTI_USE.
-          // ESDA: `prisma.promoCode.fields.maxUses` runtime'da mavjud EMAS —
-          // `where: { usedCount: { lt: <boshqa ustun> } }` Prisma'da
-          // ifoda qilinmaydi. `usedCount < maxUses` solishtiruvi JS'da
-          // (`withinGlobalLimit`) bajariladi.
-          { OR: [{ maxUses: null }, { usageScope: 'MULTI_USE' }] },
+          // Jami limit: cheksiz yoki hali tugamagan.
+          // `prisma.promoCode.fields.maxUses` — Prisma field-reference API:
+          // `usedCount < maxUses` ni bitta SQL shartga aylantiradi (boshqa
+          // ustun bilan solishtirish WHERE ichida ifoda qilinmaydi, shuning
+          // uchun JS'da filtrlash kerak edi — lekin bu filtr DB'dan KEYIN
+          // kelar edi va o'sha "yakuniy" filtr butunlay o'lik kod bo'lib
+          // qolardi: `maxUses: 100` lekin `usageScope: SINGLE_USE` kod
+          // hech qachon foydalanuvchiga ko'rinmasdi).
+          { OR: [{ maxUses: null }, { usageScope: 'MULTI_USE' }, { usedCount: { lt: prisma.promoCode.fields.maxUses } }] },
         ],
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    const withinGlobalLimit = candidates.filter(
-      (p) => p.maxUses === null || p.usageScope === 'MULTI_USE' || p.usedCount < p.maxUses,
-    );
-
     // Har bir kod uchun o'zim necha marta ishlatganimni hisoblaymiz
     const promos = await Promise.all(
-      withinGlobalLimit
+      candidates
         .filter((p) => {
           if (!p.isPersonal) return true;
           return isPromoRecipient(p, {

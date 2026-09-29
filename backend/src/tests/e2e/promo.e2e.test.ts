@@ -366,3 +366,66 @@ describe('E2E: GET /api/promo/check — kirishsiz va shaxsiy limit', () => {
     expect(res.body.code).toBe('PROMO_INACTIVE');
   });
 });
+
+/**
+ * Anti-abuse kafolatlari (§3). Oldingi holatda `maxUses` faqat `/api/promo/me`
+ * ro'yxatida filtr qilib qo'yilgan edi — BRON yaratishda umuman tekshirilmasdi.
+ * Ya'ni "100 marta" belgilangan kodni 1000 kishi ishlatishi mumkin edi.
+ */
+describe('E2E: promo global limit va twin-account himoyasi', () => {
+  let room: any;
+  let zone: any;
+  let adminToken: string;
+
+  beforeAll(async () => {
+    await reset();
+    const admin = await createUserDirect({ email: 'g-admin@e2e.test', password: 'secret123', role: 'SUPER_ADMIN' });
+    adminToken = await login('g-admin@e2e.test', 'secret123');
+    const fixture = await createRoomFixture(admin!.id);
+    room = fixture.room;
+    zone = fixture.zone;
+    for (const n of ['G1', 'G2', 'G3']) {
+      await prisma.computer.create({ data: { zoneId: zone.id, name: `PC-${n}`, status: 'AVAILABLE', specs: {} } });
+    }
+    // maxUses: 2 — uch xil turli akkaunt bilan urinish
+    await api().post('/api/promo').set('Authorization', auth(adminToken)).send({
+      code: 'GLOBAL2', discountType: 'PERCENTAGE', discountValue: 10,
+      minBookingAmount: 0, maxUses: 2, expiresAt: '2099-01-01',
+    });
+  });
+
+  it('maxUses BRON paytida ham server tomonda tekshiriladi (1 va 2 o\'tadi, 3 rad etiladi)', async () => {
+    // Uch xil akkaunt — twin-account simulatsiyasi. Ularning hech biriga
+    // telefon yo'q, shuning uchun per-user limit ulardan qochadi:
+    // faqat GLOBAL limit ularni to'xtatishi mumkin.
+    const tokens: string[] = [];
+    for (const n of ['a', 'b', 'c']) {
+      await api().post('/api/auth/register').set('X-Forwarded-For', nextIp())
+        .send({ email: `g-${n}@e2e.test`, password: 'secret123', fullName: `G ${n}` });
+      tokens.push(await login(`g-${n}@e2e.test`, 'secret123'));
+    }
+
+    const dates = ['2026-12-15', '2026-12-16', '2026-12-17'];
+    const first = await api().post('/api/bookings').set('Authorization', auth(tokens[0])).send({
+      roomId: room.id, zoneId: zone.id, date: dates[0], startTime: '09:00',
+      durationHours: 5, promoCode: 'GLOBAL2', idempotencyKey: 'g-1',
+    });
+    expect(first.status).toBe(201);
+
+    // Ikkinchi akkaunt: per-user limit o'ziga tegilmaydi (boshqa shaxs),
+    // ammo global limit hali to'lmagan -> o'tishi kerak.
+    const second = await api().post('/api/bookings').set('Authorization', auth(tokens[1])).send({
+      roomId: room.id, zoneId: zone.id, date: dates[1], startTime: '09:00',
+      durationHours: 5, promoCode: 'GLOBAL2', idempotencyKey: 'g-2',
+    });
+    expect(second.status).toBe(201);
+
+    // Uchinchi: global chegara tugagan -> rad etilishi SHART.
+    const third = await api().post('/api/bookings').set('Authorization', auth(tokens[2])).send({
+      roomId: room.id, zoneId: zone.id, date: dates[2], startTime: '09:00',
+      durationHours: 5, promoCode: 'GLOBAL2', idempotencyKey: 'g-3',
+    });
+    expect(third.status).toBe(400);
+    expect(third.body.code).toBe('PROMO_GLOBAL_LIMIT');
+  });
+});
