@@ -43,6 +43,45 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
   }
 }
 
+/**
+ * Ixtiyoriy autentifikatsiya — token BO'LSA `req.user` to'ldiriladi, yo'q
+ * yoki yaroqsiz bo'lsa so'rov davom etadi (401 bermaydi).
+ *
+ * Qachon kerak: ommaviy frontend yo'llari (masalan `GET /api/promo/check`)
+ * kirishsiz ham ishlashi kerak, lekin token yuborilganda shaxsiy ma'lumot
+ * (shaxsiy limit, "allaqachon ishlatilgan") tekshirilishi kerak. To'liq
+ * `authenticate` bu yerda noto'g'ri — u kirishsiz foydalanuvchini rad etar,
+ * `checkPromo` esa `req.user` yo'qligi sabab per-user limitni HECH QACHON
+ * ishga tushirmaydi (limit "yaroqli", keyin booking paytida "limit tugagan").
+ */
+export async function optionalAuthenticate(req: AuthRequest, res: Response, next: NextFunction) {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) return next();
+  // `authenticate` barcha muvaffaqiyatsiz holatlarda 401 qaytaradi — biz u
+  // yerda javobni yuborib tugatmasligimiz kerak, shuning uchun o'zimiz
+  // tekshiramiz va har qanday xatoni "jimgina o'tkazib yuboramiz".
+  try {
+    const decoded: JwtPayload = verifyAccessToken(header.split(' ')[1]);
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, role: true, status: true, tokenVersion: true },
+    });
+    // Bloklangan yoki eskirgan sessiya — foydalanuvchi sifatida hisobga
+    // olmaymiz (lekin so'rov ham rad etilmaydi).
+    if (user && user.status === 'ACTIVE' && (decoded.tokenVersion ?? 0) === user.tokenVersion) {
+      req.user = {
+        userId: user.id,
+        email: decoded.email,
+        role: user.role as JwtPayload['role'],
+        tokenVersion: user.tokenVersion,
+      };
+    }
+  } catch {
+    // Token yaroqsiz — davom etamiz, `req.user` bo'sh qoladi.
+  }
+  next();
+}
+
 export function authorize(...roles: string[]) {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {

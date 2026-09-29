@@ -275,3 +275,94 @@ describe('E2E: Promo-kod — admin ro\'yxatida muddati o\'tgan kod yashiriladi',
     expect(res.body.success).not.toBe(true);
   });
 });
+
+/**
+ * `GET /api/promo/check` — frontend shu endpoint orqali "promo kiritdimi?"
+ * degan savolga javob oladi. Ikki talab bor:
+ *   1) KIRISHISIZ ham ishlashi kerak (login sahifasidan kirish mumkin)
+ *   2) TOKEN bo'lsa shaxsiy limit ham tekshirilishi kerak — aks holda
+ *      foydalanuvchi "yaroqli" ko'rib, keyin booking paytida "limit
+ *      tugagan" xatosini oladi (chalkash hisob-kitob).
+ */
+describe('E2E: GET /api/promo/check — kirishsiz va shaxsiy limit', () => {
+  let room: any;
+  let zone: any;
+  let adminToken: string;
+  let userToken: string;
+
+  beforeAll(async () => {
+    await reset();
+    const admin = await createUserDirect({ email: 'check-admin@e2e.test', password: 'secret123', role: 'SUPER_ADMIN' });
+    adminToken = await login('check-admin@e2e.test', 'secret123');
+    const fixture = await createRoomFixture(admin!.id);
+    room = fixture.room;
+    zone = fixture.zone;
+    await prisma.computer.create({ data: { zoneId: zone.id, name: 'PC-CHK', status: 'AVAILABLE', specs: {} } });
+
+    await api().post('/api/auth/register').set('X-Forwarded-For', nextIp()).send({ email: 'check-user@e2e.test', password: 'secret123', fullName: 'Check User' });
+    userToken = await login('check-user@e2e.test', 'secret123');
+
+    await api().post('/api/promo').set('Authorization', auth(adminToken)).send({
+      code: 'CHECK10', discountType: 'PERCENTAGE', discountValue: 10, minBookingAmount: 100000, expiresAt: '2099-01-01',
+    });
+  });
+
+  async function bookWithPromo(key: string) {
+    return api()
+      .post('/api/bookings')
+      .set('Authorization', auth(userToken))
+      .send({
+        roomId: room.id, zoneId: zone.id, date: '2026-12-15',
+        startTime: '09:00', durationHours: 5, promoCode: 'CHECK10', idempotencyKey: key,
+      });
+  }
+
+  it('kirishsiz chaqirish ishlaydi (401 emas) va limit tekshirilmaganini aytadi', async () => {
+    const res = await api().get('/api/promo/check?code=CHECK10');
+    expect(res.status).toBe(200);
+    expect(res.body.data.code).toBe('CHECK10');
+    // Kirishsiz: shaxsiy limit tekshirilmagan — frontend buni yashirishi mumkin
+    expect(res.body.data.personalLimitChecked).toBe(false);
+  });
+
+  it('token bilan chaqirilganda shaxsiy limit TEKSHIRILADI', async () => {
+    const res = await api().get('/api/promo/check?code=CHECK10').set('Authorization', auth(userToken));
+    expect(res.status).toBe(200);
+    expect(res.body.data.personalLimitChecked).toBe(true);
+  });
+
+  it('limit tugagach /check ham rad etadi — booking paytidagi xatoga tegishli emas', async () => {
+    const booked = await bookWithPromo('check-1');
+    expect(booked.status).toBe(201);
+
+    // Mijoz endi kodni qayta kiritsa — "yaroqli" emas, aniq "limit tugagan"
+    const res = await api().get('/api/promo/check?code=CHECK10').set('Authorization', auth(userToken));
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('PROMO_USER_LIMIT');
+    expect(res.body.message).toContain('limiti tugagan');
+
+    // Booking ham rad etiladi (server tomonda tekshiriladi)
+    const again = await bookWithPromo('check-2');
+    expect(again.status).toBe(400);
+    expect(again.body.code).toBe('PROMO_USER_LIMIT');
+  });
+
+  it('noma\'lum kod -> PROMO_NOT_FOUND; nofaol kod -> PROMO_INACTIVE (chetlab o\'tmaydi)', async () => {
+    const missing = await api().get('/api/promo/check?code=YOQOTILGAN');
+    expect(missing.status).toBe(400);
+    expect(missing.body.code).toBe('PROMO_NOT_FOUND');
+
+    await api().post('/api/promo').set('Authorization', auth(adminToken)).send({
+      code: 'OFFCODE', discountType: 'FIXED', discountValue: 5000, expiresAt: '2099-01-01',
+    });
+    // Nofaol qilish uchun ID kerak — ro'yxatdan olamiz
+    const list = await api().get('/api/promo').set('Authorization', auth(adminToken));
+    const offId = (list.body.data as any[]).find((p) => p.code === 'OFFCODE').id;
+    const disabled = await api().patch(`/api/promo/${offId}`).set('Authorization', auth(adminToken)).send({ isActive: false });
+    expect(disabled.status).toBe(200);
+
+    const res = await api().get('/api/promo/check?code=OFFCODE').set('Authorization', auth(userToken));
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('PROMO_INACTIVE');
+  });
+});

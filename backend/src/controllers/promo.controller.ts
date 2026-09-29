@@ -236,28 +236,34 @@ export const getMyPromosUser = async (req: AuthRequest, res: Response, next: Nex
         isActive: true,
         startsAt: { lte: now },
         expiresAt: { gte: now },
-        OR: [
-          { isPersonal: false },
-          { isPersonal: true, recipientUserId: { in: identityIds } },
-          { isPersonal: true, recipientPhone: user?.phone || '' },
-          { isPersonal: true, recipientEmail: user?.email.toLowerCase() || '' },
-        ],
         AND: [
+          // Shaxsiy bo'lsa — faqat o'zim uchun.
           {
             OR: [
-              { maxUses: null },
-              { usageScope: 'MULTI_USE' },
-              { usedCount: { lt: prisma.promoCode.fields.maxUses } },
+              { isPersonal: false },
+              { isPersonal: true, recipientUserId: { in: identityIds } },
+              { isPersonal: true, recipientPhone: user?.phone || '' },
+              { isPersonal: true, recipientEmail: user?.email.toLowerCase() || '' },
             ],
           },
+          // Jami limit: cheksiz yoki MULTI_USE.
+          // ESDA: `prisma.promoCode.fields.maxUses` runtime'da mavjud EMAS —
+          // `where: { usedCount: { lt: <boshqa ustun> } }` Prisma'da
+          // ifoda qilinmaydi. `usedCount < maxUses` solishtiruvi JS'da
+          // (`withinGlobalLimit`) bajariladi.
+          { OR: [{ maxUses: null }, { usageScope: 'MULTI_USE' }] },
         ],
       },
       orderBy: { createdAt: 'desc' },
     });
 
+    const withinGlobalLimit = candidates.filter(
+      (p) => p.maxUses === null || p.usageScope === 'MULTI_USE' || p.usedCount < p.maxUses,
+    );
+
     // Har bir kod uchun o'zim necha marta ishlatganimni hisoblaymiz
     const promos = await Promise.all(
-      candidates
+      withinGlobalLimit
         .filter((p) => {
           if (!p.isPersonal) return true;
           return isPromoRecipient(p, {
@@ -295,7 +301,7 @@ export const getMyPromosUser = async (req: AuthRequest, res: Response, next: Nex
 };
 
 // ============ GET /api/promo/check?code=&room_id= — USER: kodni tekshirish ============
-export const checkPromo = async (req: Request, res: Response, next: NextFunction) => {
+export const checkPromo = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { code, room_id } = req.query as { code?: string; room_id?: string };
     if (!code) return badRequest(res, 'code kerak');
@@ -303,18 +309,44 @@ export const checkPromo = async (req: Request, res: Response, next: NextFunction
     const normalized = String(code).toUpperCase();
     // Ma'lumot ochish uchun muhim emas — faqat kod validligi
     const promo = await prisma.promoCode.findUnique({ where: { code: normalized } });
-    if (!promo || !promo.isActive) return badRequest(res, 'Promo-kod topilmadi yoki nofaol');
+    if (!promo) return badRequest(res, 'Promokod topilmadi.', 'PROMO_NOT_FOUND');
+    // Nofaol kod "topilmadi" emas — kod bor, faqat admin o'chirgan. Xabarni
+    // ajratamiz: mijoz nima uchun ishlamayotganini tushsin.
+    if (!promo.isActive) return badRequest(res, 'Bu promokod nofaol.', 'PROMO_INACTIVE');
 
     const now = new Date();
-    if (now < promo.startsAt || now > promo.expiresAt) return badRequest(res, 'Promo-kod muddati tugagan');
+    if (now < promo.startsAt || now > promo.expiresAt) {
+      return badRequest(res, "Promokodning muddati tugagan.", 'PROMO_EXPIRED');
+    }
     // MULTI_USE: jami limit yo'q (faqat per-user unique constraint). Boshqa scope'da
     // maxUses hali jami sifatida cheklanadi.
     if (promo.usageScope !== 'MULTI_USE' && promo.maxUses !== null && promo.usedCount >= promo.maxUses) {
-      return badRequest(res, 'Promo-kod limiti tugagan');
+      return badRequest(res, 'Bu promokodning umumiy limiti tugagan.', 'PROMO_GLOBAL_LIMIT');
     }
 
     if (room_id && promo.roomId && promo.roomId !== room_id) {
-      return badRequest(res, 'Bu promo-kod boshqa xona uchun');
+      return badRequest(res, 'Bu promo-kod boshqa xona uchun', 'PROMO_WRONG_ROOM');
+    }
+
+    // Per-account limitni HAM shu yerda tekshiramiz. Aks holda foydalanuvchi
+    // "yaroqli" deb ko'rib, keyin booking paytida "limit tugagan" xatosini
+    // olardi — bu hisob kitobi chalkashligining asosiy sababi (§20).
+    // Autentifikatsiyalangan bo'lsa, shaxsiy "twin" akkauntlar ham hisobga olinadi.
+    const authed = (req as AuthRequest).user;
+    if (authed?.userId) {
+      const identityIds = await getPromoIdentityIds(prisma, authed.userId);
+      const usedByIdentity = await prisma.booking.count({
+        where: { userId: { in: identityIds }, promoCodeId: promo.id, status: { not: 'CANCELLED' } },
+      });
+      if (usedByIdentity >= (promo.usageLimitPerUser ?? 1)) {
+        return badRequest(
+          res,
+          promo.isPersonal
+            ? "Shaxsiy promo-kodingizning limiti tugagan."
+            : "Bu promokodning foydalanish limiti tugagan.",
+          promo.isPersonal ? 'PROMO_PERSONAL_LIMIT' : 'PROMO_USER_LIMIT',
+        );
+      }
     }
 
     return ok(res, {
@@ -325,6 +357,11 @@ export const checkPromo = async (req: Request, res: Response, next: NextFunction
       minBookingAmount: promo.minBookingAmount,
       usageScope: promo.usageScope,
       usageLimitPerUser: promo.usageLimitPerUser,
+      // Shaxsiy limit tekshirildimi? Frontend shu qiymatga qarab
+      // xabarni aniq ko'rsatadi: `false` bo'lsa "siz allaqachon ishlatgansiz"
+      // degani tekshirilMAGAN — umumiy ma'lumot. Kiritishsiz chaqiruvda
+      // `req.user` yo'q, shuning uchun `false`.
+      personalLimitChecked: Boolean(authed?.userId),
       isPersonal: promo.isPersonal,
       expiresAt: promo.expiresAt,
     }, 'Promo-kod yaroqli');
