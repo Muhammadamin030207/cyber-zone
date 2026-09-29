@@ -34,8 +34,21 @@ export interface FactorGate {
   requiresTwoFactorAfterPasskey?: boolean;
 }
 
-/** Passkey talabi qo'yilgan, lekin hech qanday passkey ro'yxatlanmagan. */
-async function passkeyRequiredButNone(user: FactorPolicyUser): Promise<boolean> {
+/**
+ * Kirishda passkey bosqichi talab qilinadimi?
+ *
+ * `requirePasskey` admin tomonidan yoqilgan flag. U faqat foydalanuvchida
+ * kamida bitta passkey BO'LGANDA qo'llaniladi — aks holda passkey bosqichini
+ * o'tkazib bo'lmaydi va foydalanuvchi parol bilan qolib ketadi (login dead-end).
+ * `updateRequirePasskey` ham aynan shu shartni tekshiradi.
+ *
+ * ESDA: eski versiya shu yerda `count > 0` ni `count === 0` ga teskari
+ * yozgan va funksiya nomi ("...ButNone") ham teskari edi. `removePasskey`
+ * oxirgi passkeyni o'chirganda `requirePasskey` ni tozalamasdi — shu tufayli
+ * "passkey talabi qo'yilgan, lekin passkey yo'q" holati passkey bosqichi
+ * butunlay tushib qolardi.
+ */
+async function isPasskeyFactorRequired(user: FactorPolicyUser): Promise<boolean> {
   if (!user.requirePasskey) return false;
   const count = await prisma.passkey.count({ where: { userId: user.id } });
   return count > 0;
@@ -49,7 +62,7 @@ async function passkeyRequiredButNone(user: FactorPolicyUser): Promise<boolean> 
  */
 export async function evaluateRemainingFactors(passed: FactorPolicyUser): Promise<FactorGate> {
   // 1-bosqich: passkey. Talab qilingan va mavjud bo'lsa — avval shu.
-  if (await passkeyRequiredButNone(passed)) {
+  if (await isPasskeyFactorRequired(passed)) {
     const alsoNeeds2fa = Boolean(passed.twoFactorEnabled && passed.twoFactorSecret);
     return {
       pending: 'pending-passkey',

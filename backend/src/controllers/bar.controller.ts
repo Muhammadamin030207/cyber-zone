@@ -132,6 +132,23 @@ export const createBarOrder = async (req: AuthRequest, res: Response, next: Next
     const room = await prisma.computerRoom.findUnique({ where: { id: roomId } });
     if (!room) return notFoundMsg(res, 'Xona topilmadi');
 
+    // Xavfsizlik (BOLA): `bookingId` mijoz tomonidan yuboriladi. Uni
+    // tekshirmasak, foydalanuvchi O'ZGA bronini tanlab qo'yishi mumkin —
+    // admin ko'rsatkida esa boshqa foydalanuvchining sana/vaqti ko'rinadi.
+    // Faqat o'z broniga ulash mumkin.
+    if (bookingId) {
+      const booking = await prisma.booking.findUnique({
+        where: { id: String(bookingId) },
+        select: { id: true, userId: true, roomId: true },
+      });
+      if (!booking || booking.userId !== req.user!.userId) {
+        return forbidden(res, 'Bu bron sizniki emas');
+      }
+      if (booking.roomId !== roomId) {
+        return badRequest(res, 'Bu bron boshqa xonaga tegishli');
+      }
+    }
+
     // Narx serverda hisoblanadi (qalbakilashtirishdan himoya)
     let total = 0;
     const lines: any[] = [];

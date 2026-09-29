@@ -459,7 +459,21 @@ export async function removePasskey(req: AuthRequest, res: Response, next: NextF
       }
     }
 
-    await prisma.passkey.delete({ where: { id: passkey.id } });
+    // Oxirgi passkey o'chirilganda `requirePasskey` ni tozalaymiz — aks holda
+    // hisob "passkey talabi qo'yilgan, lekin passkey yo'q" holatiga tushadi
+    // va keyingi kirishda passkey bosqichi butunlay tushib qoladi
+    // (foydalanuvchi parol bilan qolib, o'ziga xavf yaratadi).
+    const willHaveNone = user?.requirePasskey === true && remaining <= 1;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.passkey.delete({ where: { id: passkey.id } });
+      if (willHaveNone) {
+        await tx.user.update({
+          where: { id: req.user!.userId },
+          data: { requirePasskey: false },
+        });
+      }
+    });
 
     if (user) {
       void recordSecurityEvent(user.id, 'PASSKEY_REMOVED', {

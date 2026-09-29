@@ -151,7 +151,15 @@ function resolveFor(
  * mavjud bo'lsa. Aniq usul kartasi bo'lmagan usullar umumiy (UzCard/DEFAULT)
  * kartaga tushadi, shu sabab ekronda usulsiz "karta bor" holati qolmaydi.
  */
-const KNOWN_CARD_METHODS = ['UZUM', 'PAYME', 'CLICK', 'PAYNET', 'UZCARD', 'HUMO', 'VISA', 'TRANSFER'];
+/**
+ * Foydalanuvchi ko'radigan to'lov usullari — FAQAT shular (§22).
+ *
+ * UZCARD / HUMO / VISA alohida "to'lov usuli" sifatida chiqarilgan: ular
+ * karta TURLARI, mustaqil to'lov kanali emas. Ular faqat `payment_cards_by_method`
+ * ichidagi bank ma'lumotida qolishi mumkin (masalan Payme kartasi — UzCard
+ * bo'lishi mumkin), lekin hech qachon alohida tanlanadigan usul bo'lmaydi.
+ */
+const KNOWN_CARD_METHODS = ['PAYME', 'CLICK', 'PAYNET', 'UZUM', 'TRANSFER'];
 
 /**
  * Barcha SOZLANGAN kartalar — usul (katta harfda) -> karta.

@@ -237,8 +237,11 @@ export const getRoomById = async (req: Request, res: Response, next: NextFunctio
     const cached = await cacheGet<unknown>(cacheKey);
     if (cached) return ok(res, cached);
 
-    const room = await prisma.computerRoom.findUnique({
-      where: { id: req.params.id },
+    const room = await prisma.computerRoom.findFirst({
+      // Ommaviy endpoint: faqat ACTIVE xonalar. Ro'yxat (/api/rooms) va
+      // /nearby ham shuni filtr qiladi — ID ni bilsangiz ham PENDING/INACTIVE
+      // xona (zonalari, kompyuterlari, sharhlari bilan) ko'rinmasin.
+      where: { id: req.params.id, status: 'ACTIVE' },
       include: ROOM_INCLUDE,
     });
 

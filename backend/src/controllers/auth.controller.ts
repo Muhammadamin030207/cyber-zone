@@ -311,6 +311,14 @@ function unlockRateLimited(ip: string): boolean {
   const now = Date.now();
   const cur = unlockAttemptsCache.get(ip);
   if (!cur || now - cur.windowStart > windowMs) {
+    // Xotira chegarasi: har 10 daqiqada eskirgan yozuvlar tozalanadi.
+    // Cheksiz o'sish — process umriga bog'liq xotira leak — oldin ham
+    // mavjud edi (Map hech qachon tozalanmasdi).
+    if (unlockAttemptsCache.size > 10_000) {
+      for (const [k, v] of unlockAttemptsCache) {
+        if (now - v.windowStart > windowMs) unlockAttemptsCache.delete(k);
+      }
+    }
     unlockAttemptsCache.set(ip, { count: 1, windowStart: now });
     return false;
   }
