@@ -151,8 +151,13 @@ export default function LocationPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1fr_minmax(0,420px)]">
-          <div className="order-2 space-y-3 lg:order-1">
+        /* `min-w-0` MUHIM: grid elementlarining default `min-width: auto`si
+           ichidagi kengroq content (Leaflet plitkalari 256px) track'ni
+           kengaytiradi va mobil viewportda gorizontal overflow chiqadi.
+           `minmax(0,420px)` faqat lg breakpointda yordam beradi —
+           mobil bir ustunli grid uchun `min-w-0` kerak. */
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
+          <div className="order-2 space-y-3 min-w-0 lg:order-1">
             <p className="text-xs text-gray-400">
               {t('found', { count: rooms.length, radius })}
             </p>
@@ -191,7 +196,7 @@ export default function LocationPage() {
             })}
           </div>
 
-          <div className="order-1 h-[420px] overflow-hidden rounded-2xl border border-white/10 lg:order-2 lg:h-[calc(100vh-260px)] lg:min-h-[420px]">
+          <div className="order-1 h-[420px] min-w-0 overflow-hidden rounded-2xl border border-white/10 lg:order-2 lg:h-[calc(100vh-260px)] lg:min-h-[420px]">
             <RoomsMap rooms={rooms as unknown as Room[]} height={520} linkBase={`/${t('locale')}/rooms`} />
           </div>
         </div>
