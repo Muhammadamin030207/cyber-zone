@@ -322,7 +322,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
       </div>
 
       {/* Quick stats bar */}
-      <div className="mt-8 grid grid-cols-3 gap-4">
+      <div className="mt-8 grid grid-cols-1 min-[420px]:grid-cols-3 gap-4">
         {[
           { icon: Monitor, label: t('computers'), value: room.zones?.reduce((a, z) => a + (z.computers?.length || 0), 0) || 0, color: 'text-neon-cyan border-neon-cyan/30 bg-neon-cyan/10' },
           { icon: ShieldCheck, label: 'Status', value: room.status === 'ACTIVE' ? 'Ochiq' : room.status === 'INACTIVE' ? 'Yopiq' : 'Kutilmoqda', color: 'text-neon-green border-neon-green/30 bg-neon-green/10' },

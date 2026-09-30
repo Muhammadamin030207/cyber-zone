@@ -1,80 +1,87 @@
 @import "tailwindcss";
 
 /* ============================================================
-   CYBERARENA HUB — Sharp "no radius" Dark Design System
-   Aksentlar: zumrad (primary) + cyan (secondary) + oltin (subtle)
-   4 ideal mavzu: obsidian (default), midnight, cyberpunk, aurora
+   CYBER-ZONE — Neon Design System
+   Primary: CYBER ORANGE. Secondary rangi har temada o'zgaradi
+   (cyan / violet / magenta / ice), lekin `--acc-a` DOIM cyber orange.
+   Barcha mavjud komponentlar `--acc-a/b/c` orqali avtomatik yangilanadi —
+   ikkinchi stilli tizim kiritilmadi.
+   Mavzular: obsidian (default), midnight, cyberpunk, aurora, halloween
    ============================================================ */
-
-/* ---- Accent & background CSS-markerlar (runtime theme) ---- */
-/* 4 ta ideal tema: obsidian (zumrad+oltin), midnight (indigo+amber),
-   cyberpunk (siyan+magenta), aurora (muz siyan+yalpiz) */
 
 :root,
 html[data-theme="obsidian"] {
-  --acc-a: #10b981;          /* zumrad / primary */
-  --acc-a-soft: #34d399;
-  --acc-b: #22d3ee;          /* cyan / secondary */
+  --acc-a: #ff6a1a;          /* CYBER ORANGE / primary */
+  --acc-a-soft: #ff8f4d;
+  --acc-b: #22d3ee;          /* electric cyan / secondary */
   --acc-b-soft: #67e8f9;
-  --acc-c: #f59e0b;          /* oltin / subtle accent */
+  --acc-c: #f5a524;          /* amber / subtle accent */
   --acc-c-soft: #fbbf24;
-  --bg-0: #0a0a0c;           /* chuqur obsidian */
-  --bg-1: #101014;           /* card */
-  --bg-2: #18181c;           /* hover / input */
-  --bg-3: #1f1f24;           /* elevated */
-  --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.14);
-  --fg: #f4f4f5;
-  --fg-mut: #a1a1aa;
-  --fg-dim: #71717a;
+  --bg-0: #0a0705;           /* deep near-black, warm */
+  --danger: #f87171;         /* xato / danger / "neon-red" */
+  --danger-soft: color-mix(in srgb, #f87171 60%, #ffffff);
+  --bg-1: #140f0c;           /* card */
+  --bg-2: #1d1613;           /* hover / input */
+  --bg-3: #261d18;           /* elevated */
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --fg: #f7f4f2;
+  --fg-mut: #a8a09a;
+  --fg-dim: #918a84;        /* >=4.5:1 on bg-0..bg-3 (AA small text) */
 }
 
 html[data-theme="midnight"] {
-  --acc-a: #6366f1;          /* indigo */
-  --acc-a-soft: #818cf8;
-  --acc-b: #f59e0b;          /* amber */
-  --acc-b-soft: #fbbf24;
-  --bg-0: #0b0b12;
-  --bg-1: #11111a;
-  --bg-2: #191925;
-  --bg-3: #21202e;
-  --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.15);
-  --fg: #f4f4f9;
-  --fg-mut: #a1a1b3;
-  --fg-dim: #71718a;
+  --acc-a: #ff6a1a;          /* CYBER ORANGE */
+  --acc-a-soft: #ff8f4d;
+  --acc-b: #a855f7;          /* violet */
+  --acc-b-soft: #c084fc;
+  --bg-0: #0a0708;
+  --danger: #fb7185;
+  --danger-soft: color-mix(in srgb, #fb7185 60%, #ffffff);
+  --bg-1: #150f14;
+  --bg-2: #1f1720;
+  --bg-3: #2a202c;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.17);
+  --fg: #f6f2f7;
+  --fg-mut: #a69daa;
+  --fg-dim: #948d98;        /* >=4.5:1 on bg-0..bg-3 */
 }
 
 html[data-theme="cyberpunk"] {
-  --acc-a: #00d4ff;          /* electric cyan */
-  --acc-a-soft: #4de1ff;
+  --acc-a: #ff6a1a;          /* CYBER ORANGE */
+  --acc-a-soft: #ff8f4d;
   --acc-b: #f033ff;          /* electric magenta */
   --acc-b-soft: #f66fff;
-  --bg-0: #070710;
-  --bg-1: #0d0d1a;
-  --bg-2: #15152a;
-  --bg-3: #1e1e3c;
-  --line: rgba(0, 212, 255, 0.14);
-  --line-strong: rgba(240, 51, 255, 0.25);
-  --fg: #eef4ff;
-  --fg-mut: #93a3c8;
-  --fg-dim: #64708f;
+  --bg-0: #08060c;
+  --danger: #ff3b5c;
+  --danger-soft: color-mix(in srgb, #ff3b5c 60%, #ffffff);
+  --bg-1: #120c18;
+  --bg-2: #1c1226;
+  --bg-3: #271934;
+  --line: rgba(255, 106, 26, 0.16);
+  --line-strong: rgba(240, 51, 255, 0.28);
+  --fg: #f4eef8;
+  --fg-mut: #9d93ac;
+  --fg-dim: #918a9f;        /* >=4.5:1 on bg-0..bg-3 */
 }
 
 html[data-theme="aurora"] {
-  --acc-a: #38bdf8;          /* muz siyan */
-  --acc-a-soft: #7dd3fc;
-  --acc-b: #10b981;          /* yalpiz zumrad */
-  --acc-b-soft: #34d399;
-  --bg-0: #060b14;
-  --bg-1: #0c1420;
-  --bg-2: #131e2c;
-  --bg-3: #1b2b3c;
-  --line: rgba(56, 189, 248, 0.12);
-  --line-strong: rgba(16, 185, 129, 0.20);
-  --fg: #eef7fb;
-  --fg-mut: #9db8c9;
-  --fg-dim: #69808f;
+  --acc-a: #ff7a2f;          /* CYBER ORANGE (cool-shifted) */
+  --acc-a-soft: #ff9d63;
+  --acc-b: #38bdf8;          /* muz siyan */
+  --acc-b-soft: #7dd3fc;
+  --bg-0: #050809;
+  --danger: #fb7185;
+  --danger-soft: color-mix(in srgb, #fb7185 60%, #ffffff);
+  --bg-1: #0b1113;
+  --bg-2: #121b1f;
+  --bg-3: #1a262b;
+  --line: rgba(255, 122, 47, 0.14);
+  --line-strong: rgba(56, 189, 248, 0.22);
+  --fg: #eef4f7;
+  --fg-mut: #97a9b2;
+  --fg-dim: #82949e;        /* >=4.5:1 on bg-0..bg-3 */
 }
 
 html[data-theme="halloween"] {
@@ -83,6 +90,8 @@ html[data-theme="halloween"] {
   --acc-b: #a855f7;          /* zahar purple */
   --acc-b-soft: #c084fc;
   --bg-0: #0a0609;
+  --danger: #ef4444;
+  --danger-soft: color-mix(in srgb, #ef4444 60%, #ffffff);
   --bg-1: #120a12;
   --bg-2: #1b1219;
   --bg-3: #251a24;
@@ -90,7 +99,159 @@ html[data-theme="halloween"] {
   --line-strong: rgba(168, 85, 247, 0.30);
   --fg: #f7edf0;
   --fg-mut: #b7a4ad;
-  --fg-dim: #7e6a72;
+  --fg-dim: #99878e;        /* >=4.5:1 on bg-0..bg-3 */
+}
+
+/* ================================================================
+   DESIGN TOKENS — CYBER-ZONE
+   Markazlashtirilgan token qatlami. Sahifalar 4 marta yozilmaydi:
+   komponentlar bir xil token nomlarini o'qiydi, token qiymatlari
+   esa har viewport sinfida ALMASHADI (4 ta art direction).
+   ================================================================ */
+
+:root {
+  /* ---- RADIUS SCALE (vazifaga qarab, har yerda 40% emas) ---- */
+  --r-control: 0.875rem;   /* 14px — kichik tugma / input */
+  --r-button: 1rem;        /* 16px — standart tugma */
+  --r-cta: 1.25rem;        /* 20px — asosiy CTA */
+  --r-card: 1.5rem;        /* 24px — standart kartochka */
+  --r-container: 1.75rem;  /* 28px — container / panel */
+  --r-hero: 2.25rem;       /* 36px — header / katta blok */
+  --r-pill: 999px;         /* faqat chip / status dot / avatar */
+
+  /* ---- NEON EFFECTS (boshqarilgan — hamma elementga glow EMAS) ---- */
+  --glow-none: none;
+  --glow-focus: 0 0 0 3px color-mix(in srgb, var(--acc-a) 24%, transparent);
+  --glow-edge: 0 0 0 1px color-mix(in srgb, var(--acc-a) 34%, transparent);
+  --glow-lift: 0 0 0 1px color-mix(in srgb, var(--acc-a) 30%, transparent),
+               0 18px 44px -22px color-mix(in srgb, var(--acc-a) 65%, transparent);
+  --glow-cta: 0 10px 34px -12px color-mix(in srgb, var(--acc-a) 78%, transparent),
+              0 0 0 1px color-mix(in srgb, var(--acc-a) 46%, transparent);
+  --glow-status: 0 0 12px -2px color-mix(in srgb, var(--acc-a) 70%, transparent);
+  --glow-text: 0 0 18px color-mix(in srgb, var(--acc-a) 45%, transparent);
+
+  /* ---- DENSITY / SPACING ---- */
+  --ad-gap: 1rem;            /* bo'limlar orasidagi masofa */
+  --ad-gap-tight: 0.75rem;   /* kartochka ichidagi masofa */
+  --shell-max: 1560px;       /* content kenglik chegarasi */
+  --shell-pad: 1.25rem;      /* chet bo'shlig'i */
+
+  /* ---- HEADER ---- */
+  --ad-header-h: 3.5rem;
+  --ad-header-radius: 1.75rem;
+
+  /* ---- TOUCH TARGET ---- */
+  --ad-touch: 44px;
+
+  /* ---- TYPE SCALE (fluid — clamp) ---- */
+  --ad-display-1: clamp(2.25rem, 1.4rem + 4.2vw, 5.5rem);
+  --ad-display-2: clamp(1.75rem, 1.3rem + 2.2vw, 3rem);
+  --ad-display-3: clamp(1.25rem, 1.05rem + 1vw, 1.875rem);
+  --ad-body: 1rem;
+  --ad-label: 0.6875rem;     /* 11px — kichik uppercase texnik yorliq */
+
+  /* ---- NEON ROLE (har art direction o'z juftligini oladi) ---- */
+  --ad-1: var(--acc-a);       /* dominant */
+  --ad-1-soft: var(--acc-a-soft);
+  --ad-2: var(--acc-b);       /* qo'llab-quvvatlaydi */
+  --ad-2-soft: var(--acc-b-soft);
+
+  /* ---- MOTION ---- */
+  --ad-dur-fast: 150ms;
+  --ad-dur: 220ms;
+  --ad-dur-slow: 340ms;
+  --ad-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ================================================================
+   ART DIRECTION 1 — DESKTOP  (1280px+)
+   "CYBER COMMAND CENTER" · orange + cyan · asymmetric · cinematic
+   Kenglik: katta, asimmetrik bo'limlar, kino tipdagi sarlavhalar.
+   ================================================================ */
+@media (min-width: 1280px) {
+  :root {
+    --shell-pad: 2rem;
+    --ad-gap: 1.75rem;
+    --ad-gap-tight: 1.25rem;
+    --ad-header-h: 3.75rem;
+    --ad-header-radius: 2.25rem;   /* 36px — premium kapsula */
+    --r-card: 1.75rem;
+    --r-container: 2rem;
+    --ad-body: 1.0625rem;
+    --ad-2: var(--acc-b);           /* cyan */
+  }
+}
+
+/* ================================================================
+   ART DIRECTION 2 — LAPTOP  (1024–1279px)
+   "NEON TERMINAL" · orange + violet · compact · technical
+   Desktopning kichikroq EMASI emas: zichroq, texnik, gorizontal.
+   ================================================================ */
+@media (min-width: 1024px) and (max-width: 1279.98px) {
+  :root {
+    --shell-pad: 1.5rem;
+    --ad-gap: 1.125rem;
+    --ad-gap-tight: 0.875rem;
+    --ad-header-h: 3.25rem;
+    --ad-header-radius: 1.25rem;   /* Terminal — burchaklar keskinroq */
+    --r-card: 1.125rem;            /* ixcham kartochka */
+    --r-container: 1.375rem;
+    --r-button: 0.75rem;
+    --r-cta: 1rem;
+    --r-control: 0.75rem;
+    --ad-body: 0.9375rem;
+    --ad-display-1: clamp(2rem, 1.3rem + 2.6vw, 3rem);  /* kompakt sarlavha */
+    --ad-display-2: clamp(1.5rem, 1.2rem + 1.2vw, 2rem);
+    --ad-2: #a855f7;               /* violet — Terminal ikkilamchi */
+  }
+}
+
+/* ================================================================
+   ART DIRECTION 3 — TABLET  (768–1023px)
+   "CYBER HUD" · cyan + violet + orange · floating panels · layered
+   Mobil layout EMAS. Yaxlitirilgan HUD panellari, vertikal ritm.
+   ================================================================ */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  :root {
+    --shell-pad: 1.5rem;
+    --ad-gap: 1.375rem;
+    --ad-gap-tight: 1rem;
+    --ad-header-h: 3.5rem;
+    --ad-header-radius: 2.375rem;  /* 38px — suzib turadigan HUD header */
+    --r-card: 1.75rem;             /* yaxlitirilgan, katta panel */
+    --r-container: 2.25rem;
+    --r-button: 1.125rem;
+    --r-cta: 1.375rem;
+    --r-control: 1.125rem;
+    --ad-body: 1rem;
+    --ad-display-1: clamp(2.125rem, 1.6rem + 2.4vw, 3.25rem);
+    --ad-display-2: clamp(1.625rem, 1.35rem + 1.4vw, 2.375rem);
+    --ad-2: #38bdf8;               /* cyan — HUD ikkilamchi */
+  }
+}
+
+/* ================================================================
+   ART DIRECTION 4 — MOBILE  (<=767px)
+   "NEON MOBILE COMMAND" · orange + magenta/cyan · touch-first · vertical
+   Desktop siqilgan EMAS. Yuqorida minimal header, pastda bottom nav.
+   ================================================================ */
+@media (max-width: 767px) {
+  :root {
+    --shell-pad: 1rem;
+    --ad-gap: 1.5rem;              /* vertikal storytelling — bo'shliq BOR */
+    --ad-gap-tight: 1rem;
+    --ad-header-h: 3.25rem;
+    --ad-header-radius: 1.25rem;
+    --r-card: 1.25rem;
+    --r-container: 1.5rem;
+    --r-button: 1rem;
+    --r-cta: 1.25rem;              /* 20px — barmoq uchun qulay */
+    --r-control: 1.25rem;          /* 20px — input (18–24px diapazoni) */
+    --ad-body: 1rem;
+    --ad-display-1: clamp(1.875rem, 1.5rem + 2.2vw, 2.5rem);
+    --ad-display-2: clamp(1.375rem, 1.2rem + 0.9vw, 1.625rem);
+    --ad-2: #f033ff;               /* magenta — Mobile aksenti */
+  }
 }
 
 @theme inline {
@@ -100,6 +261,9 @@ html[data-theme="halloween"] {
   --color-neon-green: var(--acc-a);
   --color-neon-purple: var(--acc-b);
   --color-neon-magenta: var(--acc-b);
+  /* `neon-red` 9 marta ishlatilgan, lekin token HECH QACHON yo'q edi —
+     klass `text-neon-red`/`bg-neon-red/15` rang yo'q (transparent) chiqardi. */
+  --color-neon-red: var(--danger);
   --color-cyber-950: var(--bg-0);
   --color-cyber-900: var(--bg-1);
   --color-cyber-800: var(--bg-2);
@@ -209,7 +373,11 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  overflow-x: hidden;
+  /* Eski holat: `overflow-x: hidden` BU YERDA (barcha kengliklarda) turardi.
+     Bu har bir oshib ketgan kenglikni JIM qilib kesib tashlayardi — kontent
+     scroll qilinmay qolardi, faqat yo'qolardi. Endi faqat kichik
+     ekranlarda (pastdagi media query) himoya qoladi; keng ekranda
+     oshib ketish ko'rinib turadi va topshiriq bo'lib chiqadi. */
 }
 
 /* ---- Global scrollbar ---- */
@@ -691,7 +859,11 @@ a:hover { opacity: 0.9; }
     --fab-bottom: 1.25rem;
   }
 }
-main {
+/* Bottom-tabbar `<main>` ni ham, FOOTER'ni ham yopadi. Avval faqat `main`
+   ga padding berilardi — footer esa `main` ning akasi bo'lgani uchun
+   telefon ekranida uning oxirgi qatorlari tabbar ostida qolardi. */
+main,
+.cz-footer {
   padding-bottom: var(--content-bottom);
 }
 
@@ -1265,4 +1437,391 @@ html[data-theme="halloween"] .halloween-decor {
 /* 8) Skeleton shimmer — tabletda sekinroq (kam GPU kuch) */
 @media (min-width: 768px) and (max-width: 1023.98px) {
   .animate-pulse { animation-duration: 2.4s; }
+}
+
+/* ================================================================
+   PRIMITIVE LAYER — tokenlarni ishlashga tayyor komponent klasslari
+   Bitta stilli tizim (Tailwind v4 CSS-first). Sahifalar 4 marta
+   yozilmaydi — har komponent tokenlarni o'qiydi, token qiymati
+   esa art direction'ga qarab almashadi.
+   ================================================================ */
+
+/* ---- FLUID SHELL: har viewportda to'g'ri kenglik ---- */
+.cz-shell {
+  width: 100%;
+  max-width: var(--shell-max);
+  margin-inline: auto;
+  padding-inline: var(--shell-pad);
+  min-width: 0;
+}
+
+/* ---- CARD: 8 xil tur, bitta dizayn tizimi ---- */
+.cz-card {
+  position: relative;
+  min-width: 0;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  padding: calc(var(--ad-gap-tight) * 1.25);
+  transition: border-color var(--ad-dur) var(--ad-ease),
+              box-shadow var(--ad-dur) var(--ad-ease),
+              transform var(--ad-dur) var(--ad-ease);
+}
+.cz-card-hover:hover {
+  border-color: color-mix(in srgb, var(--ad-1) 42%, transparent);
+  box-shadow: var(--glow-lift);
+  transform: translateY(-2px);
+}
+
+/* 1) Standart axborot kartasi */
+.cz-card--info { background: var(--bg-1); }
+
+/* 2) Neon status kartasi — faqat holat uchun glow */
+.cz-card--status {
+  border-color: color-mix(in srgb, var(--ad-1) 38%, transparent);
+  box-shadow: var(--glow-edge);
+}
+
+/* 3) Featured xona kartasi — diagonal neon edge */
+.cz-card--room {
+  overflow: hidden;
+  border-radius: var(--r-container);
+}
+.cz-card--room::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 3px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--ad-1) 22%,
+    var(--ad-2) 78%,
+    transparent
+  );
+  opacity: 0.85;
+}
+
+/* 4) Booking konfiguratori kartasi */
+.cz-card--booking {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--ad-1) 7%, transparent) 0%,
+      transparent 42%
+    ),
+    var(--bg-1);
+  border-color: color-mix(in srgb, var(--ad-1) 26%, var(--line));
+  border-radius: var(--r-container);
+}
+
+/* 5) To'lov kartasi */
+.cz-card--payment {
+  background: var(--bg-1);
+  border-color: var(--line-strong);
+}
+.cz-card--payment[data-selected='true'] {
+  border-color: var(--ad-1);
+  box-shadow: var(--glow-edge);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--ad-1) 12%, transparent) 0%,
+      transparent 55%
+    ),
+    var(--bg-1);
+}
+
+/* 6) Promo kartasi */
+.cz-card--promo {
+  border-radius: var(--r-card);
+  border-color: color-mix(in srgb, var(--acc-c) 30%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--acc-c) 11%, transparent) 0%,
+      transparent 60%
+    ),
+    var(--bg-1);
+}
+
+/* 7) AI kartasi */
+.cz-card--ai {
+  border-radius: var(--r-card);
+  border-color: color-mix(in srgb, var(--ad-2) 32%, transparent);
+  background:
+    radial-gradient(
+      120% 100% at 0% 0%,
+      color-mix(in srgb, var(--ad-2) 10%, transparent) 0%,
+      transparent 55%
+    ),
+    var(--bg-1);
+}
+
+/* 8) Xavfsizlik kartasi */
+.cz-card--security {
+  border-radius: var(--r-card);
+  border-color: color-mix(in srgb, var(--acc-a) 22%, var(--line));
+}
+
+/* Texnik mikro-yorliq — kartalar ustida kichik status matni */
+.cz-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: var(--ad-label);
+  line-height: 1;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  font-family: var(--font-tech-mono, ui-monospace, monospace);
+}
+.cz-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--ad-1);
+  box-shadow: var(--glow-status);
+  flex: none;
+}
+
+/* ---- BUTTON: radius tokenlari, barcha holatlar ---- */
+.cz-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: var(--ad-touch);
+  padding-inline: 1.25rem;
+  border-radius: var(--r-button);
+  border: 1px solid transparent;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform var(--ad-dur-fast) var(--ad-ease),
+              box-shadow var(--ad-dur) var(--ad-ease),
+              background-color var(--ad-dur) var(--ad-ease),
+              border-color var(--ad-dur) var(--ad-ease),
+              opacity var(--ad-dur) var(--ad-ease);
+}
+.cz-btn:active { transform: scale(0.97); }
+.cz-btn:focus-visible { outline: none; box-shadow: var(--glow-focus); }
+.cz-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+.cz-btn--primary {
+  background: linear-gradient(
+    180deg,
+    var(--ad-1-soft) 0%,
+    var(--ad-1) 100%
+  );
+  color: #140b04;
+  box-shadow: var(--glow-cta);
+}
+.cz-btn--primary:hover:not(:disabled) {
+  box-shadow: 0 12px 40px -10px color-mix(in srgb, var(--ad-1) 90%, transparent),
+              0 0 0 1px color-mix(in srgb, var(--ad-1) 60%, transparent);
+}
+
+.cz-btn--secondary {
+  background: color-mix(in srgb, var(--bg-3) 70%, transparent);
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+.cz-btn--secondary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--ad-1) 45%, transparent);
+  background: var(--bg-3);
+}
+
+.cz-btn--cta {
+  min-height: 3rem;
+  padding-inline: 1.75rem;
+  border-radius: var(--r-cta);
+  font-size: 1rem;
+  font-weight: 700;
+  background: linear-gradient(180deg, var(--ad-1-soft), var(--ad-1));
+  color: #140b04;
+  box-shadow: var(--glow-cta);
+}
+
+/* Mobilda asosiy CTA to'liq kenglikda */
+@media (max-width: 767px) {
+  .cz-btn--block-mobile { width: 100%; }
+}
+
+/* ---- INPUT: to'liq kenglik, 20px radius, neon focus ---- */
+.cz-input {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--ad-touch);
+  padding-inline: 0.875rem;
+  border-radius: var(--r-control);
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  color: var(--fg);
+  font-size: 1rem;
+  transition: border-color var(--ad-dur) var(--ad-ease),
+              box-shadow var(--ad-dur) var(--ad-ease);
+}
+.cz-input::placeholder { color: var(--fg-dim); }
+.cz-input:hover { border-color: color-mix(in srgb, var(--ad-1) 32%, transparent); }
+.cz-input:focus {
+  outline: none;
+  border-color: var(--ad-1);
+  box-shadow: var(--glow-focus);
+}
+.cz-label {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-size: var(--ad-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-mut);
+}
+.cz-error {
+  margin-top: 0.375rem;
+  font-size: 0.8125rem;
+  color: var(--danger);
+}
+
+/* ---- TYPE UTILITIES ---- */
+.cz-display-1 { font-size: var(--ad-display-1); line-height: 0.98; letter-spacing: -0.02em; }
+.cz-display-2 { font-size: var(--ad-display-2); line-height: 1.08; letter-spacing: -0.015em; }
+.cz-display-3 { font-size: var(--ad-display-3); line-height: 1.2; }
+
+/* ---- HEADER: 4 ta art direction, bitta komponent ---- */
+.cz-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  min-height: var(--ad-header-h);
+  border-radius: var(--ad-header-radius);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-0) 82%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ad-1) 8%, transparent),
+              0 18px 50px -30px color-mix(in srgb, var(--ad-1) 60%, transparent);
+  transition: border-radius var(--ad-dur) var(--ad-ease),
+              box-shadow var(--ad-dur) var(--ad-ease);
+}
+
+/* DESKTOP: premium kapsula, markazlashgan keng komponent */
+@media (min-width: 1280px) {
+  .cz-header { padding-inline: 1.5rem; }
+}
+/* LAPTOP: ixcham, texnik */
+@media (min-width: 1024px) and (max-width: 1279.98px) {
+  .cz-header { padding-inline: 1rem; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ad-1) 14%, transparent); }
+}
+/* TABLET: suzib turadigan yaxlitirilgan HUD */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .cz-header {
+    padding-inline: 1.25rem;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--ad-1) 20%, transparent),
+                0 22px 60px -34px color-mix(in srgb, var(--ad-2) 70%, transparent);
+  }
+}
+/* MOBILE: minimal */
+@media (max-width: 767px) {
+  .cz-header { padding-inline: 0.75rem; box-shadow: none; background: var(--bg-0); }
+}
+
+/* ---- TOUCH TARGET: tegishli viewportlarda barcha header boshqaruvlari
+       kamida 44px (WCAG 2.5.5 / iOS HIG). sichqoncha (>=1024px)da
+       ixcham 36px qoladi — sichqoncha uchun 44px majburiy emas. ---- */
+@media (max-width: 1023.98px) {
+  header a,
+  header button,
+  header [role="button"],
+  header input,
+  header select {
+    min-height: var(--ad-touch);
+  }
+  header a[class*="w-9"],
+  header button[class*="w-9"],
+  header a[class*="h-9"],
+  header button[class*="h-9"] {
+    min-width: var(--ad-touch);
+  }
+}
+
+/* ---- HEADER NAV: bitta primitiv, 4 ta art direction avtomatik ---- */
+.cz-nav-link {
+  display: inline-flex;
+  align-items: center;
+  height: 2.25rem;
+  padding-inline: 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: var(--r-button);
+  color: var(--fg-mut);
+  transition: color var(--ad-dur-fast) var(--ad-ease),
+              background-color var(--ad-dur-fast) var(--ad-ease);
+}
+.cz-nav-link:hover {
+  color: var(--fg);
+  background-color: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+.cz-nav-link--active {
+  color: var(--acc-a);
+  background-color: color-mix(in srgb, var(--acc-a) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--acc-a) 30%, transparent);
+}
+
+.cz-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  border-radius: var(--r-control);
+  border: 1px solid var(--line);
+  background-color: var(--bg-2);
+  color: var(--fg);
+  transition: color var(--ad-dur-fast) var(--ad-ease),
+              border-color var(--ad-dur-fast) var(--ad-ease),
+              background-color var(--ad-dur-fast) var(--ad-ease);
+}
+.cz-icon-btn:hover {
+  border-color: color-mix(in srgb, var(--acc-a) 45%, transparent);
+  color: var(--acc-a);
+}
+.cz-icon-btn--active {
+  color: var(--acc-a);
+  border-color: color-mix(in srgb, var(--acc-a) 34%, transparent);
+  background-color: color-mix(in srgb, var(--acc-a) 14%, transparent);
+}
+
+/* ---- SAFE AREA: notch + home indicator (avval klasslar bor, lekin
+       HECH KIM ishlatmagan — endi haqiqatan foydalaniladi) ---- */
+@supports (padding: max(0px)) {
+  .cz-top-safe { padding-top: env(safe-area-inset-top, 0px); }
+  .cz-bottom-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+}
+
+/* ---- REDUCED MOTION: neon animatsiyalar ham o'chadi ---- */
+@media (prefers-reduced-motion: reduce) {
+  .cz-card,
+  .cz-btn,
+  .cz-header {
+    transition: none !important;
+  }
+  .cz-card-hover:hover,
+  .cz-btn:active {
+    transform: none !important;
+  }
+  .cz-btn--primary,
+  .cz-btn--cta {
+    box-shadow: none;
+  }
+  .cz-btn--primary:hover:not(:disabled) {
+    box-shadow: var(--glow-edge);
+  }
 }

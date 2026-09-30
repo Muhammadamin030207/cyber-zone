@@ -81,7 +81,7 @@ export default function LocationPage() {
   }, [load, radius, t]);
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <header className="mb-6">
         <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight sm:text-3xl">
           <MapPin className="text-neon-cyan" size={26} aria-hidden />
@@ -196,6 +196,6 @@ export default function LocationPage() {
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }

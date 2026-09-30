@@ -26,7 +26,11 @@ export default function ToastContainer() {
     <div
       aria-live="polite"
       aria-atomic="false"
-      className="fixed right-3 bottom-[calc(calc(4.5rem+env(safe-area-inset-bottom)) + 0.25rem)] md:right-5 md:bottom-5 z-[100] flex flex-col gap-2 max-w-sm w-[calc(100vw-1.5rem)] md:w-auto"
+        // Eski versiya mobil ekranda `4.5rem` ni QAT'IY yozgan edi, lekin
+        // `--toast-bottom` (globals.css) bottom-nav + FAB balandligini hisobga
+        // oladi (≈6.25rem + safe-area). Natijada mobil'da toast FAB ustiga
+        // tushib ketardi. Endi bitta manba ishlatiladi.
+        className="fixed right-3 bottom-[var(--toast-bottom,1.25rem)] md:right-5 z-[100] flex flex-col gap-2 max-w-sm w-[calc(100vw-1.5rem)] md:w-auto"
     >
       {toasts.map((t) => {
         const Icon = ICONS[t.type];

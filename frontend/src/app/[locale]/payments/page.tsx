@@ -83,15 +83,15 @@ export default function PaymentsPage() {
 
   if (!user) {
     return (
-      <main className="mx-auto w-full max-w-3xl px-4 py-20 text-center">
+      <div className="mx-auto w-full max-w-3xl px-4 py-20 text-center">
         <h1 className="text-2xl font-extrabold">{t('title')}</h1>
         <p className="mt-2 text-sm text-gray-400">{t('authRequired')}</p>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
+    <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
       <header className="mb-5">
         <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight">
           <Wallet className="text-neon-cyan" size={24} aria-hidden />
@@ -194,6 +194,6 @@ export default function PaymentsPage() {
           </button>
         </div>
       )}
-    </main>
+    </div>
   );
 }

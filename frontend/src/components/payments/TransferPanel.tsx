@@ -324,7 +324,7 @@ export default function TransferPanel({
             <span className="text-gray-600">— {files.length}/{MAX_RECEIPTS}, har biri {MAX_MB} MB gacha</span>
           </span>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 min-[420px]:grid-cols-3 gap-2">
             {picked.map((p, i) => (
               <div
                 key={`${p.file.name}-${i}`}

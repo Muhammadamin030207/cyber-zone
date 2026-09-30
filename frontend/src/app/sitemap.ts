@@ -28,6 +28,14 @@ const PUBLIC_PATHS = [
   { path: '', priority: 1.0, changeFrequency: 'daily' as const },
   { path: '/rooms', priority: 0.9, changeFrequency: 'daily' as const },
   { path: '/news', priority: 0.7, changeFrequency: 'daily' as const },
+  // "Menga yaqin xonalar" — mahalliy qidiruv uchun eng muhim ommaviy
+  // sahifa ("gaming club tashkent", "internet cafe yonimda"). Indekslanadi
+  // (`location/layout.tsx` da `noindex` yo'q), shuning uchun sitemap'da
+  // bo'lishi SHART — aks holda `robots` ruxsat bergan, lekin sitemap yo'q
+  // bo'lgan sahifa topilmay qoladi.
+  { path: '/location', priority: 0.8, changeFrequency: 'weekly' as const },
+  // `/ai` — login talab qiladi, shuning uchun sitemap'ga qo'yilmaydi.
+  // `/payments` va `/profile/security` — `noindex`, qo'yilmaydi.
 ];
 
 const BACKEND = (

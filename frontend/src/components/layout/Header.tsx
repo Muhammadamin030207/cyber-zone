@@ -46,10 +46,8 @@ export default function Header() {
           href={l.href}
           aria-current={isActive(l.href) ? 'page' : undefined}
           className={cn(
-            'inline-flex items-center h-9 px-3.5 text-sm font-medium rounded-lg transition-colors whitespace-nowrap',
-            isActive(l.href)
-              ? 'text-neon-cyan bg-neon-cyan/10'
-              : 'text-gray-300 hover:text-white hover:bg-white/5'
+            'cz-nav-link',
+            isActive(l.href) && 'cz-nav-link--active'
           )}
         >
           {l.label}
@@ -63,7 +61,7 @@ export default function Header() {
     return name.trim()[0]?.toUpperCase() || 'U';
   })();
 
-  const iconBtn = 'w-9 h-9 rounded-lg border flex items-center justify-center transition-colors';
+  const iconBtn = 'cz-icon-btn';
 
   const chatButton = (
     <Link
@@ -74,9 +72,7 @@ export default function Header() {
       className={cn(
         'relative shrink-0',
         iconBtn,
-        isActive('/chat')
-          ? 'text-neon-cyan bg-neon-cyan/15 border-neon-cyan/30'
-          : 'text-gray-200 bg-cyber-800 border-white/10 hover:border-neon-cyan/40'
+        isActive('/chat') && 'cz-icon-btn--active'
       )}
     >
       <MessageSquare size={16} />
@@ -95,7 +91,7 @@ export default function Header() {
       data-tip-top
       aria-label={t('ai')}
       aria-current={isActive('/ai') ? 'page' : undefined}
-      className={cn(iconBtn, isActive('/ai') ? 'border-neon-cyan/40 text-neon-cyan' : 'text-gray-200 hover:border-neon-cyan/40')}
+      className={cn(iconBtn, isActive('/ai') && 'cz-icon-btn--active')}
     >
       <Bot size={16} aria-hidden />
     </Link>
@@ -111,9 +107,7 @@ export default function Header() {
       className={cn(
         'shrink-0',
         iconBtn,
-        isActive('/profile')
-          ? 'text-neon-cyan bg-neon-cyan/15 border-neon-cyan/30'
-          : 'text-gray-200 bg-cyber-800 border-white/10 hover:border-neon-cyan/40'
+        isActive('/profile') && 'cz-icon-btn--active'
       )}
     >
       <UserRound size={16} />
@@ -123,7 +117,7 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-3 sm:px-5 pt-2 sm:pt-3 pb-2">
-        <div className="relative flex items-center gap-2 rounded-2xl border border-white/10 glass px-2.5 sm:px-4 h-14 md:h-16 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.5)]">
+        <div className="cz-header relative flex items-center gap-2 w-full" style={{ minHeight: 'var(--ad-header-h)', paddingInline: 'var(--shell-pad)' }}>
           <Link href="/" className="flex items-center gap-2 group shrink-0" aria-label="Cyber-ZONE — bosh sahifa">
             <Logo size={30} />
             <span className="hidden sm:inline font-[--font-orbitron] font-bold tracking-widest text-base md:text-lg">
@@ -146,7 +140,7 @@ export default function Header() {
                 {user.role === 'SUPER_ADMIN' && (
                   <Link
                     href="/super-admin"
-                    className="inline-flex items-center h-9 px-3 text-sm font-medium rounded-lg text-yellow-300 hover:bg-yellow-400/10 gap-1.5"
+                    className="cz-nav-link gap-1.5 text-[var(--acc-c)] hover:bg-yellow-400/10"
                   >
                     <Crown size={16} />
                     {t('superAdmin')}
@@ -155,7 +149,7 @@ export default function Header() {
                 {user.role === 'ADMIN' && (
                   <Link
                     href="/admin"
-                    className="inline-flex items-center h-9 px-3 text-sm font-medium rounded-lg text-neon-green hover:bg-neon-green/10 gap-1.5"
+                    className="cz-nav-link gap-1.5 text-neon-green hover:bg-neon-green/10"
                   >
                     <LayoutDashboard size={16} />
                     {t('admin')}
@@ -169,7 +163,7 @@ export default function Header() {
                   data-tip-top
                   aria-label={t('payments')}
                   aria-current={isActive('/payments') ? 'page' : undefined}
-                  className={cn(iconBtn, isActive('/payments') ? 'border-neon-cyan/40 text-neon-cyan' : 'text-gray-200')}
+                  className={cn(iconBtn, isActive('/payments') && 'cz-icon-btn--active')}
                 >
                   <Wallet size={16} aria-hidden />
                 </Link>
@@ -182,10 +176,9 @@ export default function Header() {
                     aria-label={t('dashboard')}
                     aria-current={isActive('/dashboard') ? 'page' : undefined}
                     className={cn(
-                      'w-9 h-9 rounded-lg border flex items-center justify-center font-bold text-sm transition-colors',
-                      isActive('/dashboard')
-                        ? 'text-neon-cyan bg-neon-cyan/15 border-neon-cyan/30'
-                        : 'text-gray-200 bg-cyber-800 border-white/10 hover:border-neon-cyan/40'
+                      iconBtn,
+                      'font-bold text-sm',
+                      isActive('/dashboard') && 'cz-icon-btn--active'
                     )}
                   >
                     {userInitial}
@@ -193,7 +186,7 @@ export default function Header() {
                 )}
                 <button
                   onClick={handleLogout}
-                  className="inline-flex items-center h-9 px-3 text-sm font-medium rounded-lg text-red-400 hover:bg-red-500/10"
+                  className="cz-nav-link text-[var(--danger)] hover:bg-red-500/10"
                 >
                   {t('logout')}
                 </button>
@@ -201,7 +194,7 @@ export default function Header() {
             ) : (
               <Link
                 href="/login"
-                className="inline-flex items-center h-9 px-4 text-sm font-bold rounded-lg neon-btn"
+                className="cz-btn cz-btn--primary"
               >
                 {t('login')}
               </Link>
@@ -217,7 +210,7 @@ export default function Header() {
                   <Link
                     href="/super-admin"
                     aria-label={t('superAdmin')}
-                    className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-xl text-yellow-300 bg-yellow-400/10 border border-yellow-400/30"
+                    className="cz-icon-btn shrink-0 text-yellow-300 bg-yellow-400/10 border-yellow-400/30"
                   >
                     <Crown size={17} />
                   </Link>
@@ -226,7 +219,7 @@ export default function Header() {
                   <Link
                     href="/admin"
                     aria-label={t('admin')}
-                    className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-xl text-neon-green bg-neon-green/10 border border-neon-green/30"
+                    className="cz-icon-btn shrink-0 text-neon-green bg-neon-green/10 border-neon-green/30"
                   >
                     <LayoutDashboard size={16} />
                   </Link>
@@ -238,10 +231,9 @@ export default function Header() {
                     aria-label={t('dashboard')}
                     aria-current={isActive('/dashboard') ? 'page' : undefined}
                     className={cn(
-                      'shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-xl border font-bold text-sm transition-colors',
-                      isActive('/dashboard')
-                        ? 'text-neon-cyan bg-neon-cyan/15 border-neon-cyan/30'
-                        : 'text-gray-200 bg-white/[0.06] border-white/15 hover:border-neon-cyan/40'
+                      iconBtn,
+                      'font-bold text-sm',
+                      isActive('/dashboard') && 'cz-icon-btn--active'
                     )}
                   >
                     {userInitial}
@@ -253,7 +245,7 @@ export default function Header() {
             ) : (
               <Link
                 href="/login"
-                className="inline-flex items-center h-9 px-4 text-sm font-bold rounded-xl neon-btn"
+                className="cz-btn cz-btn--primary"
               >
                 {t('login')}
               </Link>

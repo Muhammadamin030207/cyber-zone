@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { Bebas_Neue, Share_Tech_Mono } from 'next/font/google';
-import { ArrowRight, Monitor, Newspaper, Zap, CreditCard, ShieldCheck } from 'lucide-react';
+import {
+  ArrowRight,
+  Monitor,
+  Newspaper,
+  Zap,
+  CreditCard,
+  ShieldCheck,
+  ScanFace,
+} from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
@@ -14,14 +22,25 @@ const techMono = Share_Tech_Mono({ weight: '400', subsets: ['latin'], variable: 
 const FEATURES = [
   { icon: Zap, label: 'Yuqori tezlik' },
   { icon: Monitor, label: 'Istalgan xona' },
-  { icon: CreditCard, label: 'Onlayn to\'lov' },
-  { icon: ShieldCheck, label: 'Liveness xavfsizlik' },
+  { icon: CreditCard, label: "Onlayn to'lov" },
+  { icon: ShieldCheck, label: 'Kamerali sessiya tekshiruvi' },
 ];
 
 /**
- * Bosh sahifa hero — CYBER-ZONE brendi.
- * NEXUS emas, countdown/soat yo'q: faqat o'z nomimiz, jonli (real) xona soni
- * va bronlashga chaqiruv.
+ * Bosh sahifa hero — CYBER-ZONE.
+ *
+ * 4 ta ART DIRECTION bitta komponentda (sahifa 4 marta yozilmaydi):
+ *   DESKTOP 1280+      "CYBER COMMAND CENTER" — asimmetrik, keng chap ustun
+ *   LAPTOP  1024-1279  "NEON TERMINAL"        — 55/45 ixcham, texnik
+ *   TABLET  768-1023   "CYBER HUD"            — ustma-ust, yaxlitirilgan panellar
+ *   MOBILE  <=767      "NEON MOBILE COMMAND"  — vertikal storytelling
+ *
+ * Eski holatda markazlashgan bitta kompozitsiya barcha kengliklarda
+ * ishlatilardi, orqasida 18vw "CYBER-ZONE" suv oltini bor edi.
+ * Endi har viewport o'z kompozitsiyasini oladi.
+ *
+ * QOIDA: hech qanday raqam yasalmaydi. Yagona raqam — `GET /api/rooms`
+ * dan keladigan jonli xona soni.
  */
 export default function HeroZone() {
   const user = useAuthStore((s) => s.user);
@@ -41,130 +60,148 @@ export default function HeroZone() {
     };
   }, []);
 
+  const dashboardHref =
+    user?.role === 'USER'
+      ? '/dashboard'
+      : user?.role === 'SUPER_ADMIN'
+        ? '/super-admin'
+        : '/admin';
+
   return (
     <div className={cn('relative w-full', bebas.variable, techMono.variable)}>
       <section
         aria-label="CYBER-ZONE — kompyuter xonalar platformasi"
-        className="relative w-full overflow-hidden bg-[var(--cz-bg,#05050f)]"
-        style={{ minHeight: '58vh' }}
+        className="relative w-full overflow-hidden"
       >
-        {/* Radial neon cyan -> magenta glow */}
+        {/* Subtle radial glow — bir marta, juda yumshoq */}
         <div
           aria-hidden
-          className="absolute inset-0"
+          className="pointer-events-none absolute inset-0"
           style={{
             background:
-              'radial-gradient(130% 85% at 50% -20%, color-mix(in srgb, var(--cz-cyan, var(--acc-a)) 34%, transparent) 0%, color-mix(in srgb, var(--cz-magenta, var(--acc-b)) 22%, transparent) 42%, transparent 72%)',
+              'radial-gradient(120% 70% at 18% -10%, color-mix(in srgb, var(--acc-a) 20%, transparent) 0%, transparent 58%), radial-gradient(90% 60% at 100% 8%, color-mix(in srgb, var(--acc-b) 14%, transparent) 0%, transparent 55%)',
           }}
         />
-        {/* Ghost watermark — o'z nomimiz */}
-        <span
+        {/* Yengil grid — faqat yuqorida, pastga yokiq holda */}
+        <div
           aria-hidden
-          className="font-bebas pointer-events-none absolute left-1/2 top-[46%] -translate-x-1/2 -translate-y-1/2 select-none whitespace-nowrap text-[18vw] sm:text-[14vw] leading-none tracking-wide text-white/[0.04]"
+          className="pointer-events-none absolute inset-x-0 top-0 h-64 opacity-[0.16]"
+          style={{
+            backgroundImage:
+              'linear-gradient(to right, color-mix(in srgb, var(--acc-a) 40%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--acc-a) 40%, transparent) 1px, transparent 1px)',
+            backgroundSize: '48px 48px',
+            maskImage: 'linear-gradient(to bottom, black, transparent)',
+            WebkitMaskImage: 'linear-gradient(to bottom, black, transparent)',
+          }}
+        />
+
+        {/* ============ 4 ART DIRECTION kompozitsiyasi ============
+            MOBILE/TABLET: bitta ustun (vertikal storytelling)
+            LAPTOP:  55 / 45
+            DESKTOP: 1.18fr / 0.82fr — kengroq asimmetriya, ko'proq bo'shliq
+        */}
+        <div
+          className={cn(
+            'cz-shell relative z-10 grid min-w-0 items-center gap-[var(--ad-gap)]',
+            'pt-[calc(var(--shell-pad)*1.5)] pb-[calc(var(--ad-gap)*1.5)]',
+            'md:gap-8',
+            'min-[1024px]:grid-cols-[55fr_45fr]',
+            'min-[1280px]:grid-cols-[1.18fr_0.82fr] min-[1280px]:gap-14 min-[1280px]:py-24'
+          )}
         >
-          CYBER-ZONE
-        </span>
-        {/* CRT scanlines */}
-        <div aria-hidden className="scan-overlay z-[1]" />
+          {/* ---------- LEFT: matn + CTA ---------- */}
+          <div className="min-w-0">
+            <p className="cz-tag mb-4">
+              <span aria-hidden className="cz-dot" />
+              CYBER-ZONE — kompyuter xonalar platformasi
+            </p>
 
-        {/* Content */}
-        <div className="relative z-10 mx-auto flex min-h-[58vh] w-full max-w-3xl flex-col items-center justify-center px-4 pb-20 pt-14 text-center sm:px-6 sm:pb-24">
-          <p className="font-tech text-neon-cyan mb-3 flex items-center gap-2 text-[11px] font-normal uppercase tracking-[0.35em] sm:text-xs">
-            <span aria-hidden className="animate-pulse-glow h-1.5 w-1.5 rounded-full bg-[var(--acc-a)] shadow-[0_0_8px_var(--acc-a)]" />
-            CYBER-ZONE — Kompyuter xonalar platformasi
-          </p>
-          <h1 className="font-bebas text-[var(--fg)] text-6xl leading-[0.92] tracking-wide sm:text-7xl md:text-8xl">
-            XONANGNI TANLA
-          </h1>
-          <p className="mt-4 max-w-xl text-sm leading-relaxed text-[var(--fg-mut)] sm:text-base">
-            Toshkent bo&apos;ylab kompyuter xonalari bitta platformada — solishtiring,
-            o&apos;rin bron qiling va onlayn to&apos;lang. Dastlab kamerada 3 marta ko&apos;z
-            pirpira<span className="text-[var(--acc-a)]">t</span>ib o&apos;zing jonli ekaningni tasdiqlaysan.
-          </p>
+            <h1 className="cz-display-1 font-bebas max-w-[14ch] text-[var(--fg)]">
+              O&apos;YIN UCHUN JOY.
+              <span className="mt-1 block text-[var(--acc-a)]">
+                SEN UCHUN TAYYAR.
+              </span>
+            </h1>
 
-          {/* CTA tugmalari */}
-          <div className="mt-8 flex w-full flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link
-              href="/rooms"
-              aria-label="Xonalarni ko'rish"
-              className="neon-btn inline-flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-bold sm:w-auto"
-            >
-              Xonalarni ko&apos;rish <ArrowRight size={16} aria-hidden="true" />
-            </Link>
-            {user ? (
+            <p className="mt-5 max-w-[52ch] text-[length:var(--ad-body)] leading-relaxed text-[var(--fg-mut)]">
+              Toshkent bo&apos;ylab kompyuter xonalari bitta platformada — solishtiring,
+              o&apos;rin bron qiling va to&apos;lovni onlayn rasmiylashtiring. Sessiyani
+              boshlashdan oldin kamera orqali o&apos;zligingizni tasdiqlaysaniz.
+            </p>
+
+            {/* CTA — mobilda to'liq kenglik, desktopda yonma-yon */}
+            <div className="mt-8 flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Link
-                href={user.role === 'USER' ? '/dashboard' : user.role === 'SUPER_ADMIN' ? '/super-admin' : '/admin'}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--acc-a)_35%,transparent)] surface px-6 py-3.5 text-sm font-semibold transition-colors hover:border-[var(--acc-a)] sm:w-auto"
+                href="/rooms"
+                aria-label="Xonalarni ko'rish"
+                className="cz-btn cz-btn--cta cz-btn--block-mobile"
               >
-                Kabinetga o&apos;tish
+                Xonalarni ko&apos;rish <ArrowRight size={17} aria-hidden="true" />
               </Link>
-            ) : (
               <Link
-                href="/login"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--acc-a)_35%,transparent)] surface px-6 py-3.5 text-sm font-semibold transition-colors hover:border-[var(--acc-a)] sm:w-auto"
+                href={user ? dashboardHref : '/login'}
+                className="cz-btn cz-btn--secondary cz-btn--block-mobile"
               >
-                Kirish / Ro&apos;yxatdan o&apos;tish
+                {user ? 'Kabinetga o\u2018tish' : "Kirish / Ro'yxatdan o'tish"}
               </Link>
-            )}
+            </div>
+
+            {/* Texnik xususiyat chiplari */}
+            <ul className="mt-8 flex flex-wrap items-center gap-2">
+              {FEATURES.map((f) => (
+                <li
+                  key={f.label}
+                  className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] text-[var(--fg-mut)]"
+                >
+                  <f.icon size={12} className="text-[var(--acc-a)]" aria-hidden="true" />
+                  {f.label}
+                </li>
+              ))}
+            </ul>
           </div>
 
-          {/* Xususiyat chiplari */}
-          <ul className="mt-7 flex flex-wrap items-center justify-center gap-2">
-            {FEATURES.map((f) => (
-              <li
-                key={f.label}
-                className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] text-[var(--fg-dim)]"
-              >
-                <f.icon size={12} className="text-[var(--acc-a)]" aria-hidden="true" />
-                {f.label}
-              </li>
-            ))}
-          </ul>
+          {/* ---------- RIGHT: jonli holat vizuali ----------
+              MOBILE: pastda (vertikal)
+              LAPTOP/DESKTOP: o'ng ustunda
+              Bu blok FAQAT real API dan kelgan raqamni ko'rsatadi. */}
+          <div className="min-w-0 md:mt-10 min-[1024px]:mt-0">
+            <div className="cz-card cz-card--status cz-card--room">
+              <div className="flex items-center justify-between gap-3">
+                <span className="cz-tag">
+                  <span aria-hidden className="cz-dot animate-pulse" />
+                  Jonli holat
+                </span>
+                <ScanFace size={16} className="text-[var(--acc-a)]" aria-hidden="true" />
+              </div>
+
+              <p className="mt-5 flex items-baseline gap-2">
+                <span className="font-bebas text-5xl leading-none tracking-wide text-[var(--fg)]">
+                  {roomsCount === null ? '—' : roomsCount}
+                </span>
+                <span className="text-sm text-[var(--fg-mut)]">
+                  {roomsCount === null ? 'yuklanmoqda' : 'ta xona'}
+                </span>
+              </p>
+              <p className="mt-2 text-sm text-[var(--fg-dim)]">
+                Platformadagi barcha xonalar — narx, zona va bo&apos;sh vaqt
+                bilan birga.
+              </p>
+
+              <div className="mt-6 flex flex-col gap-2.5">
+                <Link href="/rooms" className="cz-btn cz-btn--primary w-full">
+                  Bo&apos;sh joyni top <ArrowRight size={16} aria-hidden="true" />
+                </Link>
+                <Link
+                  href="/news"
+                  className="cz-btn cz-btn--secondary w-full"
+                >
+                  <Newspaper size={15} aria-hidden="true" /> Yangiliklar va aksiyalar
+                </Link>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
-
-      {/* ===== AMALIY STATUS QATORI (real xona soni) ===== */}
-      <div className="relative z-20 -mt-10 px-4 sm:px-6">
-        <div className="mx-auto flex max-w-3xl items-center gap-4 rounded-2xl border border-[color-mix(in_srgb,var(--acc-a)_40%,transparent)] bg-[color-mix(in_srgb,var(--bg-1)_80%,transparent)] p-4 backdrop-blur-xl shadow-[inset_0_1px_0_color-mix(in_srgb,#fff_6%,transparent),0_24px_50px_-32px_rgba(0,0,0,0.9)] sm:p-5">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span
-                aria-hidden
-                className="animate-pulse-glow h-2 w-2 shrink-0 rounded-full bg-[var(--acc-a)] shadow-[0_0_8px_var(--acc-a)]"
-              />
-              <span className="font-tech text-[var(--fg-mut)] text-[10px] uppercase tracking-[0.3em] sm:text-[11px]">
-                Jonli xonalar
-              </span>
-            </div>
-            <p className="font-tech mt-1.5 text-[var(--fg)] text-sm sm:text-base">
-              <span className="font-bebas text-3xl leading-none tracking-wide sm:text-4xl">
-                {roomsCount === null ? '—' : roomsCount}
-              </span>
-              <span className="ml-2 align-middle text-[var(--fg-mut)]">
-                {roomsCount === null ? 'yuklanmoqda' : 'ta xona platformada'}
-              </span>
-            </p>
-          </div>
-
-          <Link
-            href="/rooms"
-            aria-label="Xonalarni ko'rish"
-            className="clip-hex clip-glow grid h-14 w-14 shrink-0 place-items-center bg-gradient-to-br from-[var(--acc-a-soft)] via-[var(--acc-a)] to-[var(--acc-b)] text-[#04040f] transition-[filter,transform] duration-150 active:scale-95"
-          >
-            <ArrowRight size={20} strokeWidth={2.75} />
-          </Link>
-        </div>
-      </div>
-
-      {/* Yangilik tezkor havola — hero pastida, engil */}
-      <div className="relative z-20 mx-auto -mt-6 max-w-3xl px-4 pb-2 sm:px-6">
-        <Link
-          href="/news"
-          className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.2em] text-[var(--fg-dim)] transition-colors hover:text-[var(--acc-a)]"
-        >
-          <Newspaper size={12} aria-hidden="true" /> Yangiliklar va aksiyalar
-        </Link>
-      </div>
     </div>
   );
 }

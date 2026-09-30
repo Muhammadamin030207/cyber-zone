@@ -63,15 +63,15 @@ export default function AiPage() {
 
   if (!user) {
     return (
-      <main className="mx-auto w-full max-w-3xl px-4 py-20 text-center">
+      <div className="mx-auto w-full max-w-3xl px-4 py-20 text-center">
         <h1 className="text-2xl font-extrabold">{t('title')}</h1>
         <p className="mt-2 text-sm text-gray-400">{t('authRequired')}</p>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col px-4 py-6 sm:px-6">
+    <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-6 sm:px-6">
       <header className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight">
@@ -194,6 +194,6 @@ export default function AiPage() {
           {sending ? <Loader2 size={17} className="animate-spin" aria-hidden /> : <Send size={17} aria-hidden />}
         </button>
       </form>
-    </main>
+    </div>
   );
 }

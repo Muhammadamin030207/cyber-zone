@@ -532,7 +532,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
               <legend className="px-2 text-xs text-gray-400 flex items-center gap-1.5">
                 <BadgePercent size={12} aria-hidden="true" /> Qancha to&apos;lamoqchisiz?
               </legend>
-              <div className="grid grid-cols-5 gap-2 mt-1">
+              <div className="grid grid-cols-2 min-[420px]:grid-cols-3 sm:grid-cols-5 gap-2 mt-1">
                 {percentOptions.map((opt) => {
                   const selected = !customPercentOpen && (payPercent ?? depositPercent) === opt.value;
                   return (
@@ -642,6 +642,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
           </div>
 
           {transferPayment ? (
+            /* Karta ma'lumotlari TransferPanel ichida — qayta ko'rsatmaymiz,
+               aks holda bir xil raqam va bank ikki marta chiqadi. */
             <div className="mb-5">
               <button
                 onClick={() => { setTransferPayment(null); setMethod('CASH'); }}
@@ -688,32 +690,45 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
             </p>
           )}
 
-          <button
-            onClick={() => startPay(method)}
-            disabled={paying || polling || Boolean(transferPayment) || (method !== 'CASH' && !cardFor(method) && !(providers.find((p) => p.method === method)?.available))}
-            className="w-full py-3.5 rounded-xl neon-btn flex items-center justify-center gap-2 font-bold disabled:opacity-40"
-          >
-            {paying ? (
-              <><Loader2 size={18} className="animate-spin" /> To&apos;lanmoqda...</>
-            ) : polling ? (
-              <><RefreshCw size={18} className="animate-spin" /> Tekshirilmoqda...</>
-            ) : (
-              <>
-                {method === 'CASH'
-                  ? 'Kassada to\'layman'
-                  : cardFor(method)
-                    ? <>To&apos;lovni boshlash: {formatPrice(payAmount)} so&apos;m</>
-                    : <>To&apos;lash: {formatPrice(advance)} so&apos;m</>}
-                <ArrowRight size={16} />
-              </>
-            )}
-          </button>
+          {/* To'lov allaqachon yaratilgan bo'lsa CTA ko'rsatilmaydi — eski
+              kodda u `disabled` bo'lib qolardi va sababsiz o'chgan holda
+              ekranda turardi. TransferPanel o'zining "yuborish" tugmasini
+              ko'rsatadi, kassada esa `cashNotified` banneri bor. */}
+          {!transferPayment && !cashNotified && (
+            <button
+              onClick={() => startPay(method)}
+              disabled={paying || polling || (method !== 'CASH' && !cardFor(method) && !(providers.find((p) => p.method === method)?.available))}
+              className="w-full py-3.5 rounded-xl neon-btn flex items-center justify-center gap-2 font-bold disabled:opacity-40"
+            >
+              {paying ? (
+                <><Loader2 size={18} className="animate-spin" /> To&apos;lanmoqda...</>
+              ) : polling ? (
+                <><RefreshCw size={18} className="animate-spin" /> Tekshirilmoqda...</>
+              ) : (
+                <>
+                  {method === 'CASH'
+                    ? 'Kassada to\'layman'
+                    : cardFor(method)
+                      ? <>To&apos;lovni boshlash: {formatPrice(payAmount)} so&apos;m</>
+                      : <>To&apos;lash: {formatPrice(advance)} so&apos;m</>}
+                  <ArrowRight size={16} />
+                </>
+              )}
+            </button>
+          )}
         </>
       ) : isVoid ? (
-        /* Bekor qilingan / muddati o'tgan bron — QR berilmaydi. */
+        /* Bekor qilingan / rad etilgan bron — QR berilmaydi. */
         <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6 text-center">
           <AlertCircle size={36} className="mx-auto text-red-400 mb-3" aria-hidden="true" />
-          <h2 className="text-lg font-bold mb-1.5">Bu bron bekor qilingan</h2>
+          <h2 className="text-lg font-bold mb-1.5">
+            {booking.rejectionReason ? 'Bu bron rad etildi' : 'Bu bron bekor qilingan'}
+          </h2>
+          {booking.rejectionReason && (
+            <p className="text-sm text-red-300 mb-3">
+              Sabab: <span className="font-semibold">{booking.rejectionReason}</span>
+            </p>
+          )}
           <p className="text-sm text-gray-400 mb-5">
             Bu bron endi kuchda emas va kirish QR kodi berilmaydi. Qayta bron qilish uchun xona tanlang.
           </p>

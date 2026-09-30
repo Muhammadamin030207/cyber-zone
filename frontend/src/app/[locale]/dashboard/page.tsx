@@ -93,7 +93,11 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
     }
   }
 
-  const isActiveStatus = (s: string) => ['PENDING', 'CONFIRMED', 'ACTIVE'].includes(s);
+  // `PENDING_PAYMENT` ham faol holat: bron yaratilgan, deposit hali
+  // to'lanmagan. Eski ro'yxatda yo'q edi — shu sabab to'lov kutilayotgan
+  // bron "Tarix" tabiga tushib, foydalanuvchi uni ko'rmay qolardi.
+  const isActiveStatus = (s: string) =>
+    ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED', 'ACTIVE'].includes(s);
   const activeBookings = bookings.filter((b) => isActiveStatus(b.status));
   const historyBookings = bookings.filter((b) => !isActiveStatus(b.status));
   const shown = tab === 'active' ? activeBookings : historyBookings;
@@ -130,7 +134,7 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-3 sm:gap-4 mt-6">
+        <div className="grid grid-cols-1 min-[380px]:grid-cols-3 gap-3 sm:gap-4 mt-6">
           {[
             {
               icon: CalendarDays,
@@ -278,7 +282,7 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
                 </div>
 
                 {['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'].includes(b.status) && (
-                  <div className="mt-4 grid grid-cols-2 gap-2">
+                  <div className="mt-4 grid grid-cols-1 min-[420px]:grid-cols-2 gap-2">
                     {['PENDING', 'PENDING_PAYMENT'].includes(b.status) && (
                       <Link
                         href={`/checkout/${b.id}`}

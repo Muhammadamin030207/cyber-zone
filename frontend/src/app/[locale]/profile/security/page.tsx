@@ -56,15 +56,15 @@ export default function ProfileSecurityPage() {
 
   if (!user) {
     return (
-      <main className="mx-auto w-full max-w-3xl px-4 py-20 text-center">
+      <div className="mx-auto w-full max-w-3xl px-4 py-20 text-center">
         <h1 className="text-2xl font-extrabold">{t('title')}</h1>
         <p className="mt-2 text-sm text-gray-400">{t('authRequired')}</p>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
+    <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
       <Link
         href={`/${t('locale')}/profile`}
         className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-gray-200"
@@ -154,6 +154,6 @@ export default function ProfileSecurityPage() {
           <SecurityActivity />
         </section>
       </div>
-    </main>
+    </div>
   );
 }

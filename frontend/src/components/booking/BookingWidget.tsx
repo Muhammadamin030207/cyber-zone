@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   CalendarDays, Clock, BadgePercent, Check, Loader2, Ticket, Zap, ShieldCheck,
@@ -46,17 +46,87 @@ function minutesToHHMM(total: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+type Draft = Record<string, string | boolean>;
+const EMPTY_DRAFT: Draft = {};
+
+/* localStorage o'qish/yozish uchun kichik store. `useSyncExternalStore`
+   bir xil qiymatni qayta-qayta qayd etmasligi uchun ob'ekt KESHLANADI —
+   aks holda har render'da yangi ob'ekt qaytadi va React cheksiz
+   render aylanmasi (infinite loop) boshlaydi. */
+const draftCache = new Map<string, Draft>();
+
+function readDraft(key: string): Draft {
+  const hit = draftCache.get(key);
+  if (hit) return hit;
+  let parsed: Draft = EMPTY_DRAFT;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw) {
+      const p: unknown = JSON.parse(raw);
+      if (p && typeof p === 'object' && !Array.isArray(p)) parsed = p as Draft;
+    }
+  } catch {
+    /* buzilgan yoki eskirgan draft — bo'sh qoralama davom etadi */
+  }
+  draftCache.set(key, parsed);
+  return parsed;
+}
+
+function writeDraft(key: string, value: Draft | null): void {
+  try {
+    if (value === null) {
+      window.localStorage.removeItem(key);
+      draftCache.delete(key);
+    } else {
+      window.localStorage.setItem(key, JSON.stringify(value));
+      draftCache.set(key, value);
+    }
+  } catch {
+    /* private mode yoki kvota to'lgan — draft saqlanmaydi, ilova ishlayveradi */
+  }
+}
+
+/** Boshqa tab yoki oyna localStorage'ni o'zgartirsa — bu store ogohlantiriladi. */
+function subscribeDraftStore(onChange: () => void): () => void {
+  window.addEventListener('storage', onChange);
+  return () => window.removeEventListener('storage', onChange);
+}
+
 export default function BookingWidget({ room, date, onDateChange, availability, availabilityLoading = false }: Props) {
   const t = useTranslations('booking');
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const DRAFT_KEY = `cz:booking-draft:${room.id}`;
 
-  const [zoneId, setZoneId] = useState('');
-  const [computerId, setComputerId] = useState('');
+  /* ===== QORALAMANI SAQLASH (draft) =====
+     Sahifa yangilansa yoki boshqa tabga o'tsa, foydalanuvchi tanlagan
+     zonani / kompyuterni / vaqtni / cheksiz rejimni yo'qotmasdi. Faqat
+     lokal saqlanadi — serverga hech narsa yuborilmaydi.
+
+     O'qish `useSyncExternalStore` orqali: bu localStorage kabi tashqi
+     manbani render paytida o'qishning to'g'ri usuli. Effect ichida
+     setState qilinsa (eskida shunday edi) har bir tiklash qo'shimcha
+     render keltiradi va `react-hooks/set-state-in-effect` xatosi beradi.
+     Boshlang'ich qiymatlar draft'dan olinadi — shuning uchun tiklash
+     umuman render siklisiz ishlaydi. */
+  const draft = useSyncExternalStore(
+    subscribeDraftStore,
+    () => readDraft(DRAFT_KEY),
+    () => EMPTY_DRAFT,
+  );
+  const draftRestored = Object.keys(draft).length > 0;
+  const str = (k: string, fallback: string) => (typeof draft[k] === 'string' && draft[k] ? (draft[k] as string) : fallback);
+  const hhmm = (k: string, fallback: string) => {
+    const v = draft[k];
+    return typeof v === 'string' && /^\d{1,2}:\d{2}$/.test(v) ? v : fallback;
+  };
+
+  const [zoneId, setZoneId] = useState(() => str('zoneId', ''));
+  const [computerId, setComputerId] = useState(() => str('computerId', ''));
   const [autoPc, setAutoPc] = useState(true);
-  const [startTime, setStartTime] = useState('14:00');
-  const [endTime, setEndTime] = useState('18:00');
-  const [promoCode, setPromoCode] = useState('');
+  const [startTime, setStartTime] = useState(() => hhmm('startTime', '14:00'));
+  const [endTime, setEndTime] = useState(() => hhmm('endTime', '18:00'));
+  const [promoCode, setPromoCode] = useState(() => str('promoCode', ''));
   const [promo, setPromo] = useState<PromoCheck | null>(null);
   const [promoApplied, setPromoApplied] = useState(false);
   const [promoLoading, setPromoLoading] = useState(false);
@@ -66,9 +136,17 @@ export default function BookingWidget({ room, date, onDateChange, availability, 
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // §13: moslashuvchan (custom) davomiylik — 0.5 soat qadamida, chips + qo'lda kiritish
-  const [customH, setCustomH] = useState('');
+  const [customH, setCustomH] = useState(() => str('customH', ''));
   // UNLIMITED sessiya: taymer yo'q — sarflangan vaqt bo'yicha hisob, admin yopadi.
-  const [useUnlimited, setUseUnlimited] = useState(false);
+  const [useUnlimited, setUseUnlimited] = useState(() => draft.useUnlimited === true);
+
+  useEffect(() => {
+    // Bo'sh qoralama yozmaymiz — localStorage'ni keraksiz to'ldirmaymiz.
+    const hasContent = Boolean(zoneId || computerId || customH || promoCode || useUnlimited);
+    writeDraft(DRAFT_KEY, hasContent
+      ? { zoneId, computerId, startTime, endTime, useUnlimited, customH, promoCode }
+      : null);
+  }, [zoneId, computerId, startTime, endTime, useUnlimited, customH, promoCode, DRAFT_KEY]);
 
   // Tanlangan zona render paytida YECHILADI (effect emas): sana almashsa
   // eski zona mavjudlik ro'yxatidan "yo'qoladi" va birinchi zona qo'llanadi.
@@ -294,6 +372,9 @@ async function submit() {
 
       const { data } = await api.post('/api/bookings', payload);
       const bookingId = data.data?.id;
+      // Bron muvaffaqiyatli — endi bu qoralama kerak emas. Aks holda
+      // foydalanuvchi keyingi bron qilganda eskisini ko'radi.
+      writeDraft(DRAFT_KEY, null);
       router.push(bookingId ? `/checkout/${bookingId}` : '/dashboard');
       setSuccess(true);
     } catch (err) {
@@ -377,6 +458,32 @@ async function submit() {
             className="glass-input w-full rounded-xl px-3 py-2.5 text-sm outline-none"
           />
         </div>
+
+        {/* Qoralama tiklandi — foydalanuvchi nima tiklanganini bilsin va
+            kerak bo'lsa tozalashni ko'ra olsin. */}
+        {draftRestored && (
+          <div className="flex items-center justify-between gap-3 mb-3 px-3 py-2 rounded-xl border border-[#ff7a1a]/25 bg-[#ff7a1a]/[0.06]">
+            <span className="text-[11px] text-[#ff7a1a] leading-snug">
+              Oldingi tanlovlaringiz tiklandi.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                writeDraft(DRAFT_KEY, null);
+                setZoneId('');
+                setComputerId('');
+                setStartTime('14:00');
+                setEndTime('18:00');
+                setUseUnlimited(false);
+                setCustomH('');
+                setPromoCode('');
+              }}
+              className="shrink-0 text-[11px] font-semibold text-gray-300 hover:text-white underline underline-offset-2"
+            >
+              Tozalash
+            </button>
+          </div>
+        )}
 
         {/* Zona */}
         <div>
@@ -463,6 +570,27 @@ async function submit() {
 
         {/* Vaqt */}
         <div>
+          {/* ====== UNLIMITED: toggle DOIM ko'rinadi ======
+              Toggle `useUnlimited` true bo'lganda yashirilsa, foydalanuvchi
+              uni qayta o'chira olmaydi — bir tomonlama "latch" bo'lib qoladi.
+              Shu sababli toggle ternary tashqarisida, faqat duration/end-time
+              maydonlari ternary ichida. */}
+          <label className="flex items-start gap-2.5 mb-3 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={useUnlimited}
+              onChange={(e) => setUseUnlimited(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-[#ff7a1a]"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-gray-200">Cheksiz sessiya</span>
+              <span className="block text-[11px] text-gray-500 leading-relaxed">
+                Vaqt chegarasi yo&apos;q — taymer yopmaydi, sarflangan vaqt bo&apos;yicha
+                avtomatik hisoblanadi (min 1 soat). Sessiyani admin yoki siz yakunlaysiz.
+              </span>
+            </span>
+          </label>
+
           {/* ====== UNLIMITED: duration / end-time inputlari YASHIRILADI ======
               Cheksiz sessiyada vaqt chegarasi yo'q — foydalanuvchi faqat
               BOSHLASH vaqtini tanlaydi. Davomiylik va tugash vaqti so'ralmaydi,
@@ -526,21 +654,13 @@ async function submit() {
             </button>
             <span className="text-[11px] text-gray-500">0.5–24 soat</span>
           </div>
-          <label className="flex items-start gap-2.5 mb-3 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={useUnlimited}
-              onChange={(e) => setUseUnlimited(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-[#ff7a1a]"
-            />
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold text-gray-200">Cheksiz sessiya</span>
-              <span className="block text-[11px] text-gray-500 leading-relaxed">
-                Vaqt chegarasi yo&apos;q — taymer yopmaydi, sarflangan vaqt bo&apos;yicha
-                avtomatik hisoblanadi (min 1 soat). Sessiyani admin yoki siz yakunlaysiz.
-              </span>
-            </span>
-          </label>
+          </>
+          )}
+
+          {/* ====== BOSHLASH VAQTI: har ikkala rejimda ham kerak ======
+              Oldingi kodda bu input `useUnlimited` false bo'lgandagi ichki
+              blokda edi — cheksiz rejimga o'tilganda start time butunlay
+              ko'rinmas edi. */}
           <div className={`grid gap-3 ${useUnlimited ? 'grid-cols-1' : 'grid-cols-2'}`}>
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
@@ -573,13 +693,18 @@ async function submit() {
               Tugash vaqti boshlanish vaqtidan keyin bo‘lishi kerak.
             </p>
           )}
+          {useUnlimited && !timeOk && (
+            <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
+              Boshlanish vaqti xona yopilish vaqtidan oldin bo‘lishi kerak.
+            </p>
+          )}
           {timeOk && !useUnlimited && durationExceeds && (
             <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
               Bu davomiylik uchun vaqt yetarli emas — maksimal{' '}
               {maxDurationHours.toFixed(maxDurationHours % 1 === 0 ? 0 : 1)} soat.
             </p>
           )}
-          {timeOk && !useUnlimited && !durationExceeds && freeInWindow === 0 && (
+          {timeOk && freeInWindow === 0 && (
             <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
               Bu vaqt oralig‘ida bo‘sh kompyuter yo‘q — boshqa vaqtni tanlang.
             </p>
@@ -588,8 +713,6 @@ async function submit() {
             <p className="text-xs text-gray-500 mt-1.5">
               Bu vaqtda {freeInWindow} ta bo‘sh kompyuter bor.
             </p>
-          )}
-          </>
           )}
         </div>
 

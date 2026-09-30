@@ -26,7 +26,7 @@ export default function SeatMap({ computers, selectedId, onSelect }: Props) {
           EKRAN TOMONI
         </div>
 
-        <div className="mt-8 grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-10 gap-2">
+        <div className="mt-8 grid grid-cols-4 min-[420px]:grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 gap-2">
           {computers.map((pc, i) => {
             const busy = !pc.canBook;
             const selected = selectedId === pc.id;
