@@ -160,7 +160,7 @@ export default function HomeSections() {
             .map((s) => (
               <div
                 key={s.label}
-                className="surface rounded-2xl border border-white/10 p-4 text-center sm:p-5"
+                className="surface min-w-0 rounded-2xl border border-white/10 p-4 text-center sm:p-5"
               >
                 <s.icon
                   size={16}
@@ -196,7 +196,7 @@ export default function HomeSections() {
           {STEPS.map((s, i) => (
             <li
               key={s.title}
-              className="surface relative rounded-2xl border border-white/10 p-5 transition-colors hover:border-[color-mix(in_srgb,var(--acc-a)_45%,transparent)]"
+              className="surface relative min-w-0 rounded-2xl border border-white/10 p-5 transition-colors hover:border-[color-mix(in_srgb,var(--acc-a)_45%,transparent)]"
             >
               <span
                 aria-hidden
@@ -243,17 +243,20 @@ export default function HomeSections() {
             </Link>
           </div>
 
+          {/* `min-w-0` MUHIM: grid bolasi default `min-width: auto` bo'lgani
+              uchun ichidagi eng uzun so'z (xona nomi/manzil) track'ni
+              kengaytiradi va 320px ekranda gorizontal overflow chiqadi. */}
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {rooms.map((r) => {
               const zoneNames = (r.zones ?? []).slice(0, 3);
               return (
-                <li key={r.id}>
+                <li key={r.id} className="min-w-0">
                   <Link
                     href={`/rooms/${r.id}`}
-                    className="group surface flex h-full flex-col rounded-2xl border border-white/10 p-5 transition-colors hover:border-[color-mix(in_srgb,var(--acc-a)_45%,transparent)]"
+                    className="group surface flex h-full min-w-0 flex-col rounded-2xl border border-white/10 p-5 transition-colors hover:border-[color-mix(in_srgb,var(--acc-a)_45%,transparent)]"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <h3 className="min-w-0 text-base font-semibold text-[var(--fg)]">
+                      <h3 className="min-w-0 break-words text-base font-semibold text-[var(--fg)]">
                         {r.name}
                       </h3>
                       {r.avgRating ? (
@@ -273,7 +276,7 @@ export default function HomeSections() {
                         {zoneNames.map((z) => (
                           <li
                             key={z.id}
-                            className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-[var(--fg-mut)]"
+                            className="min-w-0 break-words rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-[var(--fg-mut)]"
                           >
                             {z.name}
                           </li>
@@ -316,16 +319,16 @@ export default function HomeSections() {
 
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {news.map((n) => (
-              <li key={n.id}>
+              <li key={n.id} className="min-w-0">
                 <Link
                   href="/news"
-                  className="surface flex h-full flex-col rounded-2xl border border-white/10 p-5 transition-colors hover:border-[color-mix(in_srgb,var(--acc-a)_45%,transparent)]"
+                  className="surface flex h-full min-w-0 flex-col rounded-2xl border border-white/10 p-5 transition-colors hover:border-[color-mix(in_srgb,var(--acc-a)_45%,transparent)]"
                 >
-                  <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--acc-c)_35%,transparent)] px-2.5 py-0.5 text-[10px] uppercase tracking-[0.15em] text-[var(--acc-c)]">
-                    <Newspaper size={10} aria-hidden="true" />
-                    {n.type || 'news'}
+                  <span className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--acc-c)_35%,transparent)] px-2.5 py-0.5 text-[10px] uppercase tracking-[0.15em] text-[var(--acc-c)]">
+                    <Newspaper size={10} aria-hidden="true" className="shrink-0" />
+                    <span className="truncate">{n.type || 'news'}</span>
                   </span>
-                  <h3 className="mt-3 line-clamp-2 text-base font-semibold text-[var(--fg)]">
+                  <h3 className="mt-3 line-clamp-2 break-words text-base font-semibold text-[var(--fg)]">
                     {n.title}
                   </h3>
                   {n.publishedAt ? (
