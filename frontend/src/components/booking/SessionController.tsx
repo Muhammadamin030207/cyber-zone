@@ -46,6 +46,11 @@ export default function SessionController({
   // Kamerali yuz tekshiruvi: server esgi `faceCheckRequired` (SiteSetting) bo'yicha.
   const faceRequired = session?.faceCheckRequired === true;
   const faceVerified = session?.faceVerified === true;
+  // Provider serverda sozlanganmi? `false` bo'lsa tekshiruvni talab qilib
+  // ko'rsatib, keyin "mavjud emas" degan xato berish o'rniga — to'g'ridan-to'g'ri
+  // tushuntirishni ko'rsatamiz (tuzoq bo'lmagan, halokatli UX yo'q).
+  const faceAvailable = session?.faceCheckAvailable === true;
+  const faceBlocked = faceRequired && !faceVerified && !faceAvailable;
 
   async function fetchSession(silent = false) {
     try {
@@ -82,7 +87,13 @@ export default function SessionController({
       confirmLabel: 'Boshlash',
     }))) return;
     // Yuz tekshiruvi hali o'tilmagan va talab yoqilgan bo'lsa — kameraga yuboramiz.
+    // Provider serverda yo'q bo'lsa — bu yerda to'xtaymiz, kamera ochmaymiz
+    // (foydalanuvchi "mavjud emas" xabari oladi).
     if (faceRequired && !faceVerified) {
+      if (!faceAvailable) {
+        setError('Face Verification hozircha mavjud emas. Sessiyani boshlash uchun administratorga murojaat qiling.');
+        return;
+      }
       setShowFace(true);
       return;
     }
@@ -255,10 +266,19 @@ export default function SessionController({
               Sessiyani boshlash (check-in)
             </button>
             {faceRequired && !faceVerified && !isActive && (
-              <p className="text-[11px] text-neon-amber flex items-center gap-1.5">
-                <Camera size={12} />
-                Avval kamerali yuz tekshiruvida 3 marta ko&apos;z pirpirating.
-              </p>
+              faceBlocked ? (
+                <p className="text-[11px] text-[var(--warn)] flex items-start gap-1.5">
+                  <Camera size={12} className="shrink-0 mt-0.5" />
+                  <span>Face Verification hozircha mavjud emas. Sessiyani boshlash uchun administratorga murojaat qiling.</span>
+                </p>
+              ) : (
+                <p className="text-[11px] text-[var(--warn)] flex items-start gap-1.5">
+                  <Camera size={12} className="shrink-0 mt-0.5" />
+                  <span>Avval kamerali yuz tekshiruvida {''}
+                    3 marta ko&apos;z pirpirating.
+                  </span>
+                </p>
+              )
             )}
             <p className="text-[11px] text-gray-500 flex items-center gap-1.5">
               <CheckCircle2 size={12} className="text-neon-green" />

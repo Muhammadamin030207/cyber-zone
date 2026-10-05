@@ -116,7 +116,7 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-3 sm:px-5 pt-2 sm:pt-3 pb-2">
+      <div className="cz-shell pt-2 sm:pt-3 pb-2">
         <div className="cz-header relative flex items-center gap-2 w-full" style={{ minHeight: 'var(--ad-header-h)', paddingInline: 'var(--shell-pad)' }}>
           <Link href="/" className="flex items-center gap-2 group shrink-0" aria-label="Cyber-ZONE — bosh sahifa">
             <Logo size={30} />

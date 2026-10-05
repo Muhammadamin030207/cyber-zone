@@ -1236,6 +1236,25 @@ export const submitTransferProof = async (req: AuthRequest, res: Response, next:
 
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
     if (files.length < 1) {
+      // MUHIM: so'rov umuman MULTIPART bo'lmagan bo'lsa, bu — mijoz
+      // tomonidagi texnik xato (oddiyda: `axios` instance'ida
+      // `Content-Type: application/json` header'i turgani uchun `FormData`
+      // JSON'ga aylantirilib yuboriladi, `multer` esa multipart deb
+      // TOG'RILAMAYDI -> `req.files` DOIM bo'sh). Bu holatda
+      // "kamida 1 ta chek yuklang" xabari foydalanuvchini befarq qoldiradi,
+      // chunki u allaqachon chek tanlagan. Shuning uchun alohida kod bilan
+      // aniq "texnik xato" deb belgilaymiz — chek validatsiyasi esa O'CHMAYDI.
+      const contentType = String(req.headers['content-type'] || '');
+      if (!contentType.toLowerCase().includes('multipart/form-data')) {
+        console.warn(
+          `[PAYMENT] ${payment.id} uchun chek so'rovi multipart EMAS (content-type: ${contentType || 'yo\'q'}) — fayllar serverga yetib kelmagan.`,
+        );
+        return badRequest(
+          res,
+          'Chekni yuborishda texnik xatolik yuz berdi. Sahifani yangilab, chekni qayta tanlab yuboring.',
+          'RECEIPTS_UPLOAD_MALFORMED',
+        );
+      }
       return badRequest(res, 'Kamida 1 ta o\'tkazma cheki (screenshot) yuklang');
     }
     if (files.length > 3) {

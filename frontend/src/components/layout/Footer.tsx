@@ -9,7 +9,7 @@ export default function Footer() {
 
   return (
     <footer className="cz-footer border-t border-neon-cyan/15 bg-cyber-950/80">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
+      <div className="cz-shell py-10">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* Brand */}
           <div>

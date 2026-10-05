@@ -81,7 +81,7 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
 
   if (!user || user.role !== 'ADMIN') {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-24 text-center">
+      <div className="cz-shell py-24 text-center">
         <ShieldCheck size={56} className="mx-auto mb-4 text-gray-500" />
         <p className="text-gray-300 font-bold text-xl">{tG('accessDenied')}</p>
       </div>
@@ -90,14 +90,14 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
+      <div className="cz-shell py-10">
         <div className="skeleton rounded-2xl h-96" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
+    <div className="cz-shell py-10">
       <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-5 sm:mb-6 flex items-center gap-3">
         <span className="w-10 h-10 sm:w-11 sm:h-11 neo-card rounded-xl flex items-center justify-center shrink-0"><Logo size={24} /></span>
         <span className="min-w-0">{t('title')}</span>

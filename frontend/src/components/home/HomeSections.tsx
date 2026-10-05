@@ -138,7 +138,7 @@ export default function HomeSections() {
   const hasStats = facts.rooms !== null || facts.zones !== null;
 
   return (
-    <div className="relative z-20 mx-auto w-full max-w-7xl px-4 pb-20 sm:px-6">
+    <div className="relative z-20 cz-shell pb-20 ">
       {/* ===== 1. RAQAMLAR (faqat real ma'lumot) ===== */}
       {hasStats && (
         <section

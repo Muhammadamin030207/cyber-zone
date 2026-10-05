@@ -142,6 +142,20 @@ export const config = {
       .filter(Boolean),
     tempPasswordMinutes: Math.max(10, parseInt(process.env.TEMP_PASSWORD_MINUTES || '30', 10)),
   },
+  faceVerification: {
+    // Tanlangan provider: 'aws' (AWS Rekognition Face Liveness + Face
+    // Collection) yoki 'none' (default — hech qanday tekshiruv yo'q).
+    // `services/face/registry.ts` shu qiymatni o'qiadi va konfiguratsiya
+    // yetishmasa `none` ga QAYTADI (fail-safe). Provider yo'q bo'lsa
+    // endpoint `NOT_CONFIGURED` (503) qaytaradi — hech qachon fake PASS.
+    provider: (process.env.FACE_PROVIDER || 'none').trim().toLowerCase(),
+    // Minimal o'tkazish vaqti (ms) — sun'iy "0ms da o'tdim" ni rad etadi.
+    minDurationMs: Math.max(1_000, parseInt(process.env.FACE_MIN_DURATION_MS || '6000', 10)),
+    // Maksimal o'tkazish vaqti (ms) — juda eskirgan/soxta qiymatni rad etadi.
+    maxDurationMs: Math.max(60_000, parseInt(process.env.FACE_MAX_DURATION_MS || '180000', 10)),
+    // AWS Face Collection (AWS_REKOGNITION_FACE_COLLECTION_ID).
+    awsCollectionId: process.env.AWS_FACE_COLLECTION_ID || '',
+  },
   ai: {
     // Claude (Anthropic) — server tomonida, kalit hech qachon frontendga chiqmaydi.
     // ANTHROPIC_API_KEY o'rnatilgan bo'lsa — Claude ustunlik bilan ishlatiladi.

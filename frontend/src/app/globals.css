@@ -28,6 +28,12 @@ html[data-theme="obsidian"] {
   --fg: #f7f4f2;
   --fg-mut: #a8a09a;
   --fg-dim: #918a84;        /* >=4.5:1 on bg-0..bg-3 (AA small text) */
+
+  /* ---- SEMANTIC (faqat holat uchun; interfeys asosiy rangi EMAS) ---- */
+  --ok: #34d399;
+  --ok-2: #10b981;
+  --warn: #fbbf24;
+  --info: #60a5fa;
 }
 
 html[data-theme="midnight"] {
@@ -46,6 +52,12 @@ html[data-theme="midnight"] {
   --fg: #f6f2f7;
   --fg-mut: #a69daa;
   --fg-dim: #948d98;        /* >=4.5:1 on bg-0..bg-3 */
+
+  /* ---- SEMANTIC (faqat holat uchun; interfeys asosiy rangi EMAS) ---- */
+  --ok: #34d399;
+  --ok-2: #10b981;
+  --warn: #fbbf24;
+  --info: #60a5fa;
 }
 
 html[data-theme="cyberpunk"] {
@@ -64,6 +76,12 @@ html[data-theme="cyberpunk"] {
   --fg: #f4eef8;
   --fg-mut: #9d93ac;
   --fg-dim: #918a9f;        /* >=4.5:1 on bg-0..bg-3 */
+
+  /* ---- SEMANTIC (faqat holat uchun; interfeys asosiy rangi EMAS) ---- */
+  --ok: #4ade80;
+  --ok-2: #22c55e;
+  --warn: #facc15;
+  --info: #60a5fa;
 }
 
 html[data-theme="aurora"] {
@@ -82,6 +100,12 @@ html[data-theme="aurora"] {
   --fg: #eef4f7;
   --fg-mut: #97a9b2;
   --fg-dim: #82949e;        /* >=4.5:1 on bg-0..bg-3 */
+
+  /* ---- SEMANTIC (faqat holat uchun; interfeys asosiy rangi EMAS) ---- */
+  --ok: #2dd4bf;
+  --ok-2: #14b8a6;
+  --warn: #fcd34d;
+  --info: #38bdf8;
 }
 
 html[data-theme="halloween"] {
@@ -100,6 +124,12 @@ html[data-theme="halloween"] {
   --fg: #f7edf0;
   --fg-mut: #b7a4ad;
   --fg-dim: #99878e;        /* >=4.5:1 on bg-0..bg-3 */
+
+  /* ---- SEMANTIC (faqat holat uchun; interfeys asosiy rangi EMAS) ---- */
+  --ok: #4ade80;
+  --ok-2: #22c55e;
+  --warn: #fbbf24;
+  --info: #60a5fa;
 }
 
 /* ================================================================
@@ -264,6 +294,12 @@ html[data-theme="halloween"] {
   /* `neon-red` 9 marta ishlatilgan, lekin token HECH QACHON yo'q edi —
      klass `text-neon-red`/`bg-neon-red/15` rang yo'q (transparent) chiqardi. */
   --color-neon-red: var(--danger);
+  /* Semantic — faqat holat (success/warning/info). Interfeys asosiy rangi
+     CYBER ORANGE bo'lib qoladi; yashil butun interfeysda ishlatilmaydi. */
+  --color-ok: var(--ok);
+  --color-ok-2: var(--ok-2);
+  --color-warn: var(--warn);
+  --color-info: var(--info);
   --color-cyber-950: var(--bg-0);
   --color-cyber-900: var(--bg-1);
   --color-cyber-800: var(--bg-2);
@@ -1415,8 +1451,7 @@ html[data-theme="halloween"] .halloween-decor {
 
 /* 5) Keng ekran (>=1536px): matn o'qish chegarasi — juda uzun qatorlardan qaytish */
 @media (min-width: 1536px) {
-  .container-page,
-  main > div { max-width: 1560px; }
+  main > div { max-width: var(--shell-max); }
 }
 
 /* 6) Xavfsiz zona (notch / home indicator) — pastdagi elementlar tegilmasin */

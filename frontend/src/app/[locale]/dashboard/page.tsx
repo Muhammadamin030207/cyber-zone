@@ -118,7 +118,7 @@ export default function DashboardPage({ params }: { params: Promise<{ locale: st
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
+    <div className="cz-shell py-10">
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-4">

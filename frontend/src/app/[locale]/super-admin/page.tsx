@@ -35,7 +35,7 @@ export default function SuperAdminPage({ params }: { params: Promise<{ locale: s
 
   if (!user || user.role !== 'SUPER_ADMIN') {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-20 text-center">
+      <div className="cz-shell py-20 text-center">
         <Crown size={48} className="mx-auto mb-4 text-gray-600" />
         <p className="text-gray-400 text-lg">{t('accessDenied')}</p>
       </div>
@@ -54,7 +54,7 @@ export default function SuperAdminPage({ params }: { params: Promise<{ locale: s
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
+    <div className="cz-shell py-10">
       <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-5 sm:mb-6 flex items-center gap-3">
         <span className="w-10 h-10 sm:w-11 sm:h-11 neo-card rounded-xl flex items-center justify-center shrink-0"><Logo size={24} /></span>
         <span className="min-w-0">{t('title')}</span>

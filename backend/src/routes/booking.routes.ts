@@ -9,6 +9,7 @@ import {
   getAvailability,
   startBookingSession,
   endBookingSession,
+  startFaceSession,
   markFaceVerified,
   getSessionInfo,
   reviewBookingApproval,
@@ -30,6 +31,7 @@ router.put('/:id/cancel', authenticate, cancelBooking);
 
 // SESSIYA (check-in/check-out) — foydalanuvchi yoki xona egasi/boshqaruvchi boshqara oladi.
 router.get('/:id/session', authenticate, getSessionInfo);
+router.post('/:id/face-session', authenticate, startFaceSession);
 router.post('/:id/face-verified', authenticate, markFaceVerified);
 router.post('/:id/session/start', authenticate, startBookingSession);
 router.post('/:id/session/end', authenticate, endBookingSession);

@@ -1,40 +1,76 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Camera, CheckCircle2, Loader2, AlertCircle, Eye, X } from 'lucide-react';
-import api, { getApiErrorMessage } from '@/lib/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Camera, CheckCircle2, Loader2, AlertCircle, Eye, X, ShieldCheck, RefreshCw,
+} from 'lucide-react';
+import api, { getApiErrorMessage, humanizeMediaError, humanizeModelLoadError } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/toast';
-import type { FaceLandmarker, NormalizedLandmark } from '@mediapipe/tasks-vision';
+import type { FaceLandmarker } from '@mediapipe/tasks-vision';
 
 const BLINK_TARGET = 3;
 const BLINK_THRESHOLD = 0.5;
 const BLINK_DEBOUNCE_MS = 350;
 const NO_FACE_AFTER_MS = 4500;
 
+/**
+ * Holatlar — foydalanuvchiga ko'rsatiladigan ANIQ bosqichlar.
+ * "Yuklanmoqda" umumiy holati yo'q: har bosqich o'z nomi bilan chiqadi.
+ */
 type Status =
-  | 'booting'
-  | 'camera'
-  | 'detecting'
-  | 'scanning'
-  | 'passing'
-  | 'uploading'
+  | 'preparing'   // Server sessiyasini ochmoqda
+  | 'camera'      // Kameraga ruxsat kutilmoqda
+  | 'loading'     // Yuz detektori modeli yuklanmoqda
+  | 'detecting'   // Yuz izlanmoqda
+  | 'scanning'    // Jonlilik tekshiruvi (ko'z pirpirash)
+  | 'verifying'   // Server natijani tekshiradi
+  | 'success'
   | 'error';
 
+/** Server kodlarini aniq, inson tilidagi holatga aylantiradi. */
+function faceServerMessage(code: unknown, fallback: string): string {
+  switch (code) {
+    case 'NOT_CONFIGURED':
+      return 'Face Verification hozircha mavjud emas.';
+    case 'PROVIDER_UNAVAILABLE':
+      return 'Face tekshiruv serverida vaqtinchalik xatolik.';
+    case 'SESSION_EXPIRED':
+      return 'Tekshiruv sessiyasi tugagan. Qaytadan boshlang.';
+    case 'SESSION_ALREADY_USED':
+      return 'Tekshiruv allaqachon bajarilgan. Qayta boshlang.';
+    case 'VERIFICATION_FAILED':
+      return 'Yuz tasdiqlanmadi. Qayta urinib ko‘ring.';
+    case 'FACE_NOT_DETECTED':
+      return 'Yuz aniqlanmadi. Yaxshi yoritilgan joyda urinib ko‘ring.';
+    case 'INVALID_REQUEST':
+      return 'Tekshiruv so‘rovi noto‘g‘ri.';
+    case 'RATE_LIMITED':
+      return 'Juda ko‘p urinish. Biroz kutib, qayta urinib ko‘ring.';
+    case 'FACE_CHECK_NOT_REQUIRED':
+      return 'Bu bron uchun yuz tekshiruvi talab qilinmaydi.';
+    default:
+      return fallback;
+  }
+}
+
+/** Axios xatosidan server `code` ni ajratib oladi. */
+function extractServerCode(err: unknown): unknown {
+  const e = err as { response?: { data?: { code?: unknown } } } | null;
+  return e?.response?.data?.code;
+}
+
 /**
- * KAMERALI YUZ TEKSHIRUVI (liveness).
+ * KAMERALI YUZ TEKSHIRUVI (liveness) — Cyber-ZONE.
  *
- * MediaPipe FaceLandmarker bilan yuzni topamiz va "ko'z pirpirash" (blink)
- * orqali jonlilikni tekshiramiz:
- *   1) kamerani so'raymiz + video ko'rsatamiz (mijoz yuzini ko'radi),
- *   2) FaceLandmarker blend-shape'lari `eyeBlinkLeft`/`eyeBlinkRight` > 0.5
- *      — ko'z yumilgan;
- *   3) ochiq-yumig-yochiq holat 3 marta takrorlansa — LIVENESS o'tdi;
- *   4) `POST /api/bookings/:id/face-verified` — server tegishini yozadi.
+ * Oqim:
+ *   1) `POST /api/bookings/:id/face-session` — server provider sessiyasini ochadi.
+ *      Token mijozga beriladi; u o'zini "o'tgan" deb hisoblay OLMAYDI.
+ *   2) Kamera + MediaPipe yuz detektori — jonlilik (ko'z pirpirash).
+ *   3) `POST /api/bookings/:id/face-verified` — server PROVIDER NATIJASINI
+ *      tekshiradi va faqat `VERIFIED` bo'lsa `faceVerifiedAt` yozadi.
  *
- * Bu – STATIK RASM/DONA videoni o'z-o'zidan yo'q qiladigan jonli tekshiruv:
- * "ko'z pirpirating" buyrug'i BERSIZ kamerada bajarilishi shart (hech qanday
- * rasm 3 marta pirpira olmaydi). Eslatma: bu to'liq biometrik identifikatsiya
- * EMAS — "mijozning o'zi jonli ekani"ni isbotlaydi.
+ * Xatolar: hech qachon "Internetni tekshirib" umumiy xabari chiqmaydi —
+ * kamera ruxsati, model yuklanishi, provider va tarmoq alohida ajratiladi.
  */
 export default function FaceCheck({
   open,
@@ -50,47 +86,91 @@ export default function FaceCheck({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const faceRef = useRef<FaceLandmarker | null>(null);
-  const animRef = useRef<number>(0);
   const lastVideoTimeRef = useRef(-1);
+  const sessionTokenRef = useRef<string>('');
+  const startedAtRef = useRef(0);
 
-  const [status, setStatus] = useState<Status>('booting');
-  const [message, setMessage] = useState('');
+  const [status, setStatus] = useState<Status>('preparing');
+  const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [blinks, setBlinks] = useState(0);
   const [faceSeen, setFaceSeen] = useState(false);
-  const [stillFrame, setStillFrame] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [faceLost, setFaceLost] = useState(false);
+  const [cameraError, setCameraError] = useState(false);
 
-  // Blink holati — ref'da ushlab turamiz (animatsiya sikli render'ga bog'lanmaydi).
-  const blinkStateRef = useRef<{ closed: boolean; lastClosedAt: number }>({ closed: false, lastClosedAt: 0 });
-  const noFaceSinceRef = useRef<number>(0);
+  const blinkRef = useRef({ closed: false, lastClosedAt: 0 });
+  const noFaceSinceRef = useRef(0);
+  const blinksRef = useRef(0);
   const doneRef = useRef(false);
 
-  async function stopCamera() {
-    if (animRef.current) cancelAnimationFrame(animRef.current);
+  const STATUS_TEXT: Record<Status, string> = {
+    preparing: 'Tekshiruv sessiyasi tayyorlanmoqda',
+    camera: 'Kameraga ruxsat kutilmoqda',
+    loading: 'Yuzni aniqlash moduli yuklanmoqda',
+    detecting: 'Yuz izlanmoqda',
+    scanning: `Ko‘zingizni ${BLINK_TARGET} marta pirpirating`,
+    verifying: 'Tekshirilmoqda',
+    success: 'Tasdiqlandi',
+    error: 'Tekshiruvni yakunlab bo‘lmadi',
+  };
+
+  const stopCamera = useCallback(async () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     try { await faceRef.current?.close(); } catch { /* jimgina */ }
     faceRef.current = null;
-  }
+  }, []);
 
-  // Dastlabki qadam: kamerani ochamiz
+  const fail = useCallback((title: string, technical?: string) => {
+    setError(title);
+    setErrorDetail(technical ?? null);
+    setStatus('error');
+    doneRef.current = false;
+  }, []);
+
+  // ---- Boshlang'ich oqim: server sessiyasi + kamera + model ----
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+
     (async () => {
-      setStatus('booting');
-      setMessage('Kamera sozlanmoqda…');
+      setStatus('preparing');
       setError(null);
+      setErrorDetail(null);
       setBlinks(0);
       setFaceSeen(false);
-      setStillFrame(false);
-      blinkStateRef.current = { closed: false, lastClosedAt: 0 };
+      setFaceLost(false);
+      setCameraError(false);
+      blinksRef.current = 0;
+      blinkRef.current = { closed: false, lastClosedAt: 0 };
       noFaceSinceRef.current = 0;
       doneRef.current = false;
+      sessionTokenRef.current = '';
+      startedAtRef.current = Date.now();
 
+      // 1) Server sessiyasi. Provider yo'q bo'lsa — bu yerda aniq
+      //    `NOT_CONFIGURED` xabari chiqadi va kamera umuman so'ralmaydi.
+      try {
+        const { data } = await api.post(`/api/bookings/${bookingId}/face-session`);
+        if (cancelled) return;
+        sessionTokenRef.current = String(data?.data?.sessionToken || '');
+      } catch (err) {
+        if (cancelled) return;
+        const code = extractServerCode(err);
+        fail(faceServerMessage(code, 'Tekshiruvni boshlab bo‘lmadi.'), String(getApiErrorMessage(err)));
+        return;
+      }
+      if (cancelled) return;
+
+      // 2) Kamera
+      setStatus('camera');
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          video: {
+            facingMode: 'user',
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
           audio: false,
         });
         if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
@@ -99,225 +179,307 @@ export default function FaceCheck({
           videoRef.current.srcObject = stream;
           await videoRef.current.play().catch(() => undefined);
         }
-        setStatus('detecting');
-        setMessage('Yuzni kameraga qadang');
+        setStatus('loading');
       } catch (err) {
-        setError((err as Error)?.name === 'NotAllowedError'
-          ? 'Kameraga ruxsat berilmadi — brauzer sozlamalarida ruxsat bering.'
-          : (err as Error)?.name === 'NotFoundError'
-            ? 'Kamera topilmadi.'
-            : getApiErrorMessage(err, 'Kamerani ochib bo\'lmadi'));
-        setStatus('error');
+        if (cancelled) return;
+        setCameraError(true);
+        fail(
+          humanizeMediaError(err) ?? 'Kamerani ochib bo‘lmadi. Qurilma sozlamalarini tekshiring.',
+          `getUserMedia: ${(err as Error)?.name || 'unknown'}`
+        );
       }
     })();
-    return () => { cancelled = true; void stopCamera(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, bookingId]);
 
-  // FaceLandmarker'ni yuklaymiz (ilgari yuklanmagan bo'lsa)
+    return () => { cancelled = true; void stopCamera(); };
+  }, [open, bookingId, fail, stopCamera]);
+
+  // ---- Yuz detektori modelini yuklash ----
   useEffect(() => {
-    if (status !== 'detecting' && status !== 'scanning') return;
+    if (status !== 'loading') return;
     let cancelled = false;
     (async () => {
       try {
-        const mod = await import('@mediapipe/tasks-vision');
-        const { FilesetResolver, FaceLandmarker } = mod;
+        const { FilesetResolver, FaceLandmarker } = await import('@mediapipe/tasks-vision');
         const wasm = await FilesetResolver.forVisionTasks('/wasm');
+        const opts = {
+          baseOptions: { modelAssetPath: '/models/face_landmarker.task' },
+          runningMode: 'VIDEO' as const,
+          numFaces: 1,
+          outputFaceBlendshapes: true,
+        };
         let landmarker: FaceLandmarker | null = null;
+        // Avval GPU, GPU ishlamasa CPU (ba'zi qurilmalarda GPU delegate xato beradi).
         try {
           landmarker = await FaceLandmarker.createFromOptions(wasm, {
-            baseOptions: { modelAssetPath: '/models/face_landmarker.task', delegate: 'GPU' },
-            runningMode: 'VIDEO',
-            numFaces: 1,
-            outputFaceBlendshapes: true,
+            ...opts, baseOptions: { ...opts.baseOptions, delegate: 'GPU' },
           });
         } catch {
           landmarker = await FaceLandmarker.createFromOptions(wasm, {
-            baseOptions: { modelAssetPath: '/models/face_landmarker.task', delegate: 'CPU' },
-            runningMode: 'VIDEO',
-            numFaces: 1,
-            outputFaceBlendshapes: true,
+            ...opts, baseOptions: { ...opts.baseOptions, delegate: 'CPU' },
           });
         }
         if (cancelled) { await landmarker.close(); return; }
         faceRef.current = landmarker;
-        setStatus('scanning');
-        setMessage(`Ko'zingizni ${BLINK_TARGET} marta pirpirating`);
+        setStatus('detecting');
       } catch (err) {
-        setError(getApiErrorMessage(err, 'Yuz detektori yuklanmadi'));
-        setStatus('error');
+        if (cancelled) return;
+        fail(
+          humanizeModelLoadError(err) ?? 'Yuzni aniqlash moduli yuklanmadi. Sahifani yangilang.',
+          `mediapipe: ${(err as Error)?.message?.slice(0, 120) || 'unknown'}`
+        );
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [status, fail]);
 
-  async function submitVerified() {
-    setStatus('uploading');
+  // ---- 2-bosqich: server natijani tasdiqlaydi ----
+  const submitVerified = useCallback(async () => {
+    setStatus('verifying');
+    const durationMs = Date.now() - startedAtRef.current;
     try {
-      await api.post(`/api/bookings/${bookingId}/face-verified`);
-      toastSuccess('Yuz tekshiruvi o\'tkazildi — sessiyani boshlang');
-      setStatus('passing');
+      await api.post(`/api/bookings/${bookingId}/face-verified`, {
+        sessionToken: sessionTokenRef.current,
+        clientDurationMs: durationMs,
+      });
+      setStatus('success');
+      toastSuccess('Yuz tekshiruvi o‘tkazildi — sessiyani boshlang');
       onVerified();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Tekshiruvni saqlab bo\'lmadi'));
-      setStatus('error');
-      doneRef.current = false;
+      const code = extractServerCode(err);
+      fail(faceServerMessage(code, 'Tekshiruvni saqlab bo‘lmadi.'), String(getApiErrorMessage(err)));
     }
-  }
+  }, [bookingId, fail, onVerified]);
 
-  // Jonli sikl: har kadrda detektsiya + blink sanog'i
+  // ---- Jonli sikl: detektsiya + blink sanog'i ----
   useEffect(() => {
     if (!open || status !== 'scanning' || !videoRef.current) return;
     let raf = 0;
     const tick = () => {
       const video = videoRef.current;
       const lm = faceRef.current;
-      if (video && lm && video.readyState >= 2 && video.currentTime !== lastVideoTimeRef.current && !doneRef.current) {
+      if (
+        video && lm && video.readyState >= 2 &&
+        video.currentTime !== lastVideoTimeRef.current && !doneRef.current
+      ) {
         lastVideoTimeRef.current = video.currentTime;
-        const raw = lm.detectForVideo(video, performance.now());
-        // FaceLandmarkerResult ko'p maydonli — faqat blendshapes'ni o'qiymiz.
-        const blendshapes = raw.faceBlendshapes?.[0];
-        if (blendshapes) {
-          if (!faceSeen) setFaceSeen(true);
-          noFaceSinceRef.current = 0;
-          const blinkL = blendshapes.categories?.find((c) => c.categoryName === 'eyeBlinkLeft')?.score ?? 0;
-          const blinkR = blendshapes.categories?.find((c) => c.categoryName === 'eyeBlinkRight')?.score ?? 0;
-          const closed = (blinkL + blinkR) / 2 > BLINK_THRESHOLD;
-          const st = blinkStateRef.current;
-          const now = performance.now();
-          if (closed && !st.closed) {
-            st.closed = true;
-            st.lastClosedAt = now;
-          } else if (!closed && st.closed && now - st.lastClosedAt < BLINK_DEBOUNCE_MS) {
-            // Yumdi-yochdi — bitta to'liq pirpirash
-            st.closed = false;
-            const next = blinks + 1;
-            setBlinks(next);
-            if (next >= BLINK_TARGET) {
-              doneRef.current = true;
-              setStatus('passing');
-              setMessage('Liveness o\'tdi — saqlanmoqda…');
-              void submitVerified();
-            }
-          } else if (!closed && st.closed) {
-            st.closed = false;
-          }
-        } else {
-          // Yuz yo'qolgan — timer vaqt o'tsa ogohlantiramiz
-          if (noFaceSinceRef.current === 0) noFaceSinceRef.current = performance.now();
-          else if (performance.now() - noFaceSinceRef.current > NO_FACE_AFTER_MS) {
-            setFaceSeen(false);
+        try {
+          const raw = lm.detectForVideo(video, performance.now());
+          const shapes = raw.faceBlendshapes?.[0];
+          if (shapes) {
+            setFaceSeen(true);
+            setFaceLost(false);
             noFaceSinceRef.current = 0;
-            setStillFrame(true);
-            setMessage('Yuz topilmadi — kameraga qadang');
+            const l = shapes.categories?.find((c) => c.categoryName === 'eyeBlinkLeft')?.score ?? 0;
+            const r = shapes.categories?.find((c) => c.categoryName === 'eyeBlinkRight')?.score ?? 0;
+            const closed = (l + r) / 2 > BLINK_THRESHOLD;
+            const st = blinkRef.current;
+            const now = performance.now();
+            if (closed && !st.closed) {
+              st.closed = true;
+              st.lastClosedAt = now;
+            } else if (!closed && st.closed && now - st.lastClosedAt < BLINK_DEBOUNCE_MS) {
+              st.closed = false;
+              blinksRef.current += 1;
+              setBlinks(blinksRef.current);
+              if (blinksRef.current >= BLINK_TARGET) {
+                doneRef.current = true;
+                void submitVerified();
+              }
+            } else if (!closed && st.closed) {
+              st.closed = false;
+            }
+          } else {
+            if (noFaceSinceRef.current === 0) {
+              noFaceSinceRef.current = performance.now();
+            } else if (performance.now() - noFaceSinceRef.current > NO_FACE_AFTER_MS) {
+              setFaceSeen(false);
+              setFaceLost(true);
+              noFaceSinceRef.current = 0;
+            }
           }
+        } catch (err) {
+          // Detektor ishlashdan to'xtadi — jimgina qolmaslik uchun aniq xabar.
+          doneRef.current = true;
+          fail('Yuzni aniqlash to‘xtadi. Qayta urinib ko‘ring.', `detect: ${(err as Error)?.message?.slice(0, 120)}`);
+          return;
         }
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, status, faceSeen]);
+  }, [open, status, submitVerified, fail]);
 
   if (!open) return null;
 
   const progress = Math.min(100, Math.round((blinks / BLINK_TARGET) * 100));
+  const close = () => { void stopCamera(); onClose(); };
+  const retry = () => { void stopCamera(); onClose(); window.setTimeout(() => onClose(), 0); };
+
+  const showVideo = ['detecting', 'scanning', 'verifying', 'success'].includes(status);
+  const busy = status === 'preparing' || status === 'camera' || status === 'loading';
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="neo-card rounded-2xl max-w-md w-full overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-cyber-700">
-          <p className="font-bold flex items-center gap-2 text-sm">
-            <Camera size={16} className="text-neon-cyan" />
-            Yuz tekshiruvi
-          </p>
-          <button onClick={() => { void stopCamera(); onClose(); }} className="text-gray-400 hover:text-gray-200" aria-label="Yopish">
-            <X size={18} />
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/85 sm:p-4 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Face Verification — yuz tekshiruvi"
+        className="cz-card w-full sm:max-w-lg !rounded-t-2xl sm:!rounded-2xl overflow-hidden"
+      >
+        {/* Sarlavha */}
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-[var(--line)]">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="cz-icon-btn !w-7 !h-7 !min-w-7 text-[var(--acc-a)]" aria-hidden>
+              <ShieldCheck size={15} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--acc-a)] truncate">
+                Face Verification
+              </p>
+              <p className="text-[13px] font-semibold text-[var(--fg)] truncate">Yuz tekshiruvi</p>
+            </div>
+          </div>
+          <button onClick={close} disabled={status === 'verifying'} aria-label="Yopish"
+            className="cz-icon-btn shrink-0 disabled:opacity-40">
+            <X size={16} />
           </button>
         </div>
 
-        <div className="p-4">
-          {status === 'booting' && (
-            <div className="flex flex-col items-center gap-3 py-8">
-              <Loader2 size={30} className="animate-spin text-neon-cyan" />
-              <p className="text-sm text-gray-300">{message}</p>
-            </div>
-          )}
-
+        <div className="p-4 sm:p-5">
+          {/* XATO HOLATI */}
           {status === 'error' && (
-            <div className="flex flex-col items-center gap-3 py-8 text-center">
-              <AlertCircle size={30} className="text-red-400" />
-              <p className="text-sm text-gray-300">{error}</p>
-              <button onClick={onClose} className="text-xs px-4 py-2 rounded-lg border border-cyber-600 text-gray-300 hover:border-neon-cyan transition-colors">
-                Yopish
+            <div className="flex flex-col items-center text-center gap-3 py-6" role="alert">
+              <AlertCircle size={30} className="text-[var(--danger)]" aria-hidden />
+              <p className="text-sm font-semibold text-[var(--fg)] max-w-xs">{error}</p>
+              {errorDetail && (
+                <details className="w-full max-w-xs text-left">
+                  <summary className="text-[11px] text-[var(--fg-dim)] cursor-pointer select-none">
+                    Texnik ma’lumot
+                  </summary>
+                  <code className="mt-1 block break-all text-[10px] text-[var(--fg-dim)] bg-black/40 rounded p-2">
+                    {errorDetail}
+                  </code>
+                </details>
+              )}
+              <button onClick={retry} className="cz-btn cz-btn--secondary">
+                <RefreshCw size={14} /> Qayta urinish
               </button>
             </div>
           )}
 
-          {(status === 'detecting' || status === 'scanning' || status === 'passing' || status === 'uploading') && (
+          {/* VIDEO / KAMERA */}
+          {showVideo || busy ? (
             <>
-              <div className="relative rounded-xl overflow-hidden bg-black border border-cyber-700">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="w-full aspect-[4/3] object-cover -scale-x-100"
-                />
-                {status === 'detecting' && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                    <p className="text-sm text-gray-200 flex items-center gap-2">
-                      <Loader2 size={16} className="animate-spin" />
-                      {message}
-                    </p>
-                  </div>
-                )}
-                {status === 'passing' && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-neon-green/10">
-                    <p className="text-sm font-bold text-neon-green flex items-center gap-2">
-                      <CheckCircle2 size={18} />
-                      Liveness o&apos;tdi
-                    </p>
-                  </div>
-                )}
+              <div className="relative overflow-hidden rounded-xl bg-black border border-[var(--line)]">
+                <div className="relative w-full aspect-[4/3] sm:aspect-[16/10]">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    aria-label="Kamera tasviri"
+                    className={`absolute inset-0 h-full w-full object-cover -scale-x-100 transition-opacity duration-300 ${
+                      showVideo ? 'opacity-100' : 'opacity-0'
+                    }`}
+                  />
+
+                  {/* Markaziy doira */}
+                  {showVideo && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div
+                        className={`aspect-square h-[68%] max-h-full rounded-full border-2 transition-all duration-300 ${
+                          status === 'success'
+                            ? 'border-[var(--ok)] scale-100'
+                            : faceSeen && !faceLost
+                              ? 'border-[var(--acc-a)] scale-95'
+                              : 'border-white/25 scale-105'
+                        }`}
+                        style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.42)' }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Yuklanish holati */}
+                  {busy && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-black/70">
+                      <Loader2 size={26} className="animate-spin text-[var(--acc-a)]" aria-hidden />
+                      <p className="text-[13px] text-[var(--fg-mut)] text-center px-6">{STATUS_TEXT[status]}</p>
+                    </div>
+                  )}
+
+                  {/* Yuz topilmadi */}
+                  {status === 'scanning' && !faceSeen && (
+                    <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-black/70 px-3 py-2">
+                      <p className="text-[12px] text-[var(--fg-mut)] text-center">
+                        {faceLost ? 'Yuz kadrdan chiqdi — doiraga qaytiring' : 'Yuzni doiraga joylashtiring'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Tasdiqlandi */}
+                  {status === 'success' && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70">
+                      <CheckCircle2 size={34} className="text-[var(--ok)]" aria-hidden />
+                      <p className="text-sm font-bold text-[var(--fg)]">Tasdiqlandi</p>
+                    </div>
+                  )}
+
+                  {/* Server tekshiruvi */}
+                  {status === 'verifying' && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-black/75">
+                      <Loader2 size={26} className="animate-spin text-[var(--acc-a)]" aria-hidden />
+                      <p className="text-[13px] text-[var(--fg-mut)]">Tekshirilmoqda</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs text-gray-400">
-                  <Eye size={14} className="text-neon-cyan" />
-                  <span>Ko&apos;z pirpirash: <b className="text-neon-cyan">{blinks}/{BLINK_TARGET}</b></span>
-                </div>
-                <div className="w-32 h-1.5 rounded-full bg-cyber-800 overflow-hidden">
-                  <div className="h-full bg-neon-cyan transition-all" style={{ width: `${progress}%` }} />
-                </div>
-              </div>
-
-              <p className="text-[11px] text-gray-500 mt-2">
-                {status === 'scanning' && (faceSeen ? message : 'Yuz topilmoqda…')}
-                {status === 'passing' || status === 'uploading' ? message : ''}
-              </p>
-
-              {stillFrame && (
-                <p className="text-[11px] text-neon-amber mt-1">
-                  Eslatma: bu tekshiruv jonli — rasm/video bilan o&apos;tib bo&apos;lmaydi.
+              {/* Kamera ruxsati xabari */}
+              {cameraError && status === 'error' && (
+                <p className="mt-3 text-[12px] text-[var(--danger)]">
+                  Kameraga ruxsat berish uchun brauzer manzilbaridagi kamera belgisini bosing.
                 </p>
               )}
+
+              {/* Holat qatori */}
+              {status !== 'success' && (
+                <div className="mt-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-1.5 text-[12px] text-[var(--fg-mut)]">
+                      <Eye size={13} className="text-[var(--acc-b)]" aria-hidden />
+                      Ko‘z pirpirash
+                      <b className="font-mono text-[var(--acc-b)]">{blinks}/{BLINK_TARGET}</b>
+                    </span>
+                    <div
+                      className="h-1.5 w-28 rounded-full bg-white/10 overflow-hidden"
+                      role="progressbar"
+                      aria-valuenow={blinks}
+                      aria-valuemin={0}
+                      aria-valuemax={BLINK_TARGET}
+                      aria-label="Ko‘z pirpirash progressi"
+                    >
+                      <div className="h-full bg-[var(--acc-a)] transition-all duration-300" style={{ width: `${progress}%` }} />
+                    </div>
+                  </div>
+                  <p className="text-[12px] text-[var(--fg-dim)] leading-relaxed">
+                    {STATUS_TEXT[status]}
+                    {status === 'detecting' && ' — yuz to‘liq ko‘rinishi kerak.'}
+                  </p>
+                </div>
+              )}
             </>
-          )}
+          ) : null}
         </div>
 
-        <div className="px-4 py-3 border-t border-cyber-700 flex justify-end">
-          <button
-            onClick={() => { void stopCamera(); onClose(); }}
-            disabled={status === 'uploading'}
-            className="text-xs px-4 py-2 rounded-lg border border-cyber-600 text-gray-300 hover:border-neon-cyan transition-colors disabled:opacity-50"
-          >
-            Bekor qilish
-          </button>
-        </div>
+        {/* Tugmalar */}
+        {status !== 'success' && (
+          <div className="px-4 sm:px-5 py-3 border-t border-[var(--line)] flex justify-end gap-2">
+            <button onClick={close} disabled={status === 'verifying'} className="cz-btn cz-btn--secondary">
+              Bekor qilish
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

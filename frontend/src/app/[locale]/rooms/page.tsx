@@ -85,7 +85,7 @@ export default function RoomsPage({ params }: { params: Promise<{ locale: string
   if (sort === 'price_asc') activeChips.push('Arzon');
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
+    <div className="cz-shell py-10">
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">

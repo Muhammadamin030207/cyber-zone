@@ -227,6 +227,13 @@ export interface BookingSessionState {
   /** Kamerali yuz tekshiruvi (liveness) — "Boshlash"dan oldin o'tishi shartmi/yetkazildimi. */
   faceCheckRequired?: boolean;
   faceVerified?: boolean;
+  /**
+   * Yuz tekshiruvi serverda HAQIQIY provider orqali sozlanmaganmi?
+   * `false` bo'lsa kamera umuman ochilmaydi va foydalanuvchiga
+   * "Face Verification hozircha mavjud emas" degan aniq holat ko'rsatiladi
+   * (soxta "o'tdi" yoki "internet xatosi" EMAS).
+   */
+  faceCheckAvailable?: boolean;
 }
 
 export interface Payment {

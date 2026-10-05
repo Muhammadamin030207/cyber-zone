@@ -78,16 +78,51 @@ describe('E2E: Bron sessiyasi (check-in/check-out, min 1 soat billing)', () => {
   }
 
   /**
-   * Kamerali liveness (yuz tekshiruvi) — real oqimda `FaceCheck.tsx` ko'z
-   * pirpiratganini aniqlab shu endpoint'ga xabar beradi. Test ham xuddi shu
-   * qadamni bajaradi: server "tekshiruvni o'zi qildi" deb ishontirilmaydi.
+   * Yuz tekshiruvi belgisini broniga qo'yadi.
+   *
+   * DIQQAT: bu ENDPOINT orqali emas, to'g'ridan-to'g'ri DB orqali qilinadi.
+   * Sabab: `POST /:id/face-verified` endi hech qanday sharoitda
+   * `faceVerifiedAt` YOZMAYDI (server tomonlari liveness provider hali yo'q —
+   * `isTrustedFaceVerificationAvailable()` doim `false`). Bu test sessiya
+   * gate'i (check-in/check-out hisobi) tekshiradi, yuz tekshiruvi ESA yo'q.
+   * Kelajakda ishonchli provider ulansa, shu yerga o'z sessiyasi tekshirilgan
+   * bron yoziladi. Xuddi shu usul pastdagi BOOKING_NOT_PAID testida ham
+   * qo'llanilgan.
    */
   async function passFaceCheck(bookingId: string) {
-    const res = await api()
-      .post(`/api/bookings/${bookingId}/face-verified`)
-      .set('Authorization', auth(userToken));
-    expect(res.status).toBe(200);
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: { faceVerifiedAt: new Date(), faceVerifiedById: userId },
+    });
   }
+
+  it('yuz tekshiruvi endpoint\'i hech qachon 200 qaytarmaydi (so\'rob ishonchli emas)', async () => {
+    const booking = await makeConfirmed(2);
+    await passFaceCheck(booking.id);
+    const before = await prisma.booking.findUniqueOrThrow({
+      where: { id: booking.id },
+      select: { faceVerifiedAt: true, faceVerifiedById: true },
+    });
+
+    // Qayta yuborilganda ham, hatto ALREADY VERIFIED bron uchun ham —
+    // endpoint "tekshiruv o'tdi" deb javob qaytarmaydi.
+    for (const payload of [{}, { verified: true }, { faceVerified: true }]) {
+      const again = await api()
+        .post(`/api/bookings/${booking.id}/face-verified`)
+        .set('Authorization', auth(userToken))
+        .send(payload);
+      expect(again.status).not.toBe(200);
+      expect(again.body.success).toBe(false);
+    }
+
+    // Oldingi tasdiqlangan holat O'ZGARMAGAN
+    const after = await prisma.booking.findUniqueOrThrow({
+      where: { id: booking.id },
+      select: { faceVerifiedAt: true, faceVerifiedById: true },
+    });
+    expect(after.faceVerifiedAt).toEqual(before.faceVerifiedAt);
+    expect(after.faceVerifiedById).toEqual(before.faceVerifiedById);
+  });
 
   it('check-in: yuz tekshiruvi o\'tkazilmagan sessiya BLOKLANADI (FACE_NOT_VERIFIED)', async () => {
     const booking = await makeConfirmed(2);
@@ -97,14 +132,6 @@ describe('E2E: Bron sessiyasi (check-in/check-out, min 1 soat billing)', () => {
     // Hech narsa o'zgarMAYdi: kompyuter band bo'lib qolmaydi
     const pcAfter = await prisma.computer.findUnique({ where: { id: pc.id } });
     expect(pcAfter!.status).toBe('AVAILABLE');
-  });
-
-  it('yuz tekshiruvi idempotent: qayta yuborilsa ham 200', async () => {
-    const booking = await makeConfirmed(2);
-    await passFaceCheck(booking.id);
-    const again = await api().post(`/api/bookings/${booking.id}/face-verified`).set('Authorization', auth(userToken));
-    expect(again.status).toBe(200);
-    expect(again.body.data.alreadyVerified).toBe(true);
   });
 
   it('check-in: CONFIRMED bronni ACTIVE qiladi, kompyuterni OCCUPIED qiladi', async () => {

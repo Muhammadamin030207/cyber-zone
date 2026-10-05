@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../types';
 import { io } from '../lib/socket';
-import { ok, created, badRequest, forbidden, notFoundMsg } from '../utils/response';
+import { ok, created, badRequest, forbidden, notFoundMsg, notImplemented } from '../utils/response';
 import { toNumber, round2 } from '../utils/money';
 import { computeBookingPrice } from '../utils/pricing';
 import { config } from '../config';
@@ -15,6 +15,16 @@ import {
   PAID_STATUSES,
 } from '../services/sessionService';
 import { Prisma, BookingStatus } from '@prisma/client';
+import crypto from 'crypto';
+import {
+  getFaceProvider,
+  isTrustedFaceVerificationAvailable,
+} from '../services/face/registry';
+import {
+  FACE_ERROR_MESSAGE,
+  FACE_ERROR_STATUS,
+  FaceProviderError,
+} from '../services/face/types';
 import {
   tashkentTodayISO,
   tashkentNowHHMM,
@@ -774,6 +784,9 @@ async function sessionState(now: Date, booking: any) {
     startBlockedMessage: gate.ok ? null : gate.message ?? null,
     faceVerified: !!booking.faceVerifiedAt,
     faceCheckRequired: booking.faceCheckRequired === true,
+    // Frontend shu maydon bilan "yuz tekshiruvi" tugmasini ko'rsatadi yoki
+    // "hozircha mavjud emas" holatiga o'tadi. NOT_CONFIGURED bo'lsa `false`.
+    faceCheckAvailable: isTrustedFaceVerificationAvailable(),
     elapsedMinutes,
     billedHours,
     remainingMs,
@@ -791,33 +804,159 @@ function localInstant(date: Date, minutes: number): Date {
   return new Date(tashkentMidnightUtc + minutes * 60_000);
 }
 
-// ============ POST /api/bookings/:id/face-verified — kamerali liveness ============
-// Mijoz kamerada 3 marta ko'z pirpirash (liveness) tekshiruvidan o'tgach
-// FRONTEND shu yerga xabar beradi; `faceVerifiedAt` yoziladi va `startSessionGate`
-// sessiyani boshlashga ruxsat beradi. Idempotent, faqat qaytarilmagan bronlar.
-export const markFaceVerified = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const booking = await prisma.booking.findUnique({
-      where: { id: req.params.id },
-      include: { room: { select: { id: true, ownerId: true } } },
+// =====================================================================
+// FACE VERIFICATION — provider orqali ikki bosqichli oqim
+// =====================================================================
+// 1) POST /:id/face-session  -> provider sessiyasi (server beradi)
+// 2) POST /:id/face-verified -> provider NATIJASI tekshiriladi, faqat
+//                               `VERIFIED` da `faceVerifiedAt` yoziladi
+//
+// XAVFSIZLIK KAFOLATLARI (klientga ishonilmaydi):
+//   * `userId`  — JAVOBDAN olinadi (auth), so'rovdan emas.
+//   * `booking` — egallik `canManageBooking` bilan tekshiriladi (IDOR).
+//   * sessiya   — booking + user bilan serverda bog'langan, bir martalik
+//                 (replay imkoniyati yo'q), muddati cheklangan.
+//   * `verified`, `faceVerified`, `userId` kabi so'rov maydonlari
+//     butunlay IGNOR qilinadi.
+//   * Provider sozlanmagan bo'lsa — `NOT_CONFIGURED` (503). Hech qachon
+//     200/"o'tdi" javobi qaytarilmaydi.
+// =====================================================================
+
+/** Provider xatolarini HTTP (status + code + xabarni) aylantiradi. */
+function faceFail(res: Response, err: unknown) {
+  if (err instanceof FaceProviderError) {
+    return res.status(FACE_ERROR_STATUS[err.code]).json({
+      success: false,
+      code: err.code,
+      message: FACE_ERROR_MESSAGE[err.code],
     });
-    if (!booking) return notFoundMsg(res, 'Bron topilmadi');
-    if (!canManageBooking(booking, req.user!)) return forbidden(res, 'Bu bron sizniki emas');
-    if (booking.sessionStartedAt || booking.sessionEndedAt || booking.status === 'COMPLETED') {
-      return badRequest(res, 'Sessiya allaqachon boshlangan/yakunlangan', 'FACE_CHECK_TOO_LATE');
-    }
+  }
+  console.error('[FACE] kutilmagan xato:', (err as Error)?.message);
+  return res.status(FACE_ERROR_STATUS.PROVIDER_UNAVAILABLE).json({
+    success: false,
+    code: 'PROVIDER_UNAVAILABLE',
+    message: FACE_ERROR_MESSAGE.PROVIDER_UNAVAILABLE,
+  });
+}
+
+/**
+ * Umumiy oldindan-tekshiruv.
+ *
+ * TARTIB MUHIM: avval EGALLIK tekshiriladi, keyin provider holati.
+ * Aks holda begona foydalanuvchi `503 NOT_CONFIGURED` ko'rib, o'ziga
+ * tegishli ma'lumot kelayotganini tasxmin qilishi mumkin edi. Authz
+ * har doim birinchi o'rinda turadi — "bu bron sizniki emas" (403)
+ * begona kuchaytirilgan ma'lumot berilmasligi kafolati.
+ */
+async function facePrecheck(req: AuthRequest, res: Response) {
+  const booking = await prisma.booking.findUnique({
+    where: { id: req.params.id },
+    include: { room: { select: { id: true, ownerId: true } } },
+  });
+  if (!booking) {
+    notFoundMsg(res, 'Bron topilmadi');
+    return null;
+  }
+  if (!canManageBooking(booking, req.user!)) {
+    forbidden(res, 'Bu bron sizniki emas');
+    return null;
+  }
+  if (booking.sessionStartedAt || booking.sessionEndedAt || booking.status === 'COMPLETED') {
+    badRequest(res, 'Sessiya allaqachon boshlangan/yakunlangan', 'FACE_CHECK_TOO_LATE');
+    return null;
+  }
+  // Endi — provider holati (fail-closed).
+  if (!isTrustedFaceVerificationAvailable()) {
+    res.status(FACE_ERROR_STATUS.NOT_CONFIGURED).json({
+      success: false,
+      code: 'NOT_CONFIGURED',
+      message: FACE_ERROR_MESSAGE.NOT_CONFIGURED,
+    });
+    return null;
+  }
+  if (!(await faceCheckRequired())) {
+    badRequest(res, 'Bu bron uchun yuz tekshiruvi talab qilinmaydi', 'FACE_CHECK_NOT_REQUIRED');
+    return null;
+  }
+  return booking;
+}
+
+// ---------- 1-bosqich: provider sessiyasini ochish ----------
+export const startFaceSession = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const booking = await facePrecheck(req, res);
+    if (!booking) return;
 
     if (booking.faceVerifiedAt) {
-      return ok(res, { bookingId: booking.id, faceVerifiedAt: booking.faceVerifiedAt, alreadyVerified: true }, 'Yuz tekshiruvi allaqachon o\'tkazilgan');
+      return ok(
+        res,
+        { bookingId: booking.id, alreadyVerified: true, faceVerifiedAt: booking.faceVerifiedAt },
+        "Yuz tekshiruvi allaqachon o'tkazilgan"
+      );
     }
 
+    // `nonce` — qayta ishlash (double-submit) himoyasi uchun.
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const session = await getFaceProvider().createSession({
+      userId: req.user!.userId,
+      bookingId: booking.id,
+      nonce,
+    });
+
+    return ok(res, {
+      bookingId: booking.id,
+      sessionToken: session.sessionToken,
+      providerRef: session.providerRef,
+      expiresInMs: session.expiresInMs,
+      minDurationMs: session.minDurationMs,
+    });
+  } catch (err) {
+    return faceFail(res, err);
+  }
+};
+
+// ---------- 2-bosqich: natijani server tasdiqlaydi ----------
+export const markFaceVerified = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const booking = await facePrecheck(req, res);
+    if (!booking) return;
+
+    if (booking.faceVerifiedAt) {
+      return ok(
+        res,
+        { bookingId: booking.id, faceVerifiedAt: booking.faceVerifiedAt, alreadyVerified: true },
+        "Yuz tekshiruvi allaqachon o'tkazilgan"
+      );
+    }
+
+    // DIQQAT: `verified` / `faceVerified` / `userId` kabi maydonlar
+    // QAT'IY E'TIBORSIZ qoldiriladi — ular hech qanday ta'sir ko'rsatmaydi.
+    const body = (req.body ?? {}) as { sessionToken?: unknown; clientDurationMs?: unknown };
+    const outcome = await getFaceProvider().verifySession({
+      sessionToken: typeof body.sessionToken === 'string' ? body.sessionToken : '',
+      bookingId: booking.id,
+      userId: req.user!.userId,
+      clientDurationMs: toNumber(body.clientDurationMs) ?? Number.NaN,
+    });
+
+    // Faqat provider `VERIFIED` deb qaytarganda yozamiz.
     const updated = await prisma.booking.update({
       where: { id: booking.id },
       data: { faceVerifiedAt: new Date(), faceVerifiedById: req.user!.userId },
     });
-    return ok(res, { bookingId: booking.id, faceVerifiedAt: updated.faceVerifiedAt }, 'Yuz tekshiruvi o\'tkazildi');
+
+    return ok(
+      res,
+      {
+        bookingId: booking.id,
+        faceVerifiedAt: updated.faceVerifiedAt,
+        providerRef: outcome.providerRef,
+        livenessPassed: outcome.livenessPassed === true,
+      },
+      "Yuz tekshiruvi o'tkazildi"
+    );
   } catch (err) {
-    next(err);
+    return faceFail(res, err);
   }
 };
 

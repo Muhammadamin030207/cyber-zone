@@ -99,7 +99,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 grid lg:grid-cols-3 gap-8">
+      <div className="cz-shell py-10 grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
           <div className="skeleton rounded-2xl h-72" />
           <div className="skeleton rounded-2xl h-48" />
@@ -111,7 +111,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
 
   if (error || !room) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-20 text-center">
+      <div className="cz-shell py-20 text-center">
         <div className="w-20 h-20 neo-card rounded-3xl flex items-center justify-center mx-auto mb-5">
           <Logo size={44} />
         </div>
@@ -126,7 +126,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ locale: s
   const img = room.images?.[0];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+    <div className="cz-shell py-8">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
         <Link href="/rooms" className="chip hover:border-neon-cyan/40 hover:text-neon-cyan transition-colors">
