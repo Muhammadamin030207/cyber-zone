@@ -87,14 +87,17 @@ export default function SessionController({
       confirmLabel: 'Boshlash',
     }))) return;
     // Yuz tekshiruvi hali o'tilmagan va talab yoqilgan bo'lsa — kameraga yuboramiz.
-    // Provider serverda yo'q bo'lsa — bu yerda to'xtaymiz, kamera ochmaymiz
-    // (foydalanuvchi "mavjud emas" xabari oladi).
+    // Provider serverda yo'q bo'lsa — BAZADA ENFORCEMENT YO'Q (NOT_CONFIGURED).
+    // Shuning uchun kamera ochmaymiz va to'g'ridan-to'g'ri boshlaymiz (bloklamaymiz).
     if (faceRequired && !faceVerified) {
-      if (!faceAvailable) {
-        setError('Face Verification hozircha mavjud emas. Sessiyani boshlash uchun administratorga murojaat qiling.');
+      if (faceAvailable) {
+        setShowFace(true);
         return;
       }
-      setShowFace(true);
+      // faceRequired true lekin faceAvailable false -> NOT_CONFIGURED: blok EMAS,
+      // shunchaki ogohlantirish ko'rsatib davom etamiz
+      setError('Face Verification hozircha sozlanmagan — sessiya bloklanmasdan boshlanadi.');
+      await doStart();
       return;
     }
     await doStart();
@@ -266,17 +269,17 @@ export default function SessionController({
               Sessiyani boshlash (check-in)
             </button>
             {faceRequired && !faceVerified && !isActive && (
-              faceBlocked ? (
-                <p className="text-[11px] text-[var(--warn)] flex items-start gap-1.5">
-                  <Camera size={12} className="shrink-0 mt-0.5" />
-                  <span>Face Verification hozircha mavjud emas. Sessiyani boshlash uchun administratorga murojaat qiling.</span>
-                </p>
-              ) : (
+              faceAvailable ? (
                 <p className="text-[11px] text-[var(--warn)] flex items-start gap-1.5">
                   <Camera size={12} className="shrink-0 mt-0.5" />
                   <span>Avval kamerali yuz tekshiruvida {''}
                     3 marta ko&apos;z pirpirating.
                   </span>
+                </p>
+              ) : (
+                <p className="text-[11px] text-[var(--fg-dim)] flex items-start gap-1.5">
+                  <Camera size={12} className="shrink-0 mt-0.5" />
+                  <span>Face Verification hozircha sozlanmagan (NOT_CONFIGURED). Sessiya bloklanmasdan boshlanadi.</span>
                 </p>
               )
             )}

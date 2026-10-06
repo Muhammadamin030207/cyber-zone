@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { isTrustedFaceVerificationAvailable } from './face/registry';
 import { config } from '../config';
 import { toNumber, round2 } from '../utils/money';
 import { parseTime, normalizeSlot, minutesToHHMM } from '../utils/time';
@@ -148,7 +149,15 @@ export function startSessionGate(booking: {
   // Yuz tekshiruvi (liveness): shart yoqilgan bo'lsa, mijoz kamerada jonli
   // ko'z pirpirash orqali tekshiruvdan o'tishi SHART — aks holda boshqa birov
   // uning nomiga sessiya boshlay olmaydi. Bu mijozning O'ZI ekanini isbotlaydi.
-  if (booking.faceCheckRequired === true && !booking.faceVerifiedAt) {
+  //
+  // XUSUSIYLIK (production UX): provider HAQIQIY sozlanmagan (NOT_CONFIGURED)
+  // bo'lsa — enforcement o'tkazib yuboramiz. Ya'ni: fake PASS qilmaymiz,
+  // lekin ishni to'xtatmaymiz (external credential yo'q — qism NOT_CONFIGURED).
+  if (
+    booking.faceCheckRequired === true &&
+    !booking.faceVerifiedAt &&
+    isTrustedFaceVerificationAvailable()
+  ) {
     return { ok: false, code: 'FACE_NOT_VERIFIED', message: "Yuz tekshiruvidan o'tilmagan — kameraga 3 marta ko'z pirpirating", bookedStart, bookedEnd };
   }
   if (now.getTime() < bookedStart.getTime()) {
