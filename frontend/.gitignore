@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Capacitor / Android
+android/gradle/wrapper/gradle-wrapper.jar
+android/.gradle/
+android/local.properties
+android/build/
+android/capacitor-cordova-android-plugins/
+android/app/build/
+android/app/src/main/assets/public/
+out/

@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Camera, CheckCircle2, Loader2, AlertCircle, Eye, X, ShieldCheck, RefreshCw,
+  CheckCircle2, Loader2, AlertCircle, Eye, X, ShieldCheck, RefreshCw,
 } from 'lucide-react';
 import api, { getApiErrorMessage, humanizeMediaError, humanizeModelLoadError } from '@/lib/api';
-import { toastError, toastSuccess } from '@/lib/toast';
+import { toastSuccess } from '@/lib/toast';
 import type { FaceLandmarker } from '@mediapipe/tasks-vision';
 
 const BLINK_TARGET = 3;
@@ -97,6 +97,7 @@ export default function FaceCheck({
   const [faceSeen, setFaceSeen] = useState(false);
   const [faceLost, setFaceLost] = useState(false);
   const [cameraError, setCameraError] = useState(false);
+  const [runKey, setRunKey] = useState(0);
 
   const blinkRef = useRef({ closed: false, lastClosedAt: 0 });
   const noFaceSinceRef = useRef(0);
@@ -128,10 +129,43 @@ export default function FaceCheck({
     doneRef.current = false;
   }, []);
 
-  // ---- Boshlang'ich oqim: server sessiyasi + kamera + model ----
+  /**
+   * Kamerani ochish — mobil/shaxsiy brauzerlar uchun CHIDAMLI.
+   *
+   * Ba'zi Android Chrome / WebView tizimlari `ideal` cheklovli
+   * `getUserMedia` so'rovini `NotSupportedError` yoki `OverconstrainedError`
+   * bilan rad etadi ("Brauzer kamera tekshiruvini qo'llab-quvvatlamaydi" degan
+   * YOLG'ON xabar shu sababli chiqardi). Bunday hollarda oddiy minimal
+   * cheklovsiz `{ video: true }` so'rov bilan qayta urinamiz.
+   */
+  const openCamera = useCallback(async (): Promise<MediaStream> => {
+    const md = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
+    if (!md?.getUserMedia) {
+      throw new DOMException('mediaDevices mavjud emas', 'NotSupportedError');
+    }
+    try {
+      return await md.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+    } catch (err) {
+      const name = (err as DOMException | null)?.name || '';
+      if (['NotSupportedError', 'OverconstrainedError', 'AbortError', 'TypeError'].includes(name)) {
+        return await md.getUserMedia({ video: true, audio: false });
+      }
+      throw err;
+    }
+  }, []);
+
+  // ---- Boshlang'ich oqim: kamera (parallel) + server sessiyasi + model ----
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    let pendingCam: MediaStream | null = null;
 
     (async () => {
       setStatus('preparing');
@@ -148,50 +182,65 @@ export default function FaceCheck({
       sessionTokenRef.current = '';
       startedAtRef.current = Date.now();
 
-      // 1) Server sessiyasi. Provider yo'q bo'lsa — bu yerda aniq
-      //    `NOT_CONFIGURED` xabari chiqadi va kamera umuman so'ralmaydi.
+      // 1) KamerAGA RUXSATNI DARHOL so'raymiz (server bilan parallel).
+      //    Sabab: server (Render) sovuq holatda 30-60s sekin javob berishi
+      //    mumkin — o'sha vaqtda yorliq fon o'tsa, keyin keyin ochilgan
+      //    `getUserMedia` Android Chrome'da `NotSupportedError` bilan rad
+      //    etiladi. Shu orada so'rash orqali muammo yo'qoladi.
+      const camErrHolder: { err: unknown } = { err: null };
+      const camPromise = openCamera()
+        .then((stream) => { if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return null; } return stream; })
+        .catch((err: unknown) => { camErrHolder.err = err; return null; });
+
+      // 2) Server sessiyasi. Provider yo'q bo'lsa — aniq `NOT_CONFIGURED`
+      //    xabari chiqadi; kamera ochilsa ham yopiladi.
       try {
         const { data } = await api.post(`/api/bookings/${bookingId}/face-session`);
         if (cancelled) return;
         sessionTokenRef.current = String(data?.data?.sessionToken || '');
       } catch (err) {
         if (cancelled) return;
+        pendingCam = await camPromise;
+        if (pendingCam) pendingCam.getTracks().forEach((t) => t.stop());
         const code = extractServerCode(err);
         fail(faceServerMessage(code, 'Tekshiruvni boshlab bo‘lmadi.'), String(getApiErrorMessage(err)));
         return;
       }
       if (cancelled) return;
 
-      // 2) Kamera
+      // 3) Kamera natijasi
       setStatus('camera');
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'user',
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-          audio: false,
-        });
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => undefined);
-        }
-        setStatus('loading');
-      } catch (err) {
-        if (cancelled) return;
-        setCameraError(true);
-        fail(
-          humanizeMediaError(err) ?? 'Kamerani ochib bo‘lmadi. Qurilma sozlamalarini tekshiring.',
-          `getUserMedia: ${(err as Error)?.name || 'unknown'}`
-        );
+      const stream = await camPromise;
+      if (cancelled) {
+        if (stream) stream.getTracks().forEach((t) => t.stop());
+        return;
       }
+      if (camErrHolder.err) {
+        const errName = (camErrHolder.err as DOMException | null)?.name || '';
+        const incompatible = ['NotSupportedError', 'OverconstrainedError', 'TypeError'].includes(errName);
+        setCameraError(!incompatible);
+        fail(
+          incompatible
+            ? 'Bu brauzer kamera tekshiruvini qo‘llab-quvvatlamaydi.'
+            : (humanizeMediaError(camErrHolder.err) ?? 'Kamerani ochib bo‘lmadi. Qurilma sozlamalarini tekshiring.'),
+          `getUserMedia: ${errName || 'unknown'}`
+        );
+        return;
+      }
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => undefined);
+      }
+      setStatus('loading');
     })();
 
-    return () => { cancelled = true; void stopCamera(); };
-  }, [open, bookingId, fail, stopCamera]);
+    return () => {
+      cancelled = true;
+      pendingCam?.getTracks().forEach((t) => t.stop());
+      void stopCamera();
+    };
+  }, [open, bookingId, runKey, fail, stopCamera, openCamera]);
 
   // ---- Yuz detektori modelini yuklash ----
   useEffect(() => {
@@ -314,7 +363,7 @@ export default function FaceCheck({
 
   const progress = Math.min(100, Math.round((blinks / BLINK_TARGET) * 100));
   const close = () => { void stopCamera(); onClose(); };
-  const retry = () => { void stopCamera(); onClose(); window.setTimeout(() => onClose(), 0); };
+  const retry = () => { void stopCamera(); setRunKey((k) => k + 1); };
 
   const showVideo = ['detecting', 'scanning', 'verifying', 'success'].includes(status);
   const busy = status === 'preparing' || status === 'camera' || status === 'loading';

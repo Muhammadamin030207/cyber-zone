@@ -6,6 +6,7 @@ import {
   deletePromo,
   checkPromo,
   getMyPromosUser,
+  getPublicPromos,
 } from '../controllers/promo.controller';
 import { authenticate, authorize, optionalAuthenticate } from '../middlewares/auth';
 import rateLimit from 'express-rate-limit';
@@ -27,6 +28,9 @@ const promoCheckLimiter = rateLimit({
 // `optionalAuthenticate` — kirishsiz ham ishlaydi, lekin token yuborilsa
 // shaxsiy limit ("allaqachon ishlatilgan") HAM tekshiriladi.
 router.get('/check', promoCheckLimiter, optionalAuthenticate, checkPromo);
+
+// Bosh sahifa "Aksiyalar" bo'limi uchun — faol promo-kodlar (autentifikatsiyasiz).
+router.get('/public', getPublicPromos);
 
 // User: o'z shaxsiy/yaroqli promo-kodlari
 router.get('/me', authenticate, getMyPromosUser);

@@ -116,7 +116,8 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50">
-      <div className="cz-shell pt-2 sm:pt-3 pb-2">
+      <div className="border-b border-white/[0.06] bg-[color-mix(in_srgb,var(--bg-0)_80%,transparent)] backdrop-blur-xl supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--bg-0)_72%,transparent)]">
+        <div className="cz-shell pt-2 sm:pt-3 pb-2">
         <div className="cz-header relative flex items-center gap-2 w-full" style={{ minHeight: 'var(--ad-header-h)', paddingInline: 'var(--shell-pad)' }}>
           <Link href="/" className="flex items-center gap-2 group shrink-0" aria-label="Cyber-ZONE — bosh sahifa">
             <Logo size={30} />
@@ -135,6 +136,13 @@ export default function Header() {
           <div className="hidden lg:flex items-center gap-1.5 shrink-0">
             <ThemeSwitcher />
             <LanguageSwitcher />
+            <Link
+              href="/rooms"
+              className="cz-btn cz-btn--cta whitespace-nowrap"
+              style={{ minHeight: 40 }}
+            >
+              Bron qilish
+            </Link>
             {user ? (
               <>
                 {user.role === 'SUPER_ADMIN' && (
@@ -256,6 +264,7 @@ export default function Header() {
             <ThemeSwitcher />
             <LanguageSwitcher />
           </div>
+        </div>
         </div>
       </div>
     </header>

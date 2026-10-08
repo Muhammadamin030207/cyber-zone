@@ -9,9 +9,13 @@
     "dev": "next dev -p 3006",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "apk:sync": "cap copy android",
+    "apk:build": "cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
     "@hookform/resolvers": "^5.2.2",
     "@mediapipe/tasks-vision": "^1.0.1",
     "@simplewebauthn/browser": "^14.0.0",
@@ -32,6 +36,7 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "@tailwindcss/postcss": "^4",
     "@types/leaflet": "^1.9.22",
     "@types/node": "^20",

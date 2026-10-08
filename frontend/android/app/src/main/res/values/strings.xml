@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Cyber-ZONE</string>
+    <string name="title_activity_main">Cyber-ZONE</string>
+    <string name="package_name">uz.cyberzone.app</string>
+    <string name="custom_url_scheme">uz.cyberzone.app</string>
+</resources>

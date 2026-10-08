@@ -31,6 +31,44 @@ function normalizeLimitPerUser(value: unknown): number {
   return Math.max(1, Math.min(20, Math.floor(n)));
 }
 
+// ============ GET /api/promo/public — PUBLIC: faol promo-kodlar ============
+/**
+ * Bosh sahifa "Aksiyalar" bo'limi uchun faol promo-kodlarni qaytaradi.
+ * Faqat hozirgi paytda ishlatish mumkin bo'lgan kodlar:
+ *   - `isActive=true`, muddat boshlangan va tugamagan
+ *   - (anonim foydalanuvchilarga faqat kod + chegirma ko'rsatiladi —
+ *     `usedCount`, `roomId` kabi ichki maydonlar oshkor etilmaydi)
+ * Kodlar bo'lmasa — bo'sh massiv (frontend bo'limni yashiradi).
+ */
+export const getPublicPromos = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const now = new Date();
+    const promos = await prisma.promoCode.findMany({
+      where: {
+        isActive: true,
+        startsAt: { lte: now },
+        expiresAt: { gt: now },
+      },
+      orderBy: { discountValue: 'desc' },
+      take: 6,
+    });
+
+    return ok(
+      res,
+      promos.map((p) => ({
+        id: p.id,
+        code: p.code,
+        discountType: p.discountType,
+        discountValue: Number(p.discountValue),
+        minBookingAmount: p.minBookingAmount === null ? null : Number(p.minBookingAmount),
+        expiresAt: p.expiresAt,
+      })),
+    );
+  } catch (err) {
+    next(err);
+  }
+};
+
 /**
  * Shaxsiy (personal) promo-kod sozlamalarini yig'adi. Kamida bitta identifikator
  * (recipientUserId | recipientPhone | recipientEmail) majburiy; IP EMAS ishlatiladi.
