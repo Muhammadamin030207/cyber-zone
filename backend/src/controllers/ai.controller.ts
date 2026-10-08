@@ -177,6 +177,7 @@ function buildSystemPrompt(context: string): string {
     '  • Narx, ish vaqti, xona ro\'yxati, promo-kod, mavjudlik, aloqa ma\'lumotlari — FAQAT KONTEKSTDAN. U yerda yo\'q bo\'lsa "hozircha ma\'lumot yo\'q" de. Xotiradan yoki taxmin qilib narx aytma.',
     '  • Foydalanuvchining shaxsiy ma\'lumotlari (bron, to\'lov, bonus balans, qarz) — FAQAT "FOYDALANUVCHI MA\'LUMOTI" bo\'limidan. U yerda yo\'q narsani uydirma.',
     '  • Bronni o\'zi tasdiqlamaysan, to\'lovni muvaffaqiyatli deb aytmaysan, tasdiqlanmagan holatni "bajarildi" deb ko\'rsatmaysan — bular platforma tomonda tekshiriladi.',
+    '  • "FOYDALANUVCHI/ADMIN/PLATFORMA" bo\'limlari — shu suhbatdoshga SERVER tomonidan berilgan yagona ma\'lumot. Boshqa foydalanuvchilar haqida ma\'lumot senga kelmagan: uydirmasan va boshqasining ma\'lumotini oshkora qilmasan.',
     '',
     'QULAY YORDAM:',
     '  • Bron qilish qadamlari: 1) xona sahifasi, 2) sana/vaqt/zonani tanlash, 3) promo-kod (agar bo\'lsa), 4) to\'lov (Click/PayMe/Uzum/Paynet/karta orqali o\'tkazma/naqd), 5) tasdiqlash.',
@@ -430,6 +431,92 @@ async function streamGemini(
   }
 }
 
+// ---------- Provider boshqaruvi (yagona zanjir) ----------
+// Eski kodda cascade 4 joyda (chat, chatStream, generateAIReply, streamAIReply)
+// takrorlanган edi — tartib/bu zanjirdan chiqish joyini ko'paytiradi. Endi
+// bitta dispatcher bor: AI_PROVIDER (auto|anthropic|gemini|openai) va AI_MODEL
+// shu yerda qo'llanadi. Orqaga moslik: AI_PROVIDER o'rnatilmasa avvalgi tartib.
+type LlmProvider = 'anthropic' | 'gemini' | 'openai';
+const PROVIDER_BASE_ORDER: LlmProvider[] = ['anthropic', 'gemini', 'openai'];
+
+function providerOrder(): LlmProvider[] {
+  const pref = config.ai.provider as LlmProvider;
+  return PROVIDER_BASE_ORDER.includes(pref)
+    ? [pref, ...PROVIDER_BASE_ORDER.filter((p) => p !== pref)]
+    : [...PROVIDER_BASE_ORDER];
+}
+
+function hasProviderKey(p: LlmProvider): boolean {
+  if (p === 'anthropic') return Boolean(config.ai.anthropicApiKey);
+  if (p === 'gemini') return Boolean(config.ai.geminiApiKey);
+  return Boolean(config.ai.openaiApiKey);
+}
+
+function modelFor(p: LlmProvider): string {
+  if (config.ai.modelOverride) return config.ai.modelOverride;
+  if (p === 'anthropic') return config.ai.anthropicModel;
+  if (p === 'gemini') return config.ai.model;
+  return config.ai.openaiModel;
+}
+
+interface DispatchArgs {
+  message: string;
+  context: string;
+  history: ChatHistoryItem[];
+  /** Berilsa — streaming rejim (faqat Claude/Gemini stream qo'llaydi). */
+  onDelta?: DeltaFn;
+}
+interface DispatchResult {
+  reply: string | null;
+  model: string;
+  /** Stream ortiqcha matn uzatilgan — keyingi provider/fallback ISHLATILMAYDI (dublikat oldini olish). */
+  aborted?: boolean;
+}
+
+/**
+ * LLM cascade'ni bajaradi: AI_PROVIDER tartibida har bir kalitli provider'ga
+ * uriladi, javob bo'lsa to'xtaydi. Hech qanday kalit/-provider ishlamasa
+ * reply=null — chaqiruvchi qoidaviy fallback'ni o'zi chaqiradi.
+ */
+async function dispatchChat(args: DispatchArgs): Promise<DispatchResult> {
+  const { message, context, history, onDelta } = args;
+  for (const p of providerOrder()) {
+    if (!hasProviderKey(p)) continue;
+    const model = modelFor(p);
+    if (onDelta) {
+      // streamClaude/streamGemini ichki xatoda null qaytarishi mumkin —
+      // lekin qisman matn allaqachon uzatilgan bo'lishi mumkin.
+      let emitted = false;
+      const wrapped: DeltaFn = (t) => { emitted = true; onDelta(t); };
+      try {
+        const text =
+          p === 'anthropic'
+            ? await streamClaude(message, context, model, history, wrapped)
+            : await streamGemini(message, context, model, history, wrapped);
+        if (text) return { reply: text, model };
+        if (emitted) return { reply: null, model, aborted: true };
+      } catch (err) {
+        console.warn(`[AI] ${p} stream xatoligi:`, (err as Error).message);
+        if (emitted) return { reply: null, model, aborted: true };
+      }
+    } else {
+      try {
+        const result =
+          p === 'anthropic'
+            ? await claudeChat(message, context, model, history)
+            : p === 'gemini'
+              ? await geminiChat(message, context, model, history)
+              : await openaiChat(message, context, model, history);
+        if (result) return { reply: result.text, model: result.model };
+      } catch (err) {
+        console.warn(`[AI] ${p} chat xatoligi:`, (err as Error).message);
+      }
+    }
+  }
+  return { reply: null, model: 'fallback' };
+}
+
+
 // ---------- Kontekst yig'ish ----------
 // Global kontekst (xonalar/promo/yangiliklar/mavjudlik) DB'da kamdan-kam o'zgaradi,
 // ammo HAR bir AI xabarida yana-yana o'qiladi. In-memory TTL cache per-message
@@ -635,6 +722,116 @@ async function buildUserContext(userId: string): Promise<string> {
   return lines.join('\n');
 }
 
+// ---------- Rollarga qarab kontekst (server tomonidagi ma'lumot chegarasi) ----------
+// Xavfsizlik qoidasi: foydalanuvchining RO'LIGI serverda tekshiriladi va
+// shu tekshiruvdan keyingina kontekstga qo'shimcha bo'limlar qo'shiladi.
+// USER hech qachon boshqa foydalanuvchining yoki boshqa xonaning ma'lumotini
+// ko'rmaydi; ADMIN faqat o'z xonalari bo'yicha navbatni ko'radi;
+// SUPER_ADMIN faqat agregatlar (sanamalar) oladi — LLM hech narsani "kengaytira" olmaydi.
+
+async function adminOwnedContext(ownerId: string): Promise<string> {
+  const rooms = await prisma.computerRoom.findMany({
+    where: { ownerId },
+    select: { id: true, name: true, status: true },
+    take: 30,
+  });
+  if (!rooms.length) return '';
+  const roomIds = rooms.map((r) => r.id);
+
+  const [pendingBookings, pendingPayments, todayCount] = await Promise.all([
+    prisma.booking.findMany({
+      where: { roomId: { in: roomIds }, status: { in: ['PENDING', 'PENDING_PAYMENT', 'PARTIALLY_PAID'] } },
+      select: { id: true, date: true, startTime: true, endTime: true, status: true, finalPrice: true, room: { select: { name: true } } },
+      orderBy: { date: 'asc' },
+      take: 6,
+    }),
+    prisma.payment.findMany({
+      where: { booking: { roomId: { in: roomIds } }, status: 'PENDING' },
+      select: { id: true, amount: true, method: true, createdAt: true, proofSubmittedAt: true, bookingId: true },
+      orderBy: { createdAt: 'desc' },
+      take: 6,
+    }),
+    prisma.booking.count({
+      where: { roomId: { in: roomIds }, date: new Date(new Date().toISOString().slice(0, 10)) },
+    }),
+  ]);
+
+  const lines: string[] = [];
+  lines.push(`Xonalarim (${rooms.length}): ${rooms.map((r) => `${r.name} [${r.status}]`).join(', ')}`);
+  lines.push(`Bugungi bronlar: ${todayCount}`);
+  lines.push('Kutilayotgan bronlar:');
+  lines.push(
+    pendingBookings.length
+      ? pendingBookings
+          .map((b) => `• #${b.id.slice(0, 8)} — ${b.room?.name}, ${String(b.date).slice(0, 10)} ${b.startTime}-${b.endTime}, holat: ${b.status}, ${b.finalPrice} so'm`)
+          .join('\n')
+      : 'Yo\'q.'
+  );
+  lines.push('Tasdiqlanmagan (PENDING) to\'lovlar:');
+  lines.push(
+    pendingPayments.length
+      ? pendingPayments
+          .map((p) => `• #${p.id.slice(0, 8)} — ${p.amount} so'm, usul: ${p.method || '—'}, chek yuborilgan: ${p.proofSubmittedAt ? 'ha' : 'yo\'q'}, bron: ${p.bookingId.slice(0, 8)}`)
+          .join('\n')
+      : 'Yo\'q.'
+  );
+  return lines.join('\n');
+}
+
+async function superAdminContext(): Promise<string> {
+  const startOfDay = new Date(new Date().toISOString().slice(0, 10));
+  const [statusGroups, pendingPayments, todayBookings, userCount, paidAgg] = await Promise.all([
+    prisma.booking.groupBy({ by: ['status'], _count: { _all: true } }),
+    prisma.payment.findMany({
+      where: { status: 'PENDING' },
+      select: { id: true, amount: true, method: true, proofSubmittedAt: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+    }),
+    prisma.booking.count({ where: { date: startOfDay } }),
+    prisma.user.count(),
+    prisma.payment.aggregate({ where: { status: 'PAID' }, _sum: { amount: true } }),
+  ]);
+
+  const lines: string[] = [];
+  lines.push(`Jami foydalanuvchilar: ${userCount}`);
+  lines.push(`Bugungi bronlar: ${todayBookings}`);
+  lines.push(`Bronlar holati bo'yicha: ${statusGroups.map((g) => `${g.status}=${g._count._all}`).join(', ')}`);
+  lines.push(`Tasdiqlangan jami tushum: ${paidAgg._sum.amount ?? 0} so'm`);
+  lines.push('Tasdiqlanmagan to\'lovlar navbati:');
+  lines.push(
+    pendingPayments.length
+      ? pendingPayments
+          .map((p) => `• #${p.id.slice(0, 8)} — ${p.amount} so'm, usul: ${p.method || '—'}, chek yuborilgan: ${p.proofSubmittedAt ? 'ha' : 'yo'}`)
+          .join('\n')
+      : 'Yo\'q.'
+  );
+  return lines.join('\n');
+}
+
+/**
+ * Suhbatdoshning ro'li asosida kontekst yig'adi (YAGONA kirish nuqtasi).
+ * `buildUserContext` doim shaxsiy (faqat o'zi) qismni beradi; qo'shimcha
+ * ADMIN/SUPER_ADMIN bo'limlari faqat DB'dagi roli mos bo'lgandagina qo'shiladi.
+ */
+export async function buildRoleContext(userId: string): Promise<string> {
+  const personal = await buildUserContext(userId);
+  const actor = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+  const role = actor?.role ?? 'USER';
+
+  if (role === 'SUPER_ADMIN') {
+    const stats = await superAdminContext();
+    return `${personal}\n\n===== PLATFORMA STATISTIKASI (SUPER_ADMIN) =====\n${stats}`;
+  }
+  if (role === 'ADMIN') {
+    const owned = await adminOwnedContext(userId);
+    if (owned) {
+      return `${personal}\n\n===== BOSHQARUV KONTEKSTI (ADMIN — faqat o'z xonalari) =====\n${owned}`;
+    }
+  }
+  return personal;
+}
+
 function lower(s: string) {
   return s.toLowerCase().replace(/['’`]+/g, '').replace(/[.,!?;:]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -777,10 +974,16 @@ export const getAiStatus = async (_req: AuthRequest, res: ExpressResponse, next:
         : hasOpenAI
           ? config.ai.openaiModel
           : null;
+    const order = providerOrder();
     return ok(res, {
       live: Boolean(live),
       activeModel: live,
       fallbackOnly: !live,
+      // AI_PROVIDER: 'auto' = Claude -> Gemini -> OpenAI; aks holda tanlangan
+      // provider birinchi uriladi (AI_MODEL — model nomini majburlash uchun).
+      provider: config.ai.provider,
+      providerOrder: order,
+      modelOverride: config.ai.modelOverride || null,
       providers: {
         claude: { configured: hasClaude, model: config.ai.anthropicModel },
         gemini: { configured: hasGemini, model: config.ai.model, fallbackModel: config.ai.fallbackModel },
@@ -811,58 +1014,25 @@ export const chat = async (req: AuthRequest, res: ExpressResponse, next: NextFun
     const latN = Number(lat);
     const lngN = Number(lng);
 
-    // 1) Platforma konteksti + foydalanuvchining o'z ma'lumotlari (faqat o'qish) + bugungi mavjudlik
+    // 1) Platforma konteksti + suhbatdoshning shaxsiy/rolli konteksti (faqat o'qish)
+    //    + bugungi mavjudlik. Rolli kontekst SERVERDA cheklanadi (buildRoleContext).
     const [platform, userCtx, availability] = await Promise.all([
       buildContext(),
-      buildUserContext(req.user!.userId),
+      buildRoleContext(req.user!.userId),
       buildAvailabilityContext(),
     ]);
     const context =
       `===== FOYDALANUVCHI MA'LUMOTI =====\n${userCtx}\n\n` + platform + '\n\n' + availability;
 
-    // 2) Haqiqiy LLM bilan javob berish: Claude (ustun) -> Gemini -> qoidaviy fallback
-    let reply: string | null = null;
-    let usedModel = 'fallback';
-    if (config.ai.anthropicApiKey) {
-      try {
-        const result = await claudeChat(msg, context, config.ai.anthropicModel, hist);
-        if (result) {
-          reply = result.text;
-          usedModel = result.model;
-        }
-      } catch (err) {
-        console.warn('[AI] Claude chat xatoligi:', (err as Error).message);
-      }
-    }
-    if (!reply) {
-      try {
-        const result = await geminiChat(msg, context, config.ai.model, hist);
-        if (result) {
-          reply = result.text;
-          usedModel = result.model;
-        }
-      } catch (err) {
-        console.warn('[AI] Gemini chat xatoligi:', (err as Error).message);
-      }
-    }
-    if (!reply && config.ai.openaiApiKey) {
-      try {
-        const result = await openaiChat(msg, context, config.ai.openaiModel, hist);
-        if (result) {
-          reply = result.text;
-          usedModel = result.model;
-        }
-      } catch (err) {
-        console.warn('[AI] OpenAI-compatible chat xatoligi:', (err as Error).message);
-      }
-    }
+    // 2) Haqiqiy LLM: AI_PROVIDER tartibida (auto: Claude -> Gemini -> OpenAI)
+    const dispatched = await dispatchChat({ message: msg, context, history: hist });
 
-    // 3) Gemini ishlamasa — qoidaviy fallback
-    if (!reply) {
-      reply = await fallbackReply(msg, Number.isFinite(latN) ? latN : undefined, Number.isFinite(lngN) ? lngN : undefined);
-    }
+    // 3) Hech qanday provider javob bermasa — qoidaviy fallback
+    const reply =
+      dispatched.reply ??
+      (await fallbackReply(msg, Number.isFinite(latN) ? latN : undefined, Number.isFinite(lngN) ? lngN : undefined));
 
-    return ok(res, { reply, model: usedModel });
+    return ok(res, { reply, model: dispatched.model });
   } catch (err) {
     next(err);
   }
@@ -895,36 +1065,20 @@ export const chatStream = async (req: AuthRequest, res: ExpressResponse, next: N
     const hist = sanitizeHistory(history);
     const [platform, userCtx, availability] = await Promise.all([
       buildContext(),
-      buildUserContext(req.user!.userId),
+      buildRoleContext(req.user!.userId),
       buildAvailabilityContext(),
     ]);
     const context = `===== FOYDALANUVCHI MA'LUMOTI =====\n${userCtx}\n\n` + platform + '\n\n' + availability;
 
-    let usedModel = 'fallback';
-    let streamed: string | null = null;
+    const streamed = await dispatchChat({ message: msg, context, history: hist, onDelta: (t) => send({ delta: t }) });
 
-    if (config.ai.anthropicApiKey) {
-      try {
-        streamed = await streamClaude(msg, context, config.ai.anthropicModel, hist, (t) => send({ delta: t }));
-        if (streamed) usedModel = config.ai.anthropicModel;
-      } catch (err) {
-        console.warn('[AI] chatStream Claude xatoligi:', (err as Error).message);
-      }
-    }
-    if (!streamed && config.ai.geminiApiKey) {
-      try {
-        streamed = await streamGemini(msg, context, config.ai.model, hist, (t) => send({ delta: t }));
-        if (streamed) usedModel = config.ai.model;
-      } catch (err) {
-        console.warn('[AI] chatStream Gemini xatoligi:', (err as Error).message);
-      }
-    }
-    if (!streamed) {
+    // aborted=true — matn qisman uzatilgan (dublikat bo'lmasligi uchun fallback YO'Q)
+    if (!streamed.reply && !streamed.aborted) {
       const fallback = await fallbackReply(msg);
       send({ delta: fallback });
     }
 
-    send({ done: true, model: usedModel });
+    send({ done: true, model: streamed.model });
     res.end();
   } catch (err) {
     console.error('[AI] chatStream:', (err as Error).message);
@@ -949,52 +1103,17 @@ export async function generateAIReply(
 ): Promise<{ reply: string; model: string }> {
   const [platform, userCtx, availability] = await Promise.all([
     buildContext(),
-    buildUserContext(userId),
+    buildRoleContext(userId),
     buildAvailabilityContext(),
   ]);
   const context = `===== FOYDALANUVCHI MA'LUMOTI =====\n${userCtx}\n\n` + platform + '\n\n' + availability;
 
-  let reply: string | null = null;
-  let usedModel = 'fallback';
-  if (config.ai.anthropicApiKey) {
-    try {
-      const result = await claudeChat(message, context, config.ai.anthropicModel, history);
-      if (result) {
-        reply = result.text;
-        usedModel = result.model;
-      }
-    } catch (err) {
-      console.warn('[AI] generateAIReply Claude xatoligi:', (err as Error).message);
-    }
-  }
-  if (!reply) {
-    try {
-      const result = await geminiChat(message, context, config.ai.model, history);
-      if (result) {
-        reply = result.text;
-        usedModel = result.model;
-      }
-    } catch (err) {
-      console.warn('[AI] generateAIReply Gemini xatoligi:', (err as Error).message);
-    }
-  }
-  if (!reply && config.ai.openaiApiKey) {
-    try {
-      const result = await openaiChat(message, context, config.ai.openaiModel, history);
-      if (result) {
-        reply = result.text;
-        usedModel = result.model;
-      }
-    } catch (err) {
-      console.warn('[AI] generateAIReply OpenAI-compatible xatoligi:', (err as Error).message);
-    }
-  }
+  const dispatched = await dispatchChat({ message, context, history });
+  const reply =
+    dispatched.reply ??
+    (await fallbackReply(message, Number.isFinite(lat) ? lat : undefined, Number.isFinite(lng) ? lng : undefined));
 
-  if (!reply) {
-    reply = await fallbackReply(message, Number.isFinite(lat) ? lat : undefined, Number.isFinite(lng) ? lng : undefined);
-  }
-
-  return { reply, model: usedModel };
+  return { reply, model: dispatched.model };
 }
 
 /** AIMessage[] ni Gemini uchun suhbat tarixiga o'tkazadi (so'nggi 8 ta). */
@@ -1016,32 +1135,16 @@ export async function streamAIReply(
 ): Promise<{ text: string; model: string }> {
   const [platform, userCtx, availability] = await Promise.all([
     buildContext(),
-    buildUserContext(userId),
+    buildRoleContext(userId),
     buildAvailabilityContext(),
   ]);
   const context = `===== FOYDALANUVCHI MA'LUMOTI =====\n${userCtx}\n\n` + platform + '\n\n' + availability;
 
-  let text: string | null = null;
-  let usedModel = 'fallback';
-  if (config.ai.anthropicApiKey) {
-    try {
-      text = await streamClaude(message, context, config.ai.anthropicModel, history, onDelta);
-      if (text) usedModel = config.ai.anthropicModel;
-    } catch (err) {
-      console.warn('[AI] streamAIReply Claude xatoligi:', (err as Error).message);
-    }
-  }
-  if (!text && config.ai.geminiApiKey) {
-    try {
-      text = await streamGemini(message, context, config.ai.model, history, onDelta);
-      if (text) usedModel = config.ai.model;
-    } catch (err) {
-      console.warn('[AI] streamAIReply Gemini xatoligi:', (err as Error).message);
-    }
-  }
-  if (!text) {
+  const dispatched = await dispatchChat({ message, context, history, onDelta });
+  let text = dispatched.reply;
+  if (!text && !dispatched.aborted) {
     text = await fallbackReply(message);
     if (text) onDelta(text);
   }
-  return { text: text || 'Xatolik yuz berdi. Yana urinib ko\'ring.', model: usedModel };
+  return { text: text || 'Xatolik yuz berdi. Yana urinib ko\'ring.', model: dispatched.model };
 }

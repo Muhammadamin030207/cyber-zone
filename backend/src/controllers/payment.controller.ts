@@ -404,6 +404,37 @@ amount: Number(active.amount),
     // to'lovni topadi. UUID o'rniga qisqa, o'qiladigan `CZ-7K2M9QX4`.
     const receiptNumber = await reserveReceiptNumber();
 
+    // Qo'lda o'tkazma (TRANSFER): bron uchun HAMON ochiq PENDING/REJECTED to'lov
+    // bo'lsa — yangisini yaratmaymiz, mavjudini qaytaramiz. Bu "refresh/bosish"
+    // vaqtida DUPLIKAT to'lov yozuvlari paydo bo'lishining oldini oladi
+    // (server avtoritet; frontend P0 fix — faqat ko'rsatuv uchun).
+    if (manual && !cash) {
+      const opened = await prisma.payment.findFirst({
+        where: {
+          bookingId,
+          method: 'TRANSFER',
+          status: { in: ['PENDING', 'REJECTED'] },
+        },
+        select: { id: true, status: true, amount: true, depositPercent: true, receiptNumber: true, proofSubmittedAt: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (opened) {
+        return created(res, {
+          payment: {
+            id: opened.id,
+            status: opened.status,
+            amount: opened.amount,
+            method: 'TRANSFER',
+            provider: null,
+            depositPercent: opened.depositPercent,
+            receiptNumber: opened.receiptNumber,
+            proofSubmittedAt: opened.proofSubmittedAt,
+          },
+          alreadyOpen: true,
+        });
+      }
+    }
+
     const payment = await prisma.$transaction(async (tx) => {
       const p = await tx.payment.create({
         data: {
@@ -1052,7 +1083,59 @@ export const confirmPayment = async (req: AuthRequest, res: Response, next: Next
   }
 };
 
-// ============ GET /api/payments — barcha to'lovlar (ADMIN o'z xonasi) ============
+// ============ POST /api/payments/:id/reject — ADMIN: chek/tasdiqni rad etish ============
+// Foydalanuvchi o'tkazma cheki yuklagan bo'lsa, admin noto'g'ri/jar qilingan deb
+// topilsa — sabab bilan rad etadi. Bron bekor qilinMAYDI (PENDING_PAYMENT
+// qoladi): foydalanuvchi xatosini ko'rib, XUDDI SHU to'lovga qayta chek yuklay
+// oladi (submitTransferProof status REJECTED → PENDING ga qaytaradi).
+export const rejectTransferPayment = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const reason = String(req.body?.reason ?? '').trim().slice(0, 500);
+    if (reason.length < 3) return badRequest(res, 'Rad etish sababini kiriting (kamida 3 belgi)', 'REJECT_REASON_REQUIRED');
+
+    const payment = await prisma.payment.findUnique({
+      where: { id: req.params.id },
+      include: { booking: { include: { room: true } } },
+    });
+    if (!payment) return notFoundMsg(res, 'To\'lov topilmadi');
+
+    if (payment.booking.room.ownerId !== req.user!.userId && req.user!.role !== 'SUPER_ADMIN') {
+      return forbidden(res);
+    }
+    if (payment.status !== 'PENDING') return badRequest(res, 'Faqat kutilayotgan (PENDING) to\'lovni rad etish mumkin');
+    if ((payment.metadata as any)?.manualTransfer !== true && payment.method !== 'TRANSFER') {
+      return badRequest(res, 'Faqat o\'tkazma (chek yuklangan) to\'lovlarni rad etish mumkin');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await auditLog(tx, { paymentId: payment.id, action: 'admin_rejected_payment', actorId: req.user!.userId, actorRole: req.user!.role as string, metadata: { reason } });
+      await tx.paymentEvidence.updateMany({
+        where: { paymentId: payment.id, status: 'SUBMITTED' },
+        data: { status: 'REJECTED', reviewNote: reason, reviewedById: req.user!.userId, reviewedAt: new Date() },
+      });
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: { status: 'REJECTED', failureReason: reason },
+      });
+    });
+
+    await prisma.notification.create({
+      data: {
+        userId: payment.userId,
+        title: 'To\'lovingiz rad etildi',
+        message: `To'lov tasdiqlanmadi. Sabab: ${reason}. Xatoni tuzatib chekni qayta yuklashingiz mumkin.`,
+        type: 'payment',
+      },
+    }).catch(() => undefined);
+    io.to(`user:${payment.userId}`).emit('notification_new', { userId: payment.userId, type: 'payment' });
+
+    return ok(res, { id: payment.id, status: 'REJECTED', failureReason: reason }, 'To\'lov rad etildi — foydalanuvchi qayta yuklashi mumkin');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============ GET /api/payments — barcha to'lovlar (SUPER_ADMIN) ============
 export const getAllPayments = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { limit, offset, status, q, receiptNumber: receiptQuery } = req.query as {
@@ -1211,7 +1294,9 @@ export const submitTransferProof = async (req: AuthRequest, res: Response, next:
     // faqat to'lov egasi
     if (payment.userId !== req.user!.userId) return forbidden(res, 'Bu to\'lovga kirish huquqingiz yo\'q');
 
-    if (!['PENDING', 'CREATED'].includes(payment.status)) {
+    // PENDING/REJECTED — o'tkazma cheki kutilmoqda yoki admin rad etgan:
+    // ikkala holatda ham foydalanuvchi (qayta) yuklay oladi.
+    if (!['PENDING', 'CREATED', 'REJECTED'].includes(payment.status)) {
       return badRequest(res, 'Bu to\'lov allaqachon tasdiqlangan yoki bekor qilingan');
     }
     const manualTransfer = (payment.metadata as any)?.manualTransfer === true;
@@ -1302,6 +1387,7 @@ export const submitTransferProof = async (req: AuthRequest, res: Response, next:
           proofCardLast4: last4,
           proofCardholderName: holder,
           proofSubmittedAt: new Date(),
+          failureReason: null, // REJECTED'dan qayta yuklansa — avvalgi sabab tozalanadi
         },
         include: { evidences: true },
       });

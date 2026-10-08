@@ -175,6 +175,15 @@ export const config = {
     geminiApiKey: process.env.GEMINI_API_KEY || '',
     model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
     fallbackModel: process.env.GEMINI_FALLBACK_MODEL || 'gemini-flash-lite-latest',
+
+    // Provider boshqaruvi (orqaga moslik SAQLANADI):
+    //  • AI_PROVIDER='auto' (default) — avvalgi zanjir: Claude -> Gemini -> OpenAI.
+    //  • AI_PROVIDER='anthropic'|'gemini'|'openai' — shu provider birinchi uriladi,
+    //    kaliti bo'lsa ishlatiladi; qolganlari zaxira sifatida qoladi.
+    //  • AI_MODEL — tanlangan provider uchun model nomini majburlaydi
+    //    (bo'sh bo'lsa ANTHROPIC_MODEL/GEMINI_MODEL/OPENAI_MODEL o'zgarmaydi).
+    provider: (process.env.AI_PROVIDER || 'auto').toLowerCase(),
+    modelOverride: process.env.AI_MODEL || '',
     temperature: parseFloat(process.env.AI_TEMPERATURE || '0.7'),
     // To'liq javob uchun yetarli limit (1000 token ba'zi savollarda kesilib
     // qolardi). 2048 — tez va arzon, lekin javobni to'liq chiqaradi.

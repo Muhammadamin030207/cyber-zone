@@ -16,6 +16,7 @@ import {
   getMerchantCard,
   getMerchantCards,
   submitTransferProof,
+  rejectTransferPayment,
   getDebts,
   settleDebt,
 } from '../controllers/payment.controller';
@@ -130,6 +131,7 @@ router.get('/providers', getProviders);
 router.get('/history', authenticate, getPaymentHistory);
 router.get('/:id/status', authenticate, getPaymentByIdStatus);
 router.post('/:id/confirm', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), paymentConfirmLimiter, confirmPayment);
+router.post('/:id/reject', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), paymentConfirmLimiter, rejectTransferPayment);
 router.get('/:bookingId', authenticate, getPaymentStatus);
 
 // Barcha to'lovlar (platform bo'ylab qidiruv/eksport) — FAQAT SUPER_ADMIN.

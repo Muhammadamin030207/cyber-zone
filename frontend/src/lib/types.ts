@@ -244,7 +244,9 @@ export interface Payment {
   type: 'ADVANCE' | 'REMAINING';
   method?: 'PAYME' | 'CLICK' | 'UZCARD' | 'HUMO' | 'UZUM' | 'PAYNET' | 'CASH' | 'TRANSFER' | null;
   provider?: 'PAYME' | 'CLICK' | 'UZUM' | 'PAYNET' | null;
-  status: 'CREATED' | 'PENDING' | 'REDIRECT_REQUIRED' | 'PROCESSING' | 'PAID' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'EXPIRED' | 'REFUNDED';
+  status: 'CREATED' | 'PENDING' | 'REDIRECT_REQUIRED' | 'PROCESSING' | 'PAID' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'EXPIRED' | 'REFUNDED' | 'REJECTED';
+  /** Admin chekni rad etganda sabab (REJECTED holatda to'ldiriladi). */
+  failureReason?: string | null;
   /** To'lov yaratilgandagi depozit foizi — UI da 30% deb QATOR YOZILMASIN. */
   depositPercent?: number | null;
   paidAt?: string | null;

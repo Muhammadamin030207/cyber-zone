@@ -177,6 +177,13 @@ services:
         value: gpt-4o-mini
       - key: OPENAI_BASE_URL
         value: https://api.openai.com/v1
+      # Provider boshqaruvi: 'auto' (Claude -> Gemini -> OpenAI) yoki aniq
+      # provider birinchi uriladi ('anthropic'|'gemini'|'openai').
+      - key: AI_PROVIDER
+        value: auto
+      # Bo'sh bo'lsa yuqoridagi GEMINI_MODEL/ANTHROPIC_MODEL/OPENAI_MODEL ishlatiladi.
+      - key: AI_MODEL
+        value: ""
       - key: AI_TEMPERATURE
         value: "0.7"
       - key: AI_MAX_TOKENS

@@ -12,8 +12,12 @@
 import { createAwsFaceProvider } from './providers/aws';
 import { noneFaceProvider } from './providers/none';
 import type { FaceProvider, FaceProviderId } from './types';
-import { config } from '../../config';
 
+// Kesh FAQAT tanlangan provider bo'yicha saqlanadi — `FACE_PROVIDER`
+// o'zgarsa (masalan, e2e test muhitida) yangi qaror qabul qilinadi.
+// Production'da env o'zgarmaydi, shuning uchun bu singleton xatti-harakati
+// bir xil qoladi.
+let cachedId: FaceProviderId | null = null;
 let cached: FaceProvider | null = null;
 
 function resolveId(): FaceProviderId {
@@ -26,9 +30,10 @@ function resolveId(): FaceProviderId {
  * `none` provideri har doim mavjud, u har doim NOT_CONFIGURED beradi.
  */
 export function getFaceProvider(): FaceProvider {
-  if (cached) return cached;
   const id = resolveId();
+  if (cached && cachedId === id) return cached;
   cached = id === 'aws' ? createAwsFaceProvider() : noneFaceProvider;
+  cachedId = id;
   return cached;
 }
 

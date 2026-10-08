@@ -124,14 +124,62 @@ describe('E2E: Bron sessiyasi (check-in/check-out, min 1 soat billing)', () => {
     expect(after.faceVerifiedById).toEqual(before.faceVerifiedById);
   });
 
+  /**
+   * Provider NI SOZLASH (vaqtiyca) — enforcement darajasini tekshirish uchun.
+   *
+   * Dummy AWS qiymatlari FAQAT `isConfigured() === true` qiladi; session/start
+   * geyti hech qanday AWS chaqiruv QILMAYDI (u faqat `faceVerifiedAt` ni
+   * tekshiradi). Ya'ni: test haqiqiy BLOCK holatini ko'radi, tarmoqqa chiqmaydi
+   * va hech qanday fake yuz natija yaratilmaydi.
+   */
+  const AWS_ENV_KEYS = ['FACE_PROVIDER', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'AWS_FACE_COLLECTION_ID'] as const;
+
+  async function withTrustedFaceProvider<T>(fn: () => Promise<T>): Promise<T> {
+    const saved: Record<string, string | undefined> = {};
+    for (const k of AWS_ENV_KEYS) saved[k] = process.env[k];
+    process.env.FACE_PROVIDER = 'aws';
+    process.env.AWS_ACCESS_KEY_ID = 'e2e-dummy-access-key';
+    process.env.AWS_SECRET_ACCESS_KEY = 'e2e-dummy-secret-key';
+    process.env.AWS_REGION = 'us-east-1';
+    process.env.AWS_FACE_COLLECTION_ID = 'e2e-dummy-collection';
+    try {
+      return await fn();
+    } finally {
+      for (const k of AWS_ENV_KEYS) {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      }
+    }
+  }
+
   it('check-in: yuz tekshiruvi o\'tkazilmagan sessiya BLOKLANADI (FACE_NOT_VERIFIED)', async () => {
     const booking = await makeConfirmed(2);
-    const res = await api().post(`/api/bookings/${booking.id}/session/start`).set('Authorization', auth(userToken));
+    const res = await withTrustedFaceProvider(() =>
+      api().post(`/api/bookings/${booking.id}/session/start`).set('Authorization', auth(userToken)),
+    );
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('FACE_NOT_VERIFIED');
     // Hech narsa o'zgarMAYdi: kompyuter band bo'lib qolmaydi
     const pcAfter = await prisma.computer.findUnique({ where: { id: pc.id } });
     expect(pcAfter!.status).toBe('AVAILABLE');
+  });
+
+  it('provider NOT_CONFIGURED: geyt yuz talabini o\'tkazib yuboradi (fake PASS emas — faceVerifiedAt yozilmaydi)', async () => {
+    const booking = await makeConfirmed(2);
+    // Default muhit: FACE_PROVIDER yo'q -> none provideri.
+    delete process.env.FACE_PROVIDER;
+    const info = await api().get(`/api/bookings/${booking.id}/session`).set('Authorization', auth(userToken));
+    expect(info.status).toBe(200);
+    expect(info.body.data.session.faceCheckAvailable).toBe(false);
+    expect(info.body.data.session.faceVerified).toBe(false);
+    expect(info.body.data.session.canStart).toBe(true);
+
+    const before = await prisma.booking.findUniqueOrThrow({
+      where: { id: booking.id },
+      select: { faceVerifiedAt: true, status: true },
+    });
+    expect(before.faceVerifiedAt).toBeNull();
+    expect(before.status).toBe('CONFIRMED');
   });
 
   it('check-in: CONFIRMED bronni ACTIVE qiladi, kompyuterni OCCUPIED qiladi', async () => {

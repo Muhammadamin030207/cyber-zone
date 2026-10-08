@@ -29,6 +29,7 @@ type PaymentRow = {
   proofCardLast4: string | null;
   proofCardholderName: string | null;
   proofSubmittedAt: string | null;
+  failureReason: string | null;
   isDebt: boolean;
   createdAt: string;
   evidences: Array<{ id: string; fileUrl: string; mimeType: string }>;
@@ -74,6 +75,7 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELLED: 'Bekor',
   EXPIRED: 'Muddati o\'tgan',
   REFUNDED: 'Qaytarilgan',
+  REJECTED: 'Rad etilgan',
 };
 
 /**
@@ -129,6 +131,22 @@ export default function PaymentsTab() {
     try {
       await api.post(`/api/payments/${id}/confirm`);
       toastSuccess('To\'lov tasdiqlandi — bron yakunlandi');
+      setExpanded((v) => (v === id ? null : v));
+      await load(true);
+    } catch (err) {
+      toastError(getApiErrorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function reject(id: string) {
+    const reason = window.prompt('Rad etish sababini kiriting (kamida 3 belgi):');
+    if (!reason || reason.trim().length < 3) return;
+    setBusyId(id);
+    try {
+      await api.post(`/api/payments/${id}/reject`, { reason: reason.trim() });
+      toastSuccess('To\'lov rad etildi — mijoz qayta chek yuklay oladi');
       setExpanded((v) => (v === id ? null : v));
       await load(true);
     } catch (err) {
@@ -206,6 +224,8 @@ export default function PaymentsTab() {
           {rows.map((p) => {
             const open = expanded === p.id;
             const canConfirm = ['PENDING', 'CREATED', 'PROCESSING'].includes(p.status);
+            // Rad etish — faqat chek yuborilgan (TRANSFER) kutilayotgan to'lov uchun.
+            const canReject = p.status === 'PENDING' && p.proofSubmittedAt != null && p.evidences.length > 0;
             return (
               <div key={p.id} className={cn('neo-card rounded-2xl p-4', p.isDebt && 'border-neon-amber/40')}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -227,7 +247,7 @@ export default function PaymentsTab() {
                           'text-[11px] px-2 py-0.5 rounded-full border font-semibold',
                           p.status === 'PAID' || p.status === 'COMPLETED'
                             ? 'border-neon-green/40 bg-neon-green/10 text-neon-green'
-                            : p.status === 'FAILED' || p.status === 'EXPIRED' || p.status === 'CANCELLED'
+                            : p.status === 'FAILED' || p.status === 'EXPIRED' || p.status === 'CANCELLED' || p.status === 'REJECTED'
                               ? 'border-red-400/40 bg-red-400/10 text-red-300'
                               : 'border-neon-amber/40 bg-neon-amber/10 text-neon-amber'
                         )}
@@ -276,6 +296,11 @@ export default function PaymentsTab() {
                         Chek
                       </button>
                     )}
+                    {p.status === 'REJECTED' && p.failureReason && (
+                      <p className="text-xs text-red-300 mt-1">
+                        Rad etish sababi: <span className="text-red-200">{p.failureReason}</span>
+                      </p>
+                    )}
                     {canConfirm && (
                       <button
                         onClick={() => void confirm(p.id)}
@@ -283,6 +308,15 @@ export default function PaymentsTab() {
                         className="text-xs font-bold px-3 py-2 rounded-lg bg-neon-green/15 border border-neon-green/40 text-neon-green hover:bg-neon-green/25 transition-colors disabled:opacity-50 whitespace-nowrap"
                       >
                         {busyId === p.id ? 'Tasdiqlanmoqda…' : 'Tasdiqlash'}
+                      </button>
+                    )}
+                    {canReject && (
+                      <button
+                        onClick={() => void reject(p.id)}
+                        disabled={busyId === p.id}
+                        className="text-xs font-bold px-3 py-2 rounded-lg bg-red-500/15 border border-red-500/40 text-red-300 hover:bg-red-500/25 transition-colors disabled:opacity-50 whitespace-nowrap"
+                      >
+                        Rad etish
                       </button>
                     )}
                   </div>

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { startSessionGate } from '../services/sessionService';
 import { computeBookingPrice } from '../utils/pricing';
 import { round2 } from '../utils/money';
@@ -10,6 +10,26 @@ import { round2 } from '../utils/money';
  * bo'lmaydi, sessiya ACTIVE turib beradi va faqat admin yoki foydalanuvchi
  * "check-out" bosganda yopiladi. Worker bunday sessiyani avtomatik yopmaydi.
  */
+
+/**
+ * Face provider mavjudligini test boshqaradi.
+ *
+ * SessionService `FACE_NOT_VERIFIED` ni FAQAT provider sozlangan bo'lgandagina
+ * qaytaradi (NOT_CONFIGURED -> enforcement o'tkaziladi, fake PASS EMAS).
+ * Shu sabab test ikkala holatni ham tekshiradi:
+ *   - provider sozlangan   -> FACE_NOT_VERIFIED
+ *   - provider NOT_CONFIGURED -> sessiya ruxsat etiladi (bloklanmaydi)
+ */
+const faceState = vi.hoisted(() => ({ available: false }));
+
+vi.mock('../services/face/registry', () => ({
+  isTrustedFaceVerificationAvailable: () => faceState.available,
+  faceProviderId: () => (faceState.available ? 'aws' : 'none'),
+  getFaceProvider: () => ({
+    id: faceState.available ? 'aws' : 'none',
+    isConfigured: () => faceState.available,
+  }),
+}));
 
 const base = {
   status: 'PAID' as const,
@@ -71,7 +91,10 @@ describe('startSessionGate — TIMED (eskisiga regress)', () => {
 });
 
 describe('startSessionGate — yuz tekshiruvi (liveness)', () => {
+  beforeEach(() => { faceState.available = false; });
+
   it('talab yoqilgan bo\'lsa va yuz tekshirilmagan bo\'lsa FACE_NOT_VERIFIED', () => {
+    faceState.available = true;
     const gate = startSessionGate(
       { ...base, startTime: '09:00', endTime: '10:00', faceCheckRequired: true, faceVerifiedAt: null },
       new Date('2026-09-28T04:30:00Z'),
@@ -80,7 +103,19 @@ describe('startSessionGate — yuz tekshiruvi (liveness)', () => {
     expect(gate.code).toBe('FACE_NOT_VERIFIED');
   });
 
+  it('provider NOT_CONFIGURED bo\'lsa enforcement o\'tkaziladi (sessiya bloklanmaydi, fake PASS yo\'q)', () => {
+    faceState.available = false;
+    const gate = startSessionGate(
+      { ...base, startTime: '09:00', endTime: '10:00', faceCheckRequired: true, faceVerifiedAt: null },
+      new Date('2026-09-28T04:30:00Z'),
+    );
+    // `faceVerifiedAt` YOZILMAYDI — faqat geyt e'tibordan chiqaradi.
+    expect(gate.ok).toBe(true);
+    expect(gate.code).toBeUndefined();
+  });
+
   it('talab yoqilgan bo\'lsa-yu tekshiruv o\'tgan bo\'lsa ruxsat beradi', () => {
+    faceState.available = true;
     const gate = startSessionGate(
       { ...base, startTime: '09:00', endTime: '10:00', faceCheckRequired: true, faceVerifiedAt: new Date('2026-09-28T11:00:00Z') },
       new Date('2026-09-28T04:30:00Z'),
@@ -89,6 +124,7 @@ describe('startSessionGate — yuz tekshiruvi (liveness)', () => {
   });
 
   it('talab o\'chirilgan bo\'lsa tekshiruvsiz ham ruxsat beradi', () => {
+    faceState.available = true;
     const gate = startSessionGate(
       { ...base, startTime: '09:00', endTime: '10:00', faceCheckRequired: false, faceVerifiedAt: null },
       new Date('2026-09-28T04:30:00Z'),
@@ -97,6 +133,7 @@ describe('startSessionGate — yuz tekshiruvi (liveness)', () => {
   });
 
   it('faceCheckRequired aniq berilmasa (eski chaqiruvlar) tekshiruv talab qilinmaydi', () => {
+    faceState.available = true;
     const gate = startSessionGate(
       { ...base, startTime: '09:00', endTime: '10:00', faceVerifiedAt: null },
       new Date('2026-09-28T04:30:00Z'),
@@ -111,6 +148,8 @@ describe('startSessionGate — yuz tekshiruvi (liveness)', () => {
  * tekshiruvini o'tkazadi, keyin yana "to'lanmagan" xatosini oladi.
  */
 describe('startSessionGate — to\'lov yuz tekshiruvidan oldin', () => {
+  beforeEach(() => { faceState.available = true; });
+
   it('to\'lanmagan + yuz tekshirilmagan -> avval TO\'LOV xatosi (chalg\'itmaydi)', () => {
     const gate = startSessionGate(
       { ...base, status: 'PENDING', startTime: '09:00', endTime: '10:00', faceCheckRequired: true, faceVerifiedAt: null },

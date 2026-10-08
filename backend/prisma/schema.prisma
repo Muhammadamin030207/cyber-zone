@@ -109,6 +109,7 @@ enum PaymentStatus {
   CANCELLED // bekor qilingan
   EXPIRED // muddati o'tgan
   REFUNDED // qaytarilgan
+  REJECTED // admin chekni rad etdi (sabab bilan); foydalanuvchi qayta yuklashi mumkin
 }
 
 enum PromoUsageScope {

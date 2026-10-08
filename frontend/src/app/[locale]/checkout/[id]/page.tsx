@@ -47,6 +47,39 @@ const LIVE_STATUSES: BookingStatus[] = ['PENDING', 'PENDING_PAYMENT', ...ADVANCE
 
 const TERMINAL_FAILED_PAYMENT = ['FAILED', 'CANCELLED', 'EXPIRED'];
 
+/**
+ * Ochiq (yakunlanmagan) qo'lda o'tkazma to'lovini topadi.
+ *
+ * P0 ROOT CAUSE (eski bug): `transferPayment` FAQAT `startPay()` ichida
+ * o'rnatilgandi — sahifa yangilanganda u `null` bo'lib qolardi va
+ * foydalanuvchi yana "To'lash" tugmasini ko'rgan (holatki chek allaqachon
+ * yuborilgan edi). Endi har bir server javobidan (bron yoki to'lovlar
+ * ro'yxati) tiklanadi: server/DB yagona haqiqat manbasi, React state emas.
+ */
+function pickOpenTransferPayment(payments?: Payment[] | null): Payment | null {
+  if (!payments?.length) return null;
+  const terminal = new Set(['PAID', 'COMPLETED', 'FAILED', 'CANCELLED', 'EXPIRED', 'REFUNDED']);
+  return (
+    payments.find((p) => {
+      if (terminal.has(p.status)) return false;
+      const manual = p.method === 'TRANSFER' || p.metadata?.manualTransfer === true;
+      // REJECTED — ham "ochiq" hisoblanadi: foydalanuvchi qayta chek yuklay oladi.
+      return manual && (p.status === 'CREATED' || p.status === 'PENDING' || p.status === 'REJECTED');
+    }) ?? null
+  );
+}
+
+function toTransferState(p: Payment) {
+  return {
+    id: p.id,
+    status: p.status,
+    amount: Number(p.amount),
+    receiptNumber: p.receiptNumber ?? null,
+    proofSubmittedAt: p.proofSubmittedAt ?? null,
+    failureReason: p.failureReason ?? null,
+  };
+}
+
 interface ProviderInfo {
   method: string;
   label: string;
@@ -96,8 +129,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
    * cheklaydi, shuning uchun bu faqat yuqoriga (50/70/100) yo'naltiradi.
    */
   const [payPercent, setPayPercent] = useState<number | null>(null);
-  // Qo'lda o'tkazma holati
-  const [transferPayment, setTransferPayment] = useState<{ id: string; status: string; amount: number; receiptNumber: string | null } | null>(null);
+  // Qo'lda o'tkazma holati — har doim SERVERDAN tiklanadi (yuqorida
+  // `pickOpenTransferPayment`), lokal React state yagona haqiqat EMAS.
+  const [transferPayment, setTransferPayment] = useState<{ id: string; status: string; amount: number; receiptNumber: string | null; proofSubmittedAt: string | null; failureReason: string | null } | null>(null);
   const [card, setCard] = useState<MerchantCard | null>(null);
 
   const [paying, setPaying] = useState(false);
@@ -155,6 +189,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
       const b = data.data as Booking;
       setBooking(b);
       if (ADVANCE_PAID_STATUSES.includes(b.status)) setVerified(true);
+      // Ochiq o'tkazma to'lovini serverdan tiklash (refresh = haqiqat qaytadi)
+      const openTransfer = pickOpenTransferPayment(b.payments);
+      if (openTransfer) setTransferPayment(toTransferState(openTransfer));
     } catch {
       /* tarmoq xatosi — jimgina qoldiramiz */
     }
@@ -170,6 +207,10 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
         if (cancelled) return;
         setBooking(b);
         if (ADVANCE_PAID_STATUSES.includes(b.status)) setVerified(true);
+        // P0: chek yuborilgan/ochiq o'tkazma to'lovini serverdan tiklash —
+        // refreshdan keyin "To'lash" qaytmasligi kerak.
+        const openTransfer = pickOpenTransferPayment(b.payments);
+        if (openTransfer) setTransferPayment(toTransferState(openTransfer));
       })
       .catch((err) => { if (!cancelled) setError(getApiErrorMessage(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -181,12 +222,16 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
       setVerifyPayment({ id: pid });
     } else if (!cancelled) {
       // Davom etmagan sessiyani qayta boshlash (aktiv to'lov bor bo'lsa)
+      // + o'tkazma to'lovini qayta tiklash (bron javobi bilan parallel).
       api
         .get(`/api/payments/${id}`)
         .then(({ data }) => {
-          const active = (data.data?.payments as Payment[] | undefined)
-            ?.find((p) => ['CREATED', 'REDIRECT_REQUIRED', 'PROCESSING'].includes(p.status));
-          if (active && !cancelled) setVerifyPayment({ id: active.id });
+          if (cancelled) return;
+          const payments = (data.data?.payments as Payment[] | undefined) ?? [];
+          const active = payments.find((p) => ['CREATED', 'REDIRECT_REQUIRED', 'PROCESSING'].includes(p.status));
+          if (active) setVerifyPayment({ id: active.id });
+          const openTransfer = pickOpenTransferPayment(payments);
+          if (openTransfer) setTransferPayment(toTransferState(openTransfer));
         })
         .catch(() => undefined);
     }
@@ -264,6 +309,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
           status: d.payment.status,
           amount: d.payment.amount,
           receiptNumber: d.payment.receiptNumber ?? null,
+          proofSubmittedAt: null,
+          failureReason: null,
         });
         setCard((d.merchantCard as MerchantCard | null) || cardFor(m));
       } else if (m === 'CASH' || (data.data?.method === 'CASH')) {
@@ -645,6 +692,19 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
             /* Karta ma'lumotlari TransferPanel ichida — qayta ko'rsatmaymiz,
                aks holda bir xil raqam va bank ikki marta chiqadi. */
             <div className="mb-5">
+              {transferPayment.status === 'REJECTED' && (
+                <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200 mb-3">
+                  <p className="flex items-center gap-2 font-bold">
+                    <AlertCircle size={16} /> To&apos;lov tasdiqlanmadi
+                  </p>
+                  {transferPayment.failureReason && (
+                    <p className="text-xs text-red-200/90 mt-1.5">Sabab: {transferPayment.failureReason}</p>
+                  )}
+                  <p className="text-xs text-gray-300 mt-1.5">
+                    Xatoni tuzatib, quyidagi shakl orqali chekni qayta yuklashingiz mumkin.
+                  </p>
+                </div>
+              )}
               <button
                 onClick={() => { setTransferPayment(null); setMethod('CASH'); }}
                 className="text-xs text-gray-400 hover:text-white mb-3 inline-flex items-center gap-1"
@@ -657,6 +717,10 @@ export default function CheckoutPage({ params }: { params: Promise<{ locale: str
                 merchantCard={card}
                 appName={PROVIDER_UI[method]?.label}
                 receiptNumber={transferPayment.receiptNumber}
+                // Server haqiqati: chek allaqachon yuborilgan bo'lsa "kutilmoqda"
+                // holatidan davom etadi (refreshdan keyin ham). REJECTED bo'lsa —
+                // yana yuklash shakli ochiladi.
+                alreadySubmitted={Boolean(transferPayment.proofSubmittedAt) && transferPayment.status !== 'REJECTED'}
                 onDone={() => { void reloadBooking(); }}
               />
             </div>
