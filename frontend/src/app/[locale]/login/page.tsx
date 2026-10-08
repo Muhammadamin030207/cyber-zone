@@ -750,7 +750,7 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
                     javobini parol oqimi bilan BIR xil davom ettiramiz. */}
                 <GoogleButton
                   mode="signin"
-                  onPending={({ code, pendingLoginToken, email, userId }) => {
+                  onPending={({ code, pendingLoginToken, email }) => {
                     if (code === 'TWO_FACTOR_REQUIRED') {
                       setPasskeyStep(null);
                       setTwoFactorStep({ pendingLoginToken });

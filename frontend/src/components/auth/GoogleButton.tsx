@@ -141,7 +141,7 @@ export default function GoogleButton({ mode = 'signin', className = '', onPendin
         setBusy(false);
       }
     },
-    [busy, googleLogin, router, t]
+    [busy, googleLogin, router, t, onPending]
   );
 
   useEffect(() => {
