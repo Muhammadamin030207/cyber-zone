@@ -34,6 +34,14 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Probe annotation channel
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME"/platforms 2>&1 || true
+          ls "$ANDROID_HOME"/build-tools 2>&1 || true
+          echo "Error: probe-error-tag-xyz"
+          false
+
       - name: Ensure Android SDK components + licenses
         run: |
           COMMONTOOLS="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
