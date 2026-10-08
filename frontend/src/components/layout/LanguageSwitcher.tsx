@@ -53,7 +53,7 @@ export default function LanguageSwitcher() {
         className="inline-flex items-center justify-center gap-1.5 h-9 min-w-9 px-2 text-sm font-medium rounded-xl border border-white/15 bg-white/[0.06] text-gray-300 shadow-[0_1px_2px_rgba(0,0,0,0.3)] transition-colors hover:text-neon-cyan hover:border-neon-cyan/40 hover:bg-white/10"
       >
         <Globe size={15} />
-        <span className="hidden sm:inline">{current.label}</span>
+        <span className="hidden xl:inline">{current.label}</span>
       </button>
 
       {open && (

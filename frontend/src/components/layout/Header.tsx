@@ -1,33 +1,41 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link, usePathname } from '@/i18n/navigation';
-import { LayoutDashboard, Crown, MessageSquare, UserRound, Wallet, Bot } from 'lucide-react';
+import { Bot, Menu, MessageSquare, Wallet, X } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { useChatUnread } from '@/hooks/useChatUnread';
 import LanguageSwitcher from './LanguageSwitcher';
 import ThemeSwitcher from './ThemeSwitcher';
+import ProfileDropdown from './ProfileDropdown';
 import Logo from '@/components/brand/Logo';
-import { confirmDialog } from '@/lib/confirm';
 import { cn } from '@/lib/utils';
 
 export default function Header() {
   const t = useTranslations('nav');
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
   const unread = useChatUnread();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  const handleLogout = async () => {
-    const ok = await confirmDialog({
-      title: 'Tizimdan chiqish',
-      message: 'Hisobingizdan chiqishni tasdiqlaysizmi?',
-      confirmLabel: 'Chiqish',
-      cancelLabel: 'Bekor qilish',
-      danger: true,
-    });
-    if (ok) logout();
-  };
+  // Panel — tashqariga bosish va Escape bilan yopiladi
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   const links = [
     { href: '/', label: t('home') },
@@ -38,225 +46,209 @@ export default function Header() {
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' || pathname === '' : pathname.startsWith(href);
 
-  const navItems = (
-    <>
-      {links.map((l) => (
-        <Link
-          key={l.href}
-          href={l.href}
-          aria-current={isActive(l.href) ? 'page' : undefined}
-          className={cn(
-            'cz-nav-link',
-            isActive(l.href) && 'cz-nav-link--active'
-          )}
-        >
-          {l.label}
-        </Link>
-      ))}
-    </>
-  );
+  const navClass = (href: string) =>
+    cn('cz-nav-link', isActive(href) && 'cz-nav-link--active');
 
-  const userInitial = (() => {
-    const name = user?.fullName || 'U';
-    return name.trim()[0]?.toUpperCase() || 'U';
-  })();
-
-  const iconBtn = 'cz-icon-btn';
-
-  const chatButton = (
+  // ---- Icon-tugmalar (desktop / tablet uchun) ----
+  const chatLink = (
     <Link
       href="/chat"
       data-tip={unread > 0 ? `Xabarlar (${unread})` : 'Xabarlar'}
       data-tip-top
       aria-label={unread > 0 ? `Xabarlar — ${unread} ta o'qilmagan` : 'Xabarlar'}
-      className={cn(
-        'relative shrink-0',
-        iconBtn,
-        isActive('/chat') && 'cz-icon-btn--active'
-      )}
+      aria-current={isActive('/chat') ? 'page' : undefined}
+      className={cn('relative shrink-0 cz-icon-btn', isActive('/chat') && 'cz-icon-btn--active')}
     >
-      <MessageSquare size={16} />
+      <MessageSquare size={16} aria-hidden="true" />
       {unread > 0 && (
-        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-neon-magenta text-white text-[10px] font-extrabold grid place-items-center border border-white/20">
+        <span className="absolute -top-1.5 -right-1.5 grid min-w-[18px] h-[18px] place-items-center rounded-full border border-white/20 bg-neon-magenta px-1 text-[10px] font-extrabold text-white">
           {unread > 99 ? '99+' : unread}
         </span>
       )}
     </Link>
   );
 
-  const AiButton = (
+  const aiLink = (
     <Link
       href="/ai"
       data-tip={t('ai')}
       data-tip-top
       aria-label={t('ai')}
       aria-current={isActive('/ai') ? 'page' : undefined}
-      className={cn(iconBtn, isActive('/ai') && 'cz-icon-btn--active')}
+      className={cn('shrink-0 cz-icon-btn', isActive('/ai') && 'cz-icon-btn--active')}
     >
-      <Bot size={16} aria-hidden />
+      <Bot size={16} aria-hidden="true" />
     </Link>
   );
 
-  const profileButton = (
+  const walletLink = (
     <Link
-      href="/profile"
-      data-tip={t('profile')}
+      href="/payments"
+      data-tip={t('payments')}
       data-tip-top
-      aria-label={t('profile')}
-      aria-current={isActive('/profile') ? 'page' : undefined}
-      className={cn(
-        'shrink-0',
-        iconBtn,
-        isActive('/profile') && 'cz-icon-btn--active'
-      )}
+      aria-label={t('payments')}
+      aria-current={isActive('/payments') ? 'page' : undefined}
+      className={cn('shrink-0 cz-icon-btn', isActive('/payments') && 'cz-icon-btn--active')}
     >
-      <UserRound size={16} />
+      <Wallet size={16} aria-hidden="true" />
     </Link>
   );
+
+  // ---- Mobil panel: 3 ustunli qisqa amallar (faqat <sm) ----
+  const mobileAction = (href: string, label: string, icon: React.ReactNode, badge?: React.ReactNode) => (
+    <Link
+      href={href}
+      aria-label={label}
+      aria-current={isActive(href) ? 'page' : undefined}
+      className={cn(
+        'flex flex-col items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] py-3 text-xs font-medium text-gray-300 transition-colors',
+        'hover:border-white/20 hover:text-[var(--acc-a)]',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--acc-a)]'
+      )}
+    >
+      <span className="relative grid place-items-center">
+        {icon}
+        {badge}
+      </span>
+      <span className="truncate">{label}</span>
+    </Link>
+  );
+
+  const mobileChat = mobileAction(
+    '/chat',
+    unread > 0 ? `Xabarlar (${unread})` : 'Xabarlar',
+    <MessageSquare size={18} aria-hidden="true" />,
+    unread > 0 ? (
+      <span className="absolute -top-1.5 -right-2.5 grid h-4 min-w-[16px] place-items-center rounded-full border border-white/20 bg-neon-magenta px-1 text-[10px] font-extrabold text-white">
+        {unread > 99 ? '99+' : unread}
+      </span>
+    ) : null
+  );
+  const mobileAi = mobileAction('/ai', t('ai'), <Bot size={18} aria-hidden="true" />);
+  const mobileWallet = mobileAction('/payments', t('payments'), <Wallet size={18} aria-hidden="true" />);
 
   return (
     <header className="sticky top-0 z-50">
-      <div className="cz-shell pt-2 sm:pt-3 pb-2">
-        <div className="cz-header relative flex items-center gap-2 w-full" style={{ minHeight: 'var(--ad-header-h)', paddingInline: 'var(--shell-pad)' }}>
-          <Link href="/" className="flex items-center gap-2 group shrink-0" aria-label="Cyber-ZONE — bosh sahifa">
+      <div className="mx-auto w-full max-w-[1280px] px-4 sm:px-6">
+        <div
+          className="cz-header relative flex w-full items-center gap-2 md:gap-3"
+          style={{ minHeight: 'var(--ad-header-h)' }}
+        >
+          {/* LOGO */}
+          <Link
+            href="/"
+            aria-label="Cyber-ZONE — bosh sahifa"
+            className="flex min-w-0 shrink-0 items-center gap-2"
+          >
             <Logo size={30} />
-            <span className="hidden sm:inline font-[--font-orbitron] font-bold tracking-widest text-base md:text-lg">
+            <span className="hidden whitespace-nowrap font-[--font-orbitron] text-base font-bold tracking-widest sm:inline md:text-lg">
               CYBER<span className="text-neon-cyan">-ZONE</span>
             </span>
           </Link>
 
+          {/* DESKTOP NAV (lg+) */}
           <nav
-            className="hidden lg:flex flex-1 min-w-0 items-center justify-center gap-0.5"
+            className="hidden min-w-0 flex-1 items-center justify-center gap-1 lg:flex"
             aria-label="Asosiy navigatsiya"
           >
-            {navItems}
+            {links.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                aria-current={isActive(l.href) ? 'page' : undefined}
+                className={navClass(l.href)}
+              >
+                {l.label}
+              </Link>
+            ))}
           </nav>
 
-          <div className="hidden lg:flex items-center gap-1.5 shrink-0">
+          {/* DESKTOP ACTIONS (lg+) */}
+          <div className="hidden shrink-0 items-center gap-1.5 lg:flex">
             <ThemeSwitcher />
             <LanguageSwitcher />
             {user ? (
               <>
-                {user.role === 'SUPER_ADMIN' && (
-                  <Link
-                    href="/super-admin"
-                    className="cz-nav-link gap-1.5 text-[var(--acc-c)] hover:bg-yellow-400/10"
-                  >
-                    <Crown size={16} />
-                    {t('superAdmin')}
-                  </Link>
-                )}
-                {user.role === 'ADMIN' && (
-                  <Link
-                    href="/admin"
-                    className="cz-nav-link gap-1.5 text-neon-green hover:bg-neon-green/10"
-                  >
-                    <LayoutDashboard size={16} />
-                    {t('admin')}
-                  </Link>
-                )}
-                {chatButton}
-                {AiButton}
-                <Link
-                  href="/payments"
-                  data-tip={t('payments')}
-                  data-tip-top
-                  aria-label={t('payments')}
-                  aria-current={isActive('/payments') ? 'page' : undefined}
-                  className={cn(iconBtn, isActive('/payments') && 'cz-icon-btn--active')}
-                >
-                  <Wallet size={16} aria-hidden />
-                </Link>
-                {profileButton}
-                {user.role === 'USER' && (
-                  <Link
-                    href="/dashboard"
-                    data-tip={t('dashboard')}
-                    data-tip-top
-                    aria-label={t('dashboard')}
-                    aria-current={isActive('/dashboard') ? 'page' : undefined}
-                    className={cn(
-                      iconBtn,
-                      'font-bold text-sm',
-                      isActive('/dashboard') && 'cz-icon-btn--active'
-                    )}
-                  >
-                    {userInitial}
-                  </Link>
-                )}
-                <button
-                  onClick={handleLogout}
-                  className="cz-nav-link text-[var(--danger)] hover:bg-red-500/10"
-                >
-                  {t('logout')}
-                </button>
+                {chatLink}
+                {aiLink}
+                {walletLink}
+                <ProfileDropdown />
               </>
             ) : (
-              <Link
-                href="/login"
-                className="cz-btn cz-btn--primary"
-              >
+              <Link href="/login" className="cz-btn cz-btn--primary">
                 {t('login')}
               </Link>
             )}
           </div>
 
-          <div className="hidden md:flex lg:hidden items-center justify-end flex-1 min-w-0 gap-2">
+          {/* MOBILE / TABLET ACTIONS (<lg) */}
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 lg:hidden">
             <ThemeSwitcher />
             <LanguageSwitcher />
+            {user && (
+              <div className="hidden items-center gap-1.5 sm:flex">
+                {chatLink}
+                {aiLink}
+                {walletLink}
+              </div>
+            )}
             {user ? (
-              <>
-                {user.role === 'SUPER_ADMIN' && (
-                  <Link
-                    href="/super-admin"
-                    aria-label={t('superAdmin')}
-                    className="cz-icon-btn shrink-0 text-yellow-300 bg-yellow-400/10 border-yellow-400/30"
-                  >
-                    <Crown size={17} />
-                  </Link>
-                )}
-                {user.role === 'ADMIN' && (
-                  <Link
-                    href="/admin"
-                    aria-label={t('admin')}
-                    className="cz-icon-btn shrink-0 text-neon-green bg-neon-green/10 border-neon-green/30"
-                  >
-                    <LayoutDashboard size={16} />
-                  </Link>
-                )}
-                {user.role === 'USER' && (
-                  <Link
-                    href="/dashboard"
-                    data-tip={t('dashboard')}
-                    aria-label={t('dashboard')}
-                    aria-current={isActive('/dashboard') ? 'page' : undefined}
-                    className={cn(
-                      iconBtn,
-                      'font-bold text-sm',
-                      isActive('/dashboard') && 'cz-icon-btn--active'
-                    )}
-                  >
-                    {userInitial}
-                  </Link>
-                )}
-                {chatButton}
-                {profileButton}
-              </>
+              <ProfileDropdown />
             ) : (
-              <Link
-                href="/login"
-                className="cz-btn cz-btn--primary"
-              >
+              <Link href="/login" className="cz-btn cz-btn--primary">
                 {t('login')}
               </Link>
             )}
-          </div>
-
-          <div className="md:hidden flex items-center gap-2 ml-auto">
-            <ThemeSwitcher />
-            <LanguageSwitcher />
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-label={menuOpen ? 'Menyuni yopish' : 'Menyuni ochish'}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              className={cn('cz-icon-btn shrink-0', menuOpen && 'cz-icon-btn--active')}
+            >
+              {menuOpen ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
+            </button>
           </div>
         </div>
+
+        {/* MOBILE PANEL (<lg) — faqat ochilganda */}
+        {menuOpen && (
+          <div
+            ref={menuRef}
+            className="menu-pop mt-2 overflow-hidden rounded-3xl glass border border-white/10 shadow-glow lg:hidden"
+          >
+            <nav aria-label="Mobil navigatsiya" className="flex flex-col p-2">
+              {links.map((l) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  aria-current={isActive(l.href) ? 'page' : undefined}
+                  onClick={() => setMenuOpen(false)}
+                  className={cn(navClass(l.href), 'h-11 w-full justify-start text-base')}
+                >
+                  {l.label}
+                </Link>
+              ))}
+            </nav>
+
+            {!user ? (
+              <div className="border-t border-white/10 p-2">
+                <Link
+                  href="/login"
+                  onClick={() => setMenuOpen(false)}
+                  className="cz-btn cz-btn--primary w-full"
+                >
+                  {t('login')}
+                </Link>
+              </div>
+            ) : (
+              <div className="sm:hidden border-t border-white/10 p-2">
+                <div className="grid grid-cols-3 gap-2">{mobileChat}{mobileAi}{mobileWallet}</div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

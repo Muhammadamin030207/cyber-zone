@@ -1834,6 +1834,28 @@ html[data-theme="halloween"] .halloween-decor {
   background-color: color-mix(in srgb, var(--acc-a) 14%, transparent);
 }
 
+/* Ko'rinadigan klaviatura fokus halqasi — nav/belgilar, dropdown'larsiz */
+.cz-nav-link:focus-visible,
+.cz-icon-btn:focus-visible,
+header button:focus-visible {
+  outline: none;
+  box-shadow: var(--glow-focus);
+}
+
+/* Desktop'da ham 40px+ zarba maydoni (WCAG 2.5.8). Tablet/mobil uchun
+   kenglik kichikligida 44px alohida media-sor'ovda berilgan. */
+@media (min-width: 1024px) {
+  header .cz-nav-link,
+  header .cz-icon-btn {
+    min-height: 2.5rem;
+  }
+  header .cz-icon-btn,
+  header button[class*="w-9"],
+  header button[class*="h-9"] {
+    min-width: 2.5rem;
+  }
+}
+
 /* ---- SAFE AREA: notch + home indicator (avval klasslar bor, lekin
        HECH KIM ishlatmagan — endi haqiqatan foydalaniladi) ---- */
 @supports (padding: max(0px)) {
@@ -1845,8 +1867,10 @@ html[data-theme="halloween"] .halloween-decor {
 @media (prefers-reduced-motion: reduce) {
   .cz-card,
   .cz-btn,
-  .cz-header {
+  .cz-header,
+  .menu-pop {
     transition: none !important;
+    animation: none !important;
   }
   .cz-card-hover:hover,
   .cz-btn:active {

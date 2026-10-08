@@ -102,11 +102,10 @@ export default function HeroZone() {
         */}
         <div
           className={cn(
-            'cz-shell relative z-10 grid min-w-0 items-center gap-[var(--ad-gap)]',
+            'relative z-10 mx-auto grid w-full min-w-0 max-w-[1280px] items-center gap-[var(--ad-gap)] px-4 sm:px-6',
             'pt-[calc(var(--shell-pad)*1.5)] pb-[calc(var(--ad-gap)*1.5)]',
             'md:gap-8',
-            'min-[1024px]:grid-cols-[55fr_45fr]',
-            'min-[1280px]:grid-cols-[1.18fr_0.82fr] min-[1280px]:gap-14 min-[1280px]:py-24'
+            'lg:grid-cols-[1.2fr_1fr] lg:items-center lg:gap-14'
           )}
         >
           {/* ---------- LEFT: matn + CTA ---------- */}
@@ -151,7 +150,7 @@ export default function HeroZone() {
               {FEATURES.map((f) => (
                 <li
                   key={f.label}
-                  className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] text-[var(--fg-mut)]"
+                  className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-[var(--fg-mut)]"
                 >
                   <f.icon size={12} className="text-[var(--acc-a)]" aria-hidden="true" />
                   {f.label}
@@ -164,7 +163,7 @@ export default function HeroZone() {
               MOBILE: pastda (vertikal)
               LAPTOP/DESKTOP: o'ng ustunda
               Bu blok FAQAT real API dan kelgan raqamni ko'rsatadi. */}
-          <div className="min-w-0 md:mt-10 min-[1024px]:mt-0">
+          <div className="min-w-0 md:mt-10 lg:mt-0">
             <div className="cz-card cz-card--status cz-card--room">
               <div className="flex items-center justify-between gap-3">
                 <span className="cz-tag">
