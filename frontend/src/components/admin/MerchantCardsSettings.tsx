@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Save, AlertCircle, CreditCard, Copy, Check, Info } from 'lucide-react';
+import { Loader2, Save, AlertCircle, CreditCard, Copy, Check, Info, Eye, EyeOff } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/toast';
 import { cn } from '@/lib/utils';
@@ -61,11 +61,26 @@ function field(set: (next: CardMap) => void, map: CardMap, method: string, key: 
   });
 }
 
+/** 4 xonalik guruhlash: 0000 0000 0000 0000 (maks 19 raqam). */
+function formatCardNumber(raw: string): string {
+  const d = raw.replace(/\D/g, '');
+  return d.slice(0, 19).replace(/(\d{4})(?=\d)/g, '$1 ');
+}
+
+/** Yashirilgan ko'rinish — faqat oxirgi 4 raqam ochiq qoladi. */
+function maskCardNumber(raw: string): string {
+  const d = raw.replace(/\D/g, '');
+  if (!d) return '';
+  if (d.length <= 4) return '••••';
+  return `•••• •••• •••• ${d.slice(-4)}`;
+}
+
 export default function MerchantCardsSettings() {
   const [cards, setCards] = useState<CardMap>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     api
@@ -186,14 +201,29 @@ export default function MerchantCardsSettings() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="block sm:col-span-2">
                   <span className="block text-[11px] text-gray-400 mb-1">Karta raqami</span>
-                  <input
-                    value={c.number || ''}
-                    onChange={(e) => field(setCards, cards, m.key, 'number', e.target.value.replace(/[^\d ]/g, ''))}
-                    inputMode="numeric"
-                    autoComplete="off"
-                    placeholder={m.digits === 16 ? '0000 0000 0000 0000' : '0000 0000 0000 0000'}
-                    className="w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm font-mono tracking-widest outline-none focus:border-neon-cyan/40"
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={revealed[m.key] ? formatCardNumber(c.number || '') : maskCardNumber(c.number || '')}
+                      onFocus={() => setRevealed((r) => ({ ...r, [m.key]: true }))}
+                      onBlur={() => setRevealed((r) => ({ ...r, [m.key]: false }))}
+                      onChange={(e) => {
+                        if (!revealed[m.key]) return;
+                        field(setCards, cards, m.key, 'number', formatCardNumber(e.target.value));
+                      }}
+                      inputMode="numeric"
+                      autoComplete="off"
+                      placeholder="0000 0000 0000 0000"
+                      className="w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm font-mono tracking-widest outline-none focus:border-neon-cyan/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setRevealed((r) => ({ ...r, [m.key]: !r[m.key] }))}
+                      aria-label={revealed[m.key] ? 'Raqamni yashirish' : 'Raqamni ko\'rsatish'}
+                      className="inline-flex items-center justify-center w-9 h-9 shrink-0 rounded-lg border border-white/10 bg-white/5 text-gray-300 hover:text-neon-cyan hover:border-neon-cyan/30 transition-colors"
+                    >
+                      {revealed[m.key] ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
                 </label>
                 <label className="block">
                   <span className="block text-[11px] text-gray-400 mb-1">Karta egasi (ism-familiya)</span>

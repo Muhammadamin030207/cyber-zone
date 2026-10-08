@@ -236,8 +236,9 @@ services:
 
       # ---------- WebAuthn / Passkey ----------
       # rpID — passkey bog'langan FRONTEND domeni (backend emas!)
+      # FAOL DOMEN: frontend-six-bay-25.vercel.app (Vercel production alias).
       - key: WEBAUTHN_RP_ID
-        value: cyber-zone-delta.vercel.app
+        value: frontend-six-bay-25.vercel.app
       - key: WEBAUTHN_RP_NAME
         value: Cyber-ZONE
       - key: WEBAUTHN_EXPECTED_ORIGINS

@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import {
   Loader2, CheckCircle2, Wallet, Banknote, AlertCircle,
   ArrowRight, BadgePercent, Clock, MapPin, Monitor, ChevronLeft, RefreshCw, FlaskConical,
-  Copy, Check, ExternalLink, Info,
+  Copy, Check, ExternalLink, Info, Eye, EyeOff,
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -858,12 +858,17 @@ const CARD_APP_URL: Record<string, string> = {
  */
 function CardPreviewCard({ card, method, amount }: { card: MerchantCard; method: string; amount: number }) {
   const [copied, setCopied] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const ui = PROVIDER_UI[method];
   const appUrl = card.appUrl || CARD_APP_URL[method];
 
+  const digits = (card.number || '').replace(/\s+/g, '');
+  const last4 = digits.slice(-4);
+  const visible = revealed ? (card.numberFormatted || card.number) : `•••• •••• •••• ${last4}`;
+
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(card.number.replace(/\s+/g, ''));
+      await navigator.clipboard.writeText(digits);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -891,8 +896,18 @@ function CardPreviewCard({ card, method, amount }: { card: MerchantCard; method:
       <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/10 to-white/[0.02] p-5">
         <div>
           <div className="text-[11px] uppercase tracking-wider text-gray-400 font-semibold mb-1.5">Bank karta raqami</div>
-          <div className="text-xl sm:text-2xl font-black tracking-wider text-white tabular-nums">
-            {card.numberFormatted || card.number}
+          <div className="flex items-center gap-3">
+            <div className="text-xl sm:text-2xl font-black tracking-wider text-white tabular-nums">
+              {visible}
+            </div>
+            <button
+              type="button"
+              onClick={() => setRevealed((v) => !v)}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-white/10 bg-white/5 text-gray-300 hover:text-neon-cyan hover:border-neon-cyan/30 transition-colors"
+              aria-label={revealed ? 'Karta raqamini yashirish' : 'Karta raqamini ko\'rsatish'}
+            >
+              {revealed ? <EyeOff size={15} /> : <Eye size={15} />}
+            </button>
           </div>
           {card.holder && (
             <div className="mt-2 text-sm font-semibold text-gray-200 uppercase tracking-wide">{card.holder}</div>
