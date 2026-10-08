@@ -560,7 +560,7 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
                 </div>
                 <h2 className="text-lg font-bold mb-1">Xavfsizlik tasdiqlashi</h2>
                 <p className="text-sm text-gray-400 mb-5">
-                  Parol kiritildi. Endi <b className="text-neon-cyan">{passkeyStep.email}</b> akkauntida
+                  Tizimga kirish uchun <b className="text-neon-cyan">{passkeyStep.email}</b> akkauntida
                   {bioInfo?.method === 'faceid' ? ' yuzingiz bilan (Face ID) ' : ' passkey (Face ID / barmoq izi) '}tasdiqlang.
                 </p>
                 <button
@@ -746,7 +746,20 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
                   </span>
                 </button>
 
-                <GoogleButton mode="signin" />
+                {/* Google 2-bosqich deklaratsiyasi — PASSKEY_REQUIRED / TWO_FACTOR_REQUIRED
+                    javobini parol oqimi bilan BIR xil davom ettiramiz. */}
+                <GoogleButton
+                  mode="signin"
+                  onPending={({ code, pendingLoginToken, email, userId }) => {
+                    if (code === 'TWO_FACTOR_REQUIRED') {
+                      setPasskeyStep(null);
+                      setTwoFactorStep({ pendingLoginToken });
+                    } else if (code === 'PASSKEY_REQUIRED') {
+                      setTwoFactorStep(null);
+                      setPasskeyStep({ email, pendingLoginToken });
+                    }
+                  }}
+                />
 
                 {/* Ro'yxatdan o'tish — kichkina tugma (Google akkauntingiz bo'lmasa) */}
                 <div className="mt-5 text-center">

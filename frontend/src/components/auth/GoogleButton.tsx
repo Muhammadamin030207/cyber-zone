@@ -18,6 +18,18 @@ type MomentNotification = {
 
 type GsiResponse = { credential?: string };
 
+/** Google ID-token'ning payload qismidan (JWT) emailni o'qiydi — UI uchun, verifikatsiya serverda. */
+function decodeIdTokenEmail(idToken: string): string | undefined {
+  try {
+    const payload = idToken.split('.')[1];
+    if (!payload) return undefined;
+    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof json?.email === 'string' ? json.email : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 declare global {
   interface Window {
     google?: {
@@ -35,6 +47,16 @@ declare global {
 interface GoogleButtonProps {
   mode?: 'signin' | 'signup';
   className?: string;
+  /**
+   * Google token tasdiqlangach hisobda qo'shimcha faktor (passkey / 2FA)
+   * talab qilinsa chaqiriladi — login sahifasi tegishli bosqichni ko'rsatadi.
+   */
+  onPending?: (info: {
+    code: 'PASSKEY_REQUIRED' | 'TWO_FACTOR_REQUIRED';
+    pendingLoginToken: string;
+    email: string;
+    userId?: string;
+  }) => void;
 }
 
 /**
@@ -44,7 +66,7 @@ interface GoogleButtonProps {
  *   account chooser (Google tomonidan boshqariladigan UI) ochiladi
  * - Google'ning iframe ichidagi UI'iga CSS bilan tegilmaydi
  */
-export default function GoogleButton({ mode = 'signin', className = '' }: GoogleButtonProps) {
+export default function GoogleButton({ mode = 'signin', className = '', onPending }: GoogleButtonProps) {
   const t = useTranslations('auth');
   const router = useRouter();
   const googleLogin = useAuthStore((s) => s.googleLogin);
@@ -61,9 +83,30 @@ export default function GoogleButton({ mode = 'signin', className = '' }: Google
       setError(null);
       try {
         const res = (await googleLogin(response.credential)) as {
-          data?: { data?: { pendingRegister?: boolean; profile?: { fullName?: string; email?: string; avatarUrl?: string } } };
+          data?: {
+            success?: boolean;
+            code?: string;
+            data?: { pendingRegister?: boolean; pendingLoginToken?: string; userId?: string; profile?: { fullName?: string; email?: string; avatarUrl?: string } };
+          };
         };
         const user = useAuthStore.getState().user;
+
+        // Qo'shimcha faktor talabi (passkey / 2FA) — login sahifasi davom ettiradi.
+        if (res?.data?.code === 'PASSKEY_REQUIRED' || res?.data?.code === 'TWO_FACTOR_REQUIRED') {
+          const pendingLoginToken = res.data.data?.pendingLoginToken;
+          if (pendingLoginToken) {
+            const userId = res.data.data?.userId;
+            const email = decodeIdTokenEmail(response.credential) || '';
+            if (onPending) {
+              onPending({ code: res.data.code, pendingLoginToken, email, userId });
+              return;
+            }
+            // Agar login sahifasi callback bermasa — xavfsiz tarzda tasdiqlash
+            // so'ralmaydi, foydalanuvchi xato xabari bilan qoladi.
+            setError('Qo\'shimcha tasdiqlash (passkey/2FA) talab qilinadi — iltimos boshqatdan urinib ko\'ring');
+            return;
+          }
+        }
 
         if (res?.data?.data?.pendingRegister) {
           const profile = res.data.data.profile;
