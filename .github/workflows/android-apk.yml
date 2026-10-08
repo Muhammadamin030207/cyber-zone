@@ -39,7 +39,7 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME"
           ls "$ANDROID_HOME"/platforms 2>&1 || true
           ls "$ANDROID_HOME"/build-tools 2>&1 || true
-          echo "Error: probe-error-tag-xyz"
+          echo "::error::probe-error-tag-xyz"
           false
 
       - name: Ensure Android SDK components + licenses
