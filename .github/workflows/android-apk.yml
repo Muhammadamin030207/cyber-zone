@@ -45,14 +45,15 @@ jobs:
         run: |
           chmod +x android/gradlew
           cd android
+          set +e
           OUT="$(./gradlew assembleDebug --no-daemon 2>&1)"
           CODE=$?
+          printf '%s\n' "$OUT" | tail -5
           if [ $CODE -ne 0 ]; then
-            MSG="$(printf '%s\n' "$OUT" | tail -40 | perl -0777 -pe 's/[^\x20-\x7E\n]//g; s/::/;;/g; s/%/%25/g; s/\n/%0A/g')"
+            MSG="$(printf '%s\n' "$OUT" | tail -60 | perl -0777 -pe 's/[^\x20-\x7E\n]//g; s/::/;;/g; s/%/%25/g; s/\n/%0A/g')"
             echo "::error::$MSG"
             exit $CODE
           fi
-          echo "$OUT" | tail -5
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
