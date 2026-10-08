@@ -34,6 +34,12 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Capacitor sync (generate android plugin config)
+        working-directory: frontend
+        run: |
+          mkdir -p out android/app/src/main/assets
+          npx cap sync android
+
       - name: Ensure Android SDK components + licenses
         run: |
           COMMONTOOLS="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
