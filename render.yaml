@@ -67,8 +67,11 @@ services:
     maxmemoryPolicy: allkeys-lru
     persistenceMode: snapshot
 
-  # --------------------------------------------------------------------------
-  # Backend API — Render'da (frontend esa Vercel'da).
+# 2026-10-08: AI kalitlari (ANTHROPIC/OPENAI/GEMINI) va Google OAuth service
+# env qilib qo'yildi; blueprint sync re-trigger qilindi (API deploy blueprint
+# env-ni hal qilmaydi — git deploy hal qiladi).
+# --------------------------------------------------------------------------
+# Backend API — Render'da (frontend esa Vercel'da).
   # DIQQAT: `name` o'zgartirilsa, Render'dagi LIVE service nomi ham
   # o'zgarishi kerak (Render nomi o'zgartirsa, xotira/domeninga ta'sir qiladi).
   # Bu yerda live nomi — cyberzone-backend-api.
