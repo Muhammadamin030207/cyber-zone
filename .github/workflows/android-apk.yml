@@ -48,7 +48,7 @@ jobs:
           OUT="$(./gradlew assembleDebug --no-daemon 2>&1)"
           CODE=$?
           if [ $CODE -ne 0 ]; then
-            MSG="$(printf '%s\n' "$OUT" | tail -40 | sed 's/%/%25/g; s/\r//g; s/::/;;/g' | paste -sd%0A -)"
+            MSG="$(printf '%s\n' "$OUT" | tail -40 | perl -0777 -pe 's/[^\x20-\x7E\n]//g; s/::/;;/g; s/%/%25/g; s/\n/%0A/g')"
             echo "::error::$MSG"
             exit $CODE
           fi
