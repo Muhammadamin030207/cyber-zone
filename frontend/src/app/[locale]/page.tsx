@@ -1,20 +1,21 @@
 'use client';
 
 import TopBanner from '@/components/home/TopBanner';
-import HeroZone from '@/components/home/HeroZone';
-import HomeSections from '@/components/home/HomeSections';
+import HomeBreadcrumb from '@/components/home/HomeBreadcrumb';
+import HomePage from '@/components/home/HomePage';
 
 /**
- * Bosh sahifa — topda yangilik/reklama banneri + CYBER-ZONE hero, pastida
- * statistika / qanday ishlaydi / zonalar / yangiliklar / CTA bo'limlari.
- * Global Header/Footer layout'da turadi; bu yerda faqat mazmun.
+ * Bosh sahifa — header ostida:
+ * yangilik/reklama banneri (agar mavjud bo'lsa) → breadcrumb → hero karta
+ * (real statistika) → tuman chiplari → klub to'ri.
+ * Global Header/Footer/BottomTabBar layout'da turadi.
  */
-export default function HomePage() {
+export default function HomeRoute() {
   return (
-    <div className="min-h-[calc(100dvh-8rem)] flex flex-col">
+    <div className="flex min-h-[calc(100dvh-8rem)] flex-col">
       <TopBanner />
-      <HeroZone />
-      <HomeSections />
+      <HomeBreadcrumb />
+      <HomePage />
     </div>
   );
 }

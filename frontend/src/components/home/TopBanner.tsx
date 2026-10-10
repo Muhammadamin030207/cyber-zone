@@ -88,7 +88,7 @@ export default function TopBanner() {
   if (!item || dismissed) return null;
 
   return (
-    <div className="mx-auto w-full max-w-[1280px] px-4 pt-2 sm:px-6 sm:pt-3">
+    <div className="cz-page-container pt-2 sm:pt-3">
       <Link
         href="/news"
         className={cn(

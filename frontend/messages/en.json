@@ -13,7 +13,12 @@
     "location": "Nearby",
     "ai": "AI assistant",
     "payments": "Payments",
-    "security": "Security"
+    "security": "Security",
+    "city": "Tashkent",
+    "addRoom": "Add a room",
+    "bookings": "My bookings",
+    "map": "View on map",
+    "favorites": "Favorites"
   },
   "common": {
     "loading": "Loading...",
@@ -28,12 +33,13 @@
     "busy": "Busy",
     "hour": "hour",
     "sum": "sum",
-    "next": "Continue"
+    "next": "Continue",
+    "retry": "Retry"
   },
   "home": {
-    "heroTitle": "Welcome to the cyber world",
+    "heroTitle": "Computer clubs in Tashkent",
     "heroSubtitle": "Find the best gaming zones, book and play",
-    "searchPlaceholder": "Enter zone name or address...",
+    "searchPlaceholder": "Search by club or district",
     "searchBtn": "Search",
     "popularTitle": "Popular zones",
     "popularSubtitle": "The best gaming spots",
@@ -42,7 +48,30 @@
     "roomsEmpty": "No zones added yet",
     "mapTitle": "All zones on the map",
     "mapSubtitle": "Find the nearest gaming zone in Tashkent",
-    "mapCta": "Open the map"
+    "mapCta": "Open the map",
+    "heroDesc": "Browse {count} computer clubs across Tashkent, prices from {min} so'm. Watch live free seats and book ahead.",
+    "heroBadgeCity": "Tashkent",
+    "heroBadgeVerified": "Verified clubs",
+    "statFree": "Free seats",
+    "statFreeCaption": "right now",
+    "statPrice": "Prices",
+    "statPriceCaption": "from · per hour",
+    "statLocation": "Location",
+    "statLocationCaption": "districts covered",
+    "statVerify": "Verified",
+    "statVerifyCaption": "via camera",
+    "districtsTitle": "By district",
+    "districtsSubtitle": "Pick a district — the list updates automatically",
+    "chipAll": "All",
+    "clubsTitle": "Computer clubs",
+    "clubEmptyDistrict": "No clubs found in this district",
+    "clubEmptyAll": "No clubs added yet",
+    "clubFree": "free",
+    "clubSeats": "seats",
+    "clubFromHour": "from · per hour",
+    "clubBook": "Choose a seat",
+    "clubDistanceKm": "{km} km",
+    "breadcrumbCity": "Tashkent"
   },
   "rooms": {
     "title": "Gaming zones",
@@ -191,7 +220,9 @@
     "name": "Name",
     "activate": "Activate",
     "deactivate": "Close",
-    "delete": "Delete"
+    "delete": "Delete",
+    "createRoom": "Create room",
+    "districtSales": "Sales by district"
   },
   "news": {
     "title": "News",
@@ -277,5 +308,12 @@
     "changed": "Password updated",
     "failed": "Could not update password",
     "locale": "en"
+  },
+  "favorites": {
+    "title": "Favorites",
+    "subtitle": "Your favorite clubs in one place",
+    "empty": "No favorites yet",
+    "emptyHint": "Tap the heart on a club card to add it here.",
+    "browse": "Browse clubs"
   }
 }

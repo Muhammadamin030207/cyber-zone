@@ -2,32 +2,65 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Link, usePathname } from '@/i18n/navigation';
-import { Bot, Menu, MessageSquare, Wallet, X } from 'lucide-react';
+import { Link, usePathname, useRouter } from '@/i18n/navigation';
+import {
+  Bot,
+  CalendarDays,
+  ChevronDown,
+  Heart,
+  Map,
+  MapPin,
+  MessageSquare,
+  Plus,
+  Search,
+  Wallet,
+} from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { useChatUnread } from '@/hooks/useChatUnread';
+import { useFavorites } from '@/lib/favorites';
 import LanguageSwitcher from './LanguageSwitcher';
 import ThemeSwitcher from './ThemeSwitcher';
 import ProfileDropdown from './ProfileDropdown';
 import Logo from '@/components/brand/Logo';
 import { cn } from '@/lib/utils';
 
+/**
+ * YASSI STICKY HEADER (pill emas).
+ *
+ * Bir qator, shahar tanlagich + qidiruv + ikonlar + til + Kirish/avatar.
+ * Logout — faqat avatar dropdown'da (ProfileDropdown).
+ * lg'dan pastda: logo + qidiruv ikonka + til + avatar/Kirish. HAMBURGER YO'Q
+ * — mobil navigatsiya BottomTabBar'da.
+ *
+ * Qidiruv `/rooms?q=...` ga yo'naltiradi (rooms sahifasi `q` parametrini
+ * o'qiydi). Desktop'da keng input, past kenglikda input paneli ochiladi.
+ */
 export default function Header() {
   const t = useTranslations('nav');
+  const thome = useTranslations('home');
   const pathname = usePathname();
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const unread = useChatUnread();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const favCount = useFavorites((s) => s.ids.length);
 
-  // Panel — tashqariga bosish va Escape bilan yopiladi
+  const [search, setSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const role = user?.role;
+  const canAddRoom = role === 'ADMIN' || role === 'SUPER_ADMIN';
+
+  // Mobil/tablet qidiruv paneli — tashqariga bosish va Escape bilan yopiladi
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!searchOpen) return;
     const onDoc = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+      }
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenuOpen(false);
+      if (e.key === 'Escape') setSearchOpen(false);
     };
     document.addEventListener('mousedown', onDoc);
     document.addEventListener('keydown', onKey);
@@ -35,221 +68,215 @@ export default function Header() {
       document.removeEventListener('mousedown', onDoc);
       document.removeEventListener('keydown', onKey);
     };
-  }, [menuOpen]);
-
-  const links = [
-    { href: '/', label: t('home') },
-    { href: '/rooms', label: t('rooms') },
-    { href: '/location', label: t('location') },
-  ];
+  }, [searchOpen]);
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' || pathname === '' : pathname.startsWith(href);
 
-  const navClass = (href: string) =>
-    cn('cz-nav-link', isActive(href) && 'cz-nav-link--active');
+  function submitSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const q = search.trim();
+    router.push({ pathname: '/rooms', query: q ? { q: q } : {} });
+    setSearchOpen(false);
+    setSearch('');
+  }
 
-  // ---- Icon-tugmalar (desktop / tablet uchun) ----
-  const chatLink = (
+  // ---- Chiqadigan ikonga asoslangan tugmalar (desktop) ----
+  const iconBtn = (href: string, label: string, icon: React.ReactNode, badge?: React.ReactNode) => (
     <Link
-      href="/chat"
-      data-tip={unread > 0 ? `Xabarlar (${unread})` : 'Xabarlar'}
-      data-tip-top
-      aria-label={unread > 0 ? `Xabarlar — ${unread} ta o'qilmagan` : 'Xabarlar'}
-      aria-current={isActive('/chat') ? 'page' : undefined}
-      className={cn('relative shrink-0 cz-icon-btn', isActive('/chat') && 'cz-icon-btn--active')}
-    >
-      <MessageSquare size={16} aria-hidden="true" />
-      {unread > 0 && (
-        <span className="absolute -top-1.5 -right-1.5 grid min-w-[18px] h-[18px] place-items-center rounded-full border border-white/20 bg-neon-magenta px-1 text-[10px] font-extrabold text-white">
-          {unread > 99 ? '99+' : unread}
-        </span>
-      )}
-    </Link>
-  );
-
-  const aiLink = (
-    <Link
-      href="/ai"
-      data-tip={t('ai')}
-      data-tip-top
-      aria-label={t('ai')}
-      aria-current={isActive('/ai') ? 'page' : undefined}
-      className={cn('shrink-0 cz-icon-btn', isActive('/ai') && 'cz-icon-btn--active')}
-    >
-      <Bot size={16} aria-hidden="true" />
-    </Link>
-  );
-
-  const walletLink = (
-    <Link
-      href="/payments"
-      data-tip={t('payments')}
-      data-tip-top
-      aria-label={t('payments')}
-      aria-current={isActive('/payments') ? 'page' : undefined}
-      className={cn('shrink-0 cz-icon-btn', isActive('/payments') && 'cz-icon-btn--active')}
-    >
-      <Wallet size={16} aria-hidden="true" />
-    </Link>
-  );
-
-  // ---- Mobil panel: 3 ustunli qisqa amallar (faqat <sm) ----
-  const mobileAction = (href: string, label: string, icon: React.ReactNode, badge?: React.ReactNode) => (
-    <Link
+      key={href}
       href={href}
       aria-label={label}
       aria-current={isActive(href) ? 'page' : undefined}
       className={cn(
-        'flex flex-col items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] py-3 text-xs font-medium text-gray-300 transition-colors',
-        'hover:border-white/20 hover:text-[var(--acc-a)]',
-        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--acc-a)]'
+        'relative grid shrink-0 place-items-center cz-icon-btn',
+        isActive(href) && 'cz-icon-btn--active'
       )}
     >
-      <span className="relative grid place-items-center">
-        {icon}
-        {badge}
-      </span>
-      <span className="truncate">{label}</span>
+      {icon}
+      {badge}
     </Link>
   );
 
-  const mobileChat = mobileAction(
-    '/chat',
-    unread > 0 ? `Xabarlar (${unread})` : 'Xabarlar',
-    <MessageSquare size={18} aria-hidden="true" />,
-    unread > 0 ? (
-      <span className="absolute -top-1.5 -right-2.5 grid h-4 min-w-[16px] place-items-center rounded-full border border-white/20 bg-neon-magenta px-1 text-[10px] font-extrabold text-white">
-        {unread > 99 ? '99+' : unread}
-      </span>
-    ) : null
+  const searchDesktop = (
+    <form
+      onSubmit={submitSearch}
+      role="search"
+      aria-label="Xona yoki tuman qidirish"
+      className="mx-auto flex h-11 min-w-0 flex-1 max-w-[560px] items-center gap-1 rounded-full border border-[var(--line-strong)] bg-[var(--bg-2)] py-1 pl-4 pr-1 transition-colors focus-within:border-[var(--acc-a)] focus-within:shadow-[var(--glow-focus)]"
+    >
+      <Search size={17} aria-hidden="true" className="shrink-0 text-[var(--fg-dim)]" />
+      <input
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder={thome('searchPlaceholder')}
+        enterKeyHint="search"
+        aria-label={thome('searchPlaceholder')}
+        className="h-full min-w-0 flex-1 bg-transparent text-sm text-[var(--fg)] placeholder:text-[var(--fg-dim)] focus:outline-none"
+      />
+      <button
+        type="submit"
+        aria-label={thome('searchPlaceholder')}
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[#140b04]"
+        style={{
+          background: 'linear-gradient(180deg, var(--acc-a-soft), var(--acc-a))',
+          boxShadow: '0 8px 24px -10px color-mix(in srgb, var(--acc-a) 80%, transparent)',
+        }}
+      >
+        <Search size={16} aria-hidden="true" />
+      </button>
+    </form>
   );
-  const mobileAi = mobileAction('/ai', t('ai'), <Bot size={18} aria-hidden="true" />);
-  const mobileWallet = mobileAction('/payments', t('payments'), <Wallet size={18} aria-hidden="true" />);
+
+  // Desktop ikon amallar: bronlar / xarita / sevimli / chat / AI / hamyon
+  const desktopActions = (
+    <div className="hidden shrink-0 items-center gap-1.5 lg:flex">
+      {iconBtn(
+        '/dashboard',
+        t('bookings'),
+        <CalendarDays size={17} aria-hidden="true" />,
+        undefined
+      )}
+      {iconBtn('/location', t('map'), <Map size={17} aria-hidden="true" />, undefined)}
+      {iconBtn(
+        '/favorites',
+        t('favorites'),
+        <Heart size={17} aria-hidden="true" />,
+        favCount > 0 ? (
+          <span className="absolute -right-1 -top-1 grid h-4 min-w-[16px] place-items-center rounded-full border border-white/20 bg-orange-500 px-1 text-[10px] font-extrabold text-white">
+            {favCount > 99 ? '99+' : favCount}
+          </span>
+        ) : null
+      )}
+      {user && (
+        <>
+          {iconBtn(
+            '/chat',
+            unread > 0 ? `Xabarlar — ${unread} ta o'qilmagan` : 'Xabarlar',
+            <MessageSquare size={17} aria-hidden="true" />,
+            unread > 0 ? (
+              <span className="absolute -right-1 -top-1 grid h-4 min-w-[16px] place-items-center rounded-full border border-white/20 bg-[var(--acc-b)] px-1 text-[10px] font-extrabold text-white">
+                {unread > 99 ? '99+' : unread}
+              </span>
+            ) : null
+          )}
+          {iconBtn('/ai', t('ai'), <Bot size={17} aria-hidden="true" />, undefined)}
+          {iconBtn('/payments', t('payments'), <Wallet size={17} aria-hidden="true" />, undefined)}
+        </>
+      )}
+      <ThemeSwitcher />
+      <LanguageSwitcher />
+    </div>
+  );
 
   return (
-    <header className="sticky top-0 z-50">
-      <div className="mx-auto w-full max-w-[1280px] px-4 sm:px-6">
-        <div
-          className="cz-header relative flex w-full items-center gap-2 md:gap-3"
-          style={{ minHeight: 'var(--ad-header-h)' }}
+    <header id="site-header">
+      <div className="cz-page-container flex h-[3.75rem] items-center gap-1.5 sm:gap-2 lg:h-[4.25rem] lg:gap-2.5">
+        {/* LOGO */}
+        <Link
+          href="/"
+          aria-label="Cyber-ZONE — bosh sahifa"
+          className="flex min-w-0 shrink-0 items-center gap-2"
         >
-          {/* LOGO */}
+          <Logo size={30} />
+          <span className="hidden whitespace-nowrap font-[--font-orbitron] text-[15px] font-bold tracking-widest text-[var(--fg)] sm:inline lg:text-base">
+            CYBER<span className="text-neon-cyan">-ZONE</span>
+          </span>
+        </Link>
+
+        {/* SHAHAR (lg+) */}
+        <Link
+          href="/location"
+          aria-label={`Shahar: ${t('city')}`}
+          aria-current={isActive('/location') ? 'page' : undefined}
+          className={cn(
+            'hidden h-11 shrink-0 items-center gap-1.5 rounded-full border border-[var(--line-strong)] px-3.5 text-sm font-medium text-[var(--fg-mut)] transition-colors lg:flex',
+            'hover:border-[var(--acc-a)] hover:text-[var(--acc-a)]',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--acc-a)]'
+          )}
+        >
+          <MapPin size={16} aria-hidden="true" className="text-[var(--acc-a)]" />
+          <span className="whitespace-nowrap">{t('city')}</span>
+          <ChevronDown size={14} aria-hidden="true" className="text-[var(--fg-dim)]" />
+        </Link>
+
+        {/* XONA QO'SHISH (admin/super-admin, lg+) */}
+        {canAddRoom && (
           <Link
-            href="/"
-            aria-label="Cyber-ZONE — bosh sahifa"
-            className="flex min-w-0 shrink-0 items-center gap-2"
+            href={role === 'SUPER_ADMIN' ? '/super-admin' : '/admin'}
+            aria-label={t('addRoom')}
+            className={cn(
+              'hidden h-11 shrink-0 items-center gap-1.5 rounded-full border border-[var(--line-strong)] px-3.5 text-sm font-medium text-[var(--fg-mut)] transition-colors lg:flex',
+              'hover:border-[var(--acc-a)] hover:text-[var(--acc-a)]',
+              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--acc-a)]'
+            )}
           >
-            <Logo size={30} />
-            <span className="hidden whitespace-nowrap font-[--font-orbitron] text-base font-bold tracking-widest sm:inline md:text-lg">
-              CYBER<span className="text-neon-cyan">-ZONE</span>
-            </span>
+            <Plus size={16} aria-hidden="true" />
+            <span className="whitespace-nowrap">{t('addRoom')}</span>
           </Link>
-
-          {/* DESKTOP NAV (lg+) */}
-          <nav
-            className="hidden min-w-0 flex-1 items-center justify-center gap-1 lg:flex"
-            aria-label="Asosiy navigatsiya"
-          >
-            {links.map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                aria-current={isActive(l.href) ? 'page' : undefined}
-                className={navClass(l.href)}
-              >
-                {l.label}
-              </Link>
-            ))}
-          </nav>
-
-          {/* DESKTOP ACTIONS (lg+) */}
-          <div className="hidden shrink-0 items-center gap-1.5 lg:flex">
-            <ThemeSwitcher />
-            <LanguageSwitcher />
-            {user ? (
-              <>
-                {chatLink}
-                {aiLink}
-                {walletLink}
-                <ProfileDropdown />
-              </>
-            ) : (
-              <Link href="/login" className="cz-btn cz-btn--primary">
-                {t('login')}
-              </Link>
-            )}
-          </div>
-
-          {/* MOBILE / TABLET ACTIONS (<lg) */}
-          <div className="ml-auto flex shrink-0 items-center gap-1.5 lg:hidden">
-            <ThemeSwitcher />
-            <LanguageSwitcher />
-            {user && (
-              <div className="hidden items-center gap-1.5 sm:flex">
-                {chatLink}
-                {aiLink}
-                {walletLink}
-              </div>
-            )}
-            {user ? (
-              <ProfileDropdown />
-            ) : (
-              <Link href="/login" className="cz-btn cz-btn--primary">
-                {t('login')}
-              </Link>
-            )}
-            <button
-              type="button"
-              onClick={() => setMenuOpen((o) => !o)}
-              aria-label={menuOpen ? 'Menyuni yopish' : 'Menyuni ochish'}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              className={cn('cz-icon-btn shrink-0', menuOpen && 'cz-icon-btn--active')}
-            >
-              {menuOpen ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
-            </button>
-          </div>
-        </div>
-
-        {/* MOBILE PANEL (<lg) — faqat ochilganda */}
-        {menuOpen && (
-          <div
-            ref={menuRef}
-            className="menu-pop mt-2 overflow-hidden rounded-3xl glass border border-white/10 shadow-glow lg:hidden"
-          >
-            <nav aria-label="Mobil navigatsiya" className="flex flex-col p-2">
-              {links.map((l) => (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  aria-current={isActive(l.href) ? 'page' : undefined}
-                  onClick={() => setMenuOpen(false)}
-                  className={cn(navClass(l.href), 'h-11 w-full justify-start text-base')}
-                >
-                  {l.label}
-                </Link>
-              ))}
-            </nav>
-
-            {!user ? (
-              <div className="border-t border-white/10 p-2">
-                <Link
-                  href="/login"
-                  onClick={() => setMenuOpen(false)}
-                  className="cz-btn cz-btn--primary w-full"
-                >
-                  {t('login')}
-                </Link>
-              </div>
-            ) : (
-              <div className="sm:hidden border-t border-white/10 p-2">
-                <div className="grid grid-cols-3 gap-2">{mobileChat}{mobileAi}{mobileWallet}</div>
-              </div>
-            )}
-          </div>
         )}
+
+        {/* QIDIRUV — desktopda keng input */}
+        <div className="hidden min-w-0 flex-1 lg:flex">{searchDesktop}</div>
+
+        {/* Ikon-amallar + til (lg+) */}
+        {desktopActions}
+
+        {/* <lg: minimal — qidiruv ikonka, til, avatar/Kirish (hamburger YO'Q) */}
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setSearchOpen((o) => !o)}
+            aria-label={thome('searchPlaceholder')}
+            aria-expanded={searchOpen}
+            className="cz-icon-btn shrink-0"
+          >
+            <Search size={17} aria-hidden="true" />
+          </button>
+          <LanguageSwitcher />
+          {user ? (
+            <ProfileDropdown />
+          ) : (
+            <Link href="/login" className="cz-btn cz-btn--primary h-11 px-4 text-sm">
+              {t('login')}
+            </Link>
+          )}
+        </div>
       </div>
+
+      {/* <lg — qidiruv paneli (ochilganda) */}
+      {searchOpen && (
+        <div ref={panelRef} className="cz-page-container pb-2 lg:hidden">
+          <form
+            onSubmit={submitSearch}
+            role="search"
+            aria-label="Xona yoki tuman qidirish"
+            className="flex h-12 items-center gap-1 rounded-full border border-[var(--line-strong)] bg-[var(--bg-2)] py-1 pl-4 pr-1 transition-colors focus-within:border-[var(--acc-a)] focus-within:shadow-[var(--glow-focus)]"
+          >
+            <Search size={17} aria-hidden="true" className="shrink-0 text-[var(--fg-dim)]" />
+            <input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={thome('searchPlaceholder')}
+              enterKeyHint="search"
+              aria-label={thome('searchPlaceholder')}
+              className="h-full min-w-0 flex-1 bg-transparent text-sm text-[var(--fg)] placeholder:text-[var(--fg-dim)] focus:outline-none"
+            />
+            <button
+              type="submit"
+              aria-label={thome('searchPlaceholder')}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[#140b04]"
+              style={{
+                background: 'linear-gradient(180deg, var(--acc-a-soft), var(--acc-a))',
+                boxShadow: '0 8px 24px -10px color-mix(in srgb, var(--acc-a) 80%, transparent)',
+              }}
+            >
+              <Search size={16} aria-hidden="true" />
+            </button>
+          </form>
+        </div>
+      )}
     </header>
   );
 }

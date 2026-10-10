@@ -1449,9 +1449,13 @@ html[data-theme="halloween"] .halloween-decor {
      komponentlar o'z class'ida `md:grid-cols-2` yozadi (login/register/profile). */
 }
 
-/* 5) Keng ekran (>=1536px): matn o'qish chegarasi — juda uzun qatorlardan qaytish */
+/* 5) Keng ekran (>=1536px): matn o'qish chegarasi — juda uzun qatorlardan qaytish.
+   ESLATMA: yangi bosh sahifa (breadcrumb + hero + listing) `--shell-max` (1560)
+   YO'Q — u `.cz-page-container` (max 1600) bilan HEADER bilan bitta kenglikda
+   markazlashadi. Shuning uchun ular eski qoidadan ozod qilinadi (`:has`).
+   1920+ da ular bo'lmasa u 1600 ga teng bo'ladi, misalign yo'qoladi. */
 @media (min-width: 1536px) {
-  main > div { max-width: var(--shell-max); }
+  main > div:not(:has(.cz-page-container)) { max-width: var(--shell-max); }
 }
 
 /* 6) Xavfsiz zona (notch / home indicator) — pastdagi elementlar tegilmasin */
@@ -1882,5 +1886,69 @@ header button:focus-visible {
   }
   .cz-btn--primary:hover:not(:disabled) {
     box-shadow: var(--glow-edge);
+  }
+}
+
+/* ================================================================
+   HOMEPAGE REDESIGN 2026 — umumiy konteyner · yassi header
+   Bosh sahifa, breadcrumb, hero va listing uchun YAGONA kenglik:
+   max 1600px, chet masofa fluid (hech qanday tor/toraytirilgan kenglik
+   yo'q → 1280/1440/1920/2560 da bo'sh chiziq chiqmaydi).
+   ================================================================ */
+.cz-page-container {
+  --page-pad: clamp(1rem, 3.5vw, 3.5rem);
+  margin-inline: auto;
+  width: 100%;
+  max-width: 1600px;
+  min-width: 0;
+  padding-inline: var(--page-pad);
+}
+
+/* ---- YASSI STICKY HEADER (pill EMAS) ---- */
+#site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: color-mix(in srgb, var(--bg-0) 86%, transparent);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border-bottom: 1px solid var(--line);
+  transition: background-color var(--ad-dur) var(--ad-ease);
+}
+
+/* Header boshqaruvlari: hamma pill (rounded-full), 40px+ (WCAG 2.5.8).
+   `min-*` kenglik: .cz-icon-btn da qat'iy kenglik bor, media-sor'ov bilan
+   desktop'da 40px ga ko'tariladi — shu yerda radius bir xil pill. */
+#site-header .cz-btn,
+#site-header .cz-icon-btn {
+  border-radius: 9999px;
+}
+
+/* Theme/Language dropdown tugmalari (mavjud komponentlar) — tekis headerda
+   ham bir xil pill + 44px. Label (LanguageSwitcher) faqat xl+ ko'rinadi. */
+#site-header button[aria-haspopup="menu"] {
+  height: 2.75rem;
+  min-width: 2.75rem;
+  border-radius: 9999px;
+}
+
+/* ---- Gorizontal chip ostida scrollbar yashirish ---- */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---- REDUCED MOTION: yangi header + sahifa boshqaruvlari ---- */
+@media (prefers-reduced-motion: reduce) {
+  #site-header,
+  #site-header a,
+  #site-header button,
+  .cz-page-container a,
+  .cz-page-container button {
+    transition: none !important;
+    animation: none !important;
   }
 }
