@@ -78,8 +78,7 @@ export default function BarAll() {
   }, []);
 
   useEffect(() => {
-    loadAll();
-    loadRooms().then((first) => first && loadItems(first));
+    void Promise.resolve().then(() => { loadAll(); loadRooms().then((first) => first && loadItems(first)); });
   }, [loadAll, loadRooms, loadItems]);
 
   function pickRoom(id: string) {

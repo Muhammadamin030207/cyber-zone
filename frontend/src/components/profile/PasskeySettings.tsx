@@ -48,7 +48,7 @@ export default function PasskeySettings() {
   const requirePasskey = !!user?.requirePasskey;
 
   useEffect(() => {
-    load();
+    void Promise.resolve().then(() => load());
     supportsBiometric().then(setBioAvailable).catch(() => setBioAvailable(false));
     detectBiometric().then(setBioInfo).catch(() => setBioInfo(null));
   }, [userId]);
