@@ -10,6 +10,7 @@ import {
   normalizeWorkingHours,
 } from '../utils/time';
 import { SITE_SETTING_KEYS } from './settings.controller';
+import { sanitizeAiLog } from '../utils/aiLog';
 
 // Gemini chaqiruv uchun taym-aut (abadiy kutib qolishning oldini oladi)
 const GEMINI_TIMEOUT_MS = 15_000;
@@ -93,7 +94,7 @@ async function geminiChat(
 
     if (!resp.ok) {
       const errText = await resp.text().catch(() => '');
-      console.warn(`[AI] Gemini ${model} xatosi ${resp.status}: ${errText.slice(0, 160)}`);
+      console.warn(`[AI] Gemini ${model} xatosi ${resp.status}: ${sanitizeAiLog(errText, 160)}`);
       if (resp.status === 400 || resp.status === 429 || resp.status === 500 || resp.status === 503) {
         const fallback = await geminiChatWithModel(message, context, config.ai.fallbackModel, history);
         if (fallback) return fallback;
@@ -109,7 +110,7 @@ async function geminiChat(
     if (!text) return null;
     return { text, model: primaryModel };
   } catch (err) {
-    console.warn('[AI] Gemini chaqiruv xatoligi:', (err as Error).message);
+    console.warn('[AI] Gemini chaqiruv xatoligi:', sanitizeAiLog((err as Error).message));
     const fallback = await geminiChatWithModel(message, context, config.ai.fallbackModel, history);
     return fallback;
   }
@@ -228,7 +229,7 @@ async function openaiChat(
     });
     if (!resp.ok) {
       const errText = await resp.text().catch(() => '');
-      console.warn(`[AI] OpenAI-compatible ${model} xatosi ${resp.status}: ${errText.slice(0, 180)}`);
+      console.warn(`[AI] OpenAI-compatible ${model} xatosi ${resp.status}: ${sanitizeAiLog(errText, 180)}`);
       return null;
     }
     const data = (await resp.json()) as any;
@@ -236,7 +237,7 @@ async function openaiChat(
     if (!text) return null;
     return { text, model };
   } catch (err) {
-    console.warn('[AI] OpenAI-compatible chaqiruv xatoligi:', (err as Error).message);
+    console.warn('[AI] OpenAI-compatible chaqiruv xatoligi:', sanitizeAiLog((err as Error).message));
     return null;
   }
 }
@@ -278,7 +279,7 @@ async function claudeChat(
     });
     if (!resp.ok) {
       const errText = await resp.text().catch(() => '');
-      console.warn(`[AI] Claude ${model} xatosi ${resp.status}: ${errText.slice(0, 180)}`);
+      console.warn(`[AI] Claude ${model} xatosi ${resp.status}: ${sanitizeAiLog(errText, 180)}`);
       return null;
     }
     const data = (await resp.json()) as any;
@@ -290,7 +291,7 @@ async function claudeChat(
     if (!text) return null;
     return { text, model };
   } catch (err) {
-    console.warn('[AI] Claude chaqiruv xatoligi:', (err as Error).message);
+    console.warn('[AI] Claude chaqiruv xatoligi:', sanitizeAiLog((err as Error).message));
     return null;
   }
 }
@@ -330,7 +331,7 @@ async function streamClaude(
   });
   if (!resp.ok || !resp.body) {
     const errText = await resp.text().catch(() => '');
-    console.warn(`[AI] Claude stream xatosi ${resp.status}: ${errText.slice(0, 180)}`);
+    console.warn(`[AI] Claude stream xatosi ${resp.status}: ${sanitizeAiLog(errText, 180)}`);
     return null;
   }
   const reader = resp.body.getReader();
@@ -356,7 +357,7 @@ async function streamClaude(
             onDelta(ev.delta.text);
           }
           if (ev.type === 'error' && ev.error) {
-            console.warn('[AI] Claude stream error:', JSON.stringify(ev.error).slice(0, 180));
+            console.warn('[AI] Claude stream error:', sanitizeAiLog(JSON.stringify(ev.error), 180));
             return null;
           }
         } catch {
@@ -426,7 +427,7 @@ async function streamGemini(
     }
     return full.trim() || null;
   } catch (err) {
-    console.warn('[AI] Gemini stream xatoligi:', (err as Error).message);
+    console.warn('[AI] Gemini stream xatoligi:', sanitizeAiLog((err as Error).message));
     return null;
   }
 }
@@ -471,6 +472,13 @@ interface DispatchResult {
   model: string;
   /** Stream ortiqcha matn uzatilgan — keyingi provider/fallback ISHLATILMAYDI (dublikat oldini olish). */
   aborted?: boolean;
+  /**
+   * Kalit o'rnatilgan provider urinildi, lekin JAVOB KELMADI (xato/timeout/
+   * bo'sh javob). Foydalanuvchiga "tushunmadim" deb yashirmasdan — aniq
+   * vaqtinchalik xato xabari ko'rsatiladi (B3 talabi).
+   * `false` = kalitlar umuman yo'q (AI_NOT_CONFIGURED halol ko'rsatiladi).
+   */
+  providerFailed?: boolean;
 }
 
 /**
@@ -480,8 +488,12 @@ interface DispatchResult {
  */
 async function dispatchChat(args: DispatchArgs): Promise<DispatchResult> {
   const { message, context, history, onDelta } = args;
+  // Kalitli provider urinildi-yu javob kelmadi (xato/timeout/bo'sh javob) —
+  // bu holat "kalit yo'q" dan AJRATILADI: foydalanuvchiga sabab yashirilmaydi.
+  let configuredAttempted = false;
   for (const p of providerOrder()) {
     if (!hasProviderKey(p)) continue;
+    configuredAttempted = true;
     const model = modelFor(p);
     if (onDelta) {
       // streamClaude/streamGemini ichki xatoda null qaytarishi mumkin —
@@ -495,8 +507,9 @@ async function dispatchChat(args: DispatchArgs): Promise<DispatchResult> {
             : await streamGemini(message, context, model, history, wrapped);
         if (text) return { reply: text, model };
         if (emitted) return { reply: null, model, aborted: true };
+        console.warn(`[AI] provider=${p} model=${model} — javob bo'sh qaytdi (invalid/empty response).`);
       } catch (err) {
-        console.warn(`[AI] ${p} stream xatoligi:`, (err as Error).message);
+        console.warn(`[AI] provider=${p} stream xatoligi: ${sanitizeAiLog((err as Error).message)}`);
         if (emitted) return { reply: null, model, aborted: true };
       }
     } else {
@@ -508,10 +521,17 @@ async function dispatchChat(args: DispatchArgs): Promise<DispatchResult> {
               ? await geminiChat(message, context, model, history)
               : await openaiChat(message, context, model, history);
         if (result) return { reply: result.text, model: result.model };
+        console.warn(`[AI] provider=${p} model=${model} — javob qaytmadi (xato/timeout/bo'sh javob).`);
       } catch (err) {
-        console.warn(`[AI] ${p} chat xatoligi:`, (err as Error).message);
+        console.warn(`[AI] provider=${p} chat xatoligi: ${sanitizeAiLog((err as Error).message)}`);
       }
     }
+  }
+  if (configuredAttempted) {
+    // Sabab konsolga yoziladi (maxfiysiz), lekin foydalanuvchiga shu yerdan
+    // aniq vaqtinchalik xato qaytariladi — fallback "tushunmadim" bilan yashirmaydi.
+    console.warn('[AI] cascade yakunlandi: kalitli providerlar javob bermadi — fallback\'ga o\'tiladi.');
+    return { reply: null, model: 'fallback', providerFailed: true };
   }
   return { reply: null, model: 'fallback' };
 }
@@ -856,7 +876,15 @@ const AI_NOT_CONFIGURED =
   'AI yordamchi hozircha texnik nosozlikda: sun\'iy intellekt kaliti serverga o\'rnatilmagan, shuning uchun men har qanday savolga to\'liq javob bera olmayapman. ' +
   'Hozircha quyidagilarda yordam bera olaman: narxlar, ish vaqti, xonalar, promo-kodlar va bron qilish. Administratorga xabar bering — muammo tez orada tuzatiladi.';
 
-async function fallbackReply(message: string, lat?: number, lng?: number): Promise<string> {
+/**
+ * Kalit o'rnatilgan LLM provider VAQTINCHA javob bermayapti (xato/timeout/
+ * rate limit). "Tushunmadim" deb yashirmasdan — aniq sabab bilan qaytaramiz.
+ */
+const AI_PROVIDER_TEMP_ERROR =
+  'AI yordamchi hozircha javob bera olmayapti: sun\'iy intellekt xizmatasi (provider) bilan aloqada vaqtinchalik nosozlik yuz berdi. ' +
+  'Savolingizni bir necha daqiqadan so\'ng qayta yozing. Hozircha narxlar, ish vaqti, xonalar, promo-kodlar va bron qilish bo\'yicha savollaringizga baribir javob bera olaman.';
+
+async function fallbackReply(message: string, lat?: number, lng?: number, providerFailed = false): Promise<string> {
   const intent = detectFallbackIntent(message);
 
   // Saytga oid aniq savollarga DB'dan halol javob beramiz (kalit kerak emas).
@@ -954,6 +982,10 @@ async function fallbackReply(message: string, lat?: number, lng?: number): Promi
     return `Bizda quyidagi xonalar bor:\n${rooms.slice(0, 8).map((r) => `• ${r.name} — ${r.address}`).join('\n')}\n\n/rooms sahifasiga o'ting va qidiring.`;
   }
 
+  // Noma'lum savol + kalitli provider urinildi-yu javob bermadi (providerFailed):
+  // sababni yashirib "tushunmadim" deb YOZMAYMIZ — aniq vaqtinchalik xato beramiz.
+  if (providerFailed) return AI_PROVIDER_TEMP_ERROR;
+
   return `Kechirasiz, buni aniq tushunmadim. Savolingizni biroz boshqacha yozib ko'ring.`;
 }
 
@@ -1028,9 +1060,10 @@ export const chat = async (req: AuthRequest, res: ExpressResponse, next: NextFun
     const dispatched = await dispatchChat({ message: msg, context, history: hist });
 
     // 3) Hech qanday provider javob bermasa — qoidaviy fallback
+    //    (providerFailed=true bo'lsa — noma'lum savolga sabab yashirilmaydi)
     const reply =
       dispatched.reply ??
-      (await fallbackReply(msg, Number.isFinite(latN) ? latN : undefined, Number.isFinite(lngN) ? lngN : undefined));
+      (await fallbackReply(msg, Number.isFinite(latN) ? latN : undefined, Number.isFinite(lngN) ? lngN : undefined, dispatched.providerFailed));
 
     return ok(res, { reply, model: dispatched.model });
   } catch (err) {
@@ -1074,14 +1107,14 @@ export const chatStream = async (req: AuthRequest, res: ExpressResponse, next: N
 
     // aborted=true — matn qisman uzatilgan (dublikat bo'lmasligi uchun fallback YO'Q)
     if (!streamed.reply && !streamed.aborted) {
-      const fallback = await fallbackReply(msg);
+      const fallback = await fallbackReply(msg, undefined, undefined, streamed.providerFailed);
       send({ delta: fallback });
     }
 
     send({ done: true, model: streamed.model });
     res.end();
   } catch (err) {
-    console.error('[AI] chatStream:', (err as Error).message);
+    console.error('[AI] chatStream:', sanitizeAiLog((err as Error).message));
     try {
       if (!res.headersSent) res.status(500);
       res.write(`data: ${JSON.stringify({ error: 'chat failed', done: true })}\n\n`);
@@ -1111,7 +1144,7 @@ export async function generateAIReply(
   const dispatched = await dispatchChat({ message, context, history });
   const reply =
     dispatched.reply ??
-    (await fallbackReply(message, Number.isFinite(lat) ? lat : undefined, Number.isFinite(lng) ? lng : undefined));
+    (await fallbackReply(message, Number.isFinite(lat) ? lat : undefined, Number.isFinite(lng) ? lng : undefined, dispatched.providerFailed));
 
   return { reply, model: dispatched.model };
 }
@@ -1143,7 +1176,7 @@ export async function streamAIReply(
   const dispatched = await dispatchChat({ message, context, history, onDelta });
   let text = dispatched.reply;
   if (!text && !dispatched.aborted) {
-    text = await fallbackReply(message);
+    text = await fallbackReply(message, undefined, undefined, dispatched.providerFailed);
     if (text) onDelta(text);
   }
   return { text: text || 'Xatolik yuz berdi. Yana urinib ko\'ring.', model: dispatched.model };

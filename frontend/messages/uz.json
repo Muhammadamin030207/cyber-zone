@@ -178,6 +178,9 @@
     "history": "Tarix",
     "bookingStatus": {
       "PENDING": "Kutilmoqda",
+      "PENDING_PAYMENT": "To'lov kutilmoqda",
+      "PARTIALLY_PAID": "Qisman to'langan",
+      "PAID": "To'langan",
       "CONFIRMED": "Tasdiqlangan",
       "ACTIVE": "Faol",
       "COMPLETED": "Yakunlangan",

@@ -143,6 +143,44 @@ describe('AI ROLLI KONTEKST: USER/ADMIN/SUPER_ADMIN ma\'lumot chegaralari', () =
     expect(res.body.data.reply.length).toBeGreaterThan(0);
   });
 
+  // ---- B5: kengaytirilgan rol kontekst holatlari ----
+
+  it('ODDIY SAVOL: USER chatda javob qaytadi va boshqa foydalanuvchi ma\'lumoti javobga tushmaydi', async () => {
+    const res = await api()
+      .post('/api/ai/chat')
+      .set('Authorization', userAToken)
+      .send({ message: 'narxlar qanday?' });
+    expect(res.status).toBe(200);
+    const reply = String(res.body.data.reply);
+    expect(reply.length).toBeGreaterThan(0);
+    // Rolli kontekst chegarasi javobda ham saqlanadi
+    expect(reply).not.toContain('Ai User B');
+    expect(reply).not.toContain('ai-user-b@e2e.test');
+  });
+
+  it('ADMIN SAVOLI: admin chatda javob 200 va boshqa owner xonasi nomi javobga tushmaydi', async () => {
+    const res = await api()
+      .post('/api/ai/chat')
+      .set('Authorization', adminToken)
+      .send({ message: 'mening xonamda narxlar qanday?' });
+    expect(res.status).toBe(200);
+    const reply = String(res.body.data.reply);
+    expect(reply.length).toBeGreaterThan(0);
+    // Boshqa admin (Owner Admin Two) ning xonasi javob kontekstida emas
+    expect(reply).not.toContain('Owner Admin Two');
+  });
+
+  it('NOMA\'LUM SAVOL: "tushunmadim" ga tushmaydi — holol fallback/javob qaytadi', async () => {
+    const res = await api()
+      .post('/api/ai/chat')
+      .set('Authorization', userAToken)
+      .send({ message: 'Dengizdagi to\'lqinlar nechcha bitda saqlanadi?' });
+    expect(res.status).toBe(200);
+    const reply = String(res.body.data.reply);
+    expect(reply.length).toBeGreaterThan(0);
+    expect(reply).not.toContain('buni aniq tushunmadim');
+  });
+
   it('/api/ai/status: AI_PROVIDER/AI_MODEL ko\'rsatiladi, kalit qiymati chiqmaydi', async () => {
     const res = await api().get('/api/ai/status').set('Authorization', userAToken);
     expect(res.status).toBe(200);

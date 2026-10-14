@@ -166,6 +166,16 @@ export default function Header() {
       )}
       <ThemeSwitcher />
       <LanguageSwitcher />
+      {/* Hisob boshqaruvi (lg+): avatar dropdown yoki Kirish.
+          OLDIN shu yerda YO'Q edi — desktop'da profil/Logout topilmaydi
+          (root cause, 2026-10-14). Mobil blok <lg da ochiq qolgan. */}
+      {user ? (
+        <ProfileDropdown />
+      ) : (
+        <Link href="/login" className="cz-btn cz-btn--primary h-11 px-4 text-sm">
+          {t('login')}
+        </Link>
+      )}
     </div>
   );
 

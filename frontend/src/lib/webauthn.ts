@@ -39,6 +39,74 @@ export interface AIMessage {
   updatedAt: string;
 }
 
+/**
+ * =====================================================================
+ * PASSKEY XATOLARINI TASHXIL OLISH — har bir holat ALOHIDA xabar.
+ * =====================================================================
+ * Qoida (A4): "passkey ro'yxatdan o'tmagan", "qurilma qo'llamaydi",
+ * "foydalanuvchi bekor qildi", "permission rad etildi" va "server xatosi"
+ * — hamma bir xil xabar bo'lmasligi kerak.
+ *
+ * returning `null` — bu brauzer/autentifikator xatosi EMAS (masalan server
+ * javobi): chaqiruvchi o'z xabarini (data.message) ishlatadi.
+ * =====================================================================
+ */
+export function describeWebAuthnError(err: unknown): string | null {
+  const e = err as {
+    name?: string;
+    code?: string;
+    isAxiosError?: boolean;
+    response?: { data?: { message?: string } };
+  } | null;
+
+  // 1) Server xatosi — brauzer emas. Uning o'z xabarini chaqiruvchi ishlatadi.
+  if (e?.response?.data?.message) return null;
+  if (e?.isAxiosError) return null;
+
+  const name = typeof e?.name === 'string' ? e.name : '';
+  const code = typeof e?.code === 'string' ? e.code : '';
+
+  // 2) @simplewebauthn/browser WebAuthnError kodlari
+  if (code === 'ERROR_CEREMONY_ABORTED') {
+    return 'Biometrik tasdiqlash bekor qilindi.';
+  }
+  if (code === 'ERROR_INVALID_RP_ID' || code === 'ERROR_INVALID_DOMAIN') {
+    return 'WebAuthn domen (RP ID) noto‘g‘ri sozlangan — sayt administratoriga murojaat qiling.';
+  }
+  if (code === 'ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED') {
+    return 'Bu qurilmada ushbu passkey allaqachon qo‘shilgan.';
+  }
+  if (code === 'ERROR_AUTHENTICATOR_MISSING_USER_VERIFICATION_SUPPORT') {
+    return 'Bu autentifikator biometrik tasdiqlashni qo‘llab-quvvatlamaydi.';
+  }
+  if (code === 'ERROR_NOT_SUPPORTED' || code === 'ERROR_AUTHENTICATOR_GENERAL_ERROR') {
+    return 'Bu qurilma yoki brauzer WebAuthn (passkey) ni to‘liq qo‘llab-quvvatlamaydi.';
+  }
+
+  // 3) DOMException (brauzer o'zi tashlaydi)
+  if (name === 'NotAllowedError') {
+    return 'Biometrik tasdiqlash rad etildi yoki bekor qilindi. Qaytadan urinib ko‘ring.';
+  }
+  if (name === 'AbortError') {
+    return 'Biometrik tasdiqlash vaqti tugadi yoki bekor qilindi.';
+  }
+  if (name === 'NotSupportedError' || name === 'TypeError') {
+    return 'Bu qurilma yoki brauzer WebAuthn (passkey) ni qo‘llab-quvvatlamaydi. HTTPS orqali kirishga ishonch hosil qiling.';
+  }
+  if (name === 'SecurityError') {
+    return 'WebAuthn faqat HTTPS yoki localhost domenida ishlaydi — manzilni tekshiring.';
+  }
+  if (name === 'InvalidStateError') {
+    return 'Bu qurilmada shu passkey allaqachon mavjud.';
+  }
+  if (name === 'ConstraintError') {
+    return 'Biometrik sensor band yoki mavjud emas — parol orqali kirishingiz mumkin.';
+  }
+
+  // 4) Noma'lum xato — chaqiruvchi umumiy xabarini ko'rsatadi.
+  return null;
+}
+
 export interface AIConversation {
   id: string;
   userId: string;

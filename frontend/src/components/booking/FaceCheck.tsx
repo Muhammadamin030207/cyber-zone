@@ -31,7 +31,7 @@ type Status =
 function faceServerMessage(code: unknown, fallback: string): string {
   switch (code) {
     case 'NOT_CONFIGURED':
-      return 'Face Verification hozircha mavjud emas.';
+      return 'Yuz tekshiruvi hozircha mavjud emas (serverda sozlanmagan). Sessiyani boshlash bloklanmaydi — administratorga murojaat qiling.';
     case 'PROVIDER_UNAVAILABLE':
       return 'Face tekshiruv serverida vaqtinchalik xatolik.';
     case 'SESSION_EXPIRED':

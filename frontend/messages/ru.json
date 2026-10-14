@@ -178,6 +178,9 @@
     "history": "История",
     "bookingStatus": {
       "PENDING": "Ожидание",
+      "PENDING_PAYMENT": "Ожидает оплаты",
+      "PARTIALLY_PAID": "Оплачено частично",
+      "PAID": "Оплачено",
       "CONFIRMED": "Подтверждено",
       "ACTIVE": "Активно",
       "COMPLETED": "Завершено",

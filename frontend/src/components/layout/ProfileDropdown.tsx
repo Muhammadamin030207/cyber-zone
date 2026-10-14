@@ -89,7 +89,7 @@ export default function ProfileDropdown() {
         <div
           role="menu"
           aria-label="Profil menyusi"
-          className="absolute right-0 top-[calc(100%+8px)] z-50 w-60 overflow-hidden rounded-2xl glass border border-white/10 shadow-glow menu-pop"
+          className="absolute right-0 top-[calc(100%+8px)] z-50 w-60 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl glass border border-white/10 shadow-glow menu-pop"
         >
           <div className="border-b border-white/10 px-3 py-3">
             <p className="truncate text-sm font-semibold text-gray-100">

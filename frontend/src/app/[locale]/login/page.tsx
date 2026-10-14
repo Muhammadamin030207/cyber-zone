@@ -13,7 +13,7 @@ import { useAuthStore } from '@/store/auth';
 import type { AuthResponse, User } from '@/lib/types';
 import GoogleButton from '@/components/auth/GoogleButton';
 import Logo from '@/components/brand/Logo';
-import { finishPasskeyLogin, passwordlessLogin, biometricLogin, supportsBiometric, detectBiometric, type BiometricInfo } from '@/lib/webauthn';
+import { finishPasskeyLogin, passwordlessLogin, biometricLogin, supportsBiometric, detectBiometric, describeWebAuthnError, type BiometricInfo } from '@/lib/webauthn';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email kiriting').email('Email noto\u2019g\u2019ri'),
@@ -158,10 +158,11 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
         setPasskeyError(result.message || 'Passkey tekshiruvi bajarilmadi');
       }
     } catch (err: unknown) {
+      // 2-bosqich passkey xatolari ham ajratilgan: server xabari (masalan
+      // "passkey topilmadi") ustun — u bo'lmasa brauzer/autentifikator sababi.
+      const described = describeWebAuthnError(err);
       const data = (err as { response?: { data?: { message?: string } } })?.response?.data;
-      setPasskeyError(
-        data?.message || 'Brauzer bilan bog&apos;lanishda xatolik. Passkey ushbu qurilmada mavjudligiga ishonch hosil qiling.'
-      );
+      setPasskeyError(described || data?.message || 'Server bilan aloqada xatolik yuz berdi. Keyinroq qayta urinib ko‘ring.');
     } finally {
       setPasskeyBusy(false);
     }
@@ -237,17 +238,14 @@ export default function LoginPage({ params }: { params: Promise<{ locale: string
         );
       }
     } catch (err: unknown) {
-      // Foydalanuvchi biometrik oynani bekor qilgan bo'lishi mumkin
-      // (NotAllowedError) — bu xato emas, alohilda ko'rsatamiz.
-      const name = (err as { name?: string })?.name;
-      if (name === 'NotAllowedError' || name === 'AbortError') {
-        setPasskeyError('Biometrik tasdiqlash bekor qilindi');
+      // Har bir holat ALOHIDA xabar (A4): bekor qilindi / qurilma qo'llamaydi /
+      // ruxsat rad etildi / server xatosi — bir xil matn EMAS.
+      const described = describeWebAuthnError(err);
+      if (described) {
+        setPasskeyError(described);
       } else {
         const data = (err as { response?: { data?: ApiErrorData } })?.response?.data;
-        setPasskeyError(
-          data?.message ||
-            'Brauzer bilan bog‘lanishda xatolik. Passkey ushbu qurilmada mavjudligiga ishonch hosil qiling.'
-        );
+        setPasskeyError(data?.message || 'Server bilan aloqada xatolik yuz berdi. Keyinroq qayta urinib ko‘ring.');
       }
     } finally {
       setPasskeyBusy(false);

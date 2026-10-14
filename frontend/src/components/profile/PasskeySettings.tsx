@@ -5,7 +5,7 @@ import { Fingerprint, ScanFace, Loader2, Trash2, Pencil, ShieldCheck, Smartphone
 import api, { getApiErrorMessage } from '@/lib/api';
 import { toastSuccess, toastError } from '@/lib/toast';
 import { confirmDialog } from '@/lib/confirm';
-import { addPasskey, supportsBiometric, detectBiometric, type BiometricInfo, type PasskeyRecord } from '@/lib/webauthn';
+import { addPasskey, supportsBiometric, detectBiometric, describeWebAuthnError, type BiometricInfo, type PasskeyRecord } from '@/lib/webauthn';
 import { useAuthStore } from '@/store/auth';
 
 export default function PasskeySettings() {
@@ -63,7 +63,11 @@ export default function PasskeySettings() {
       setDeviceName('');
       await load();
     } catch (err) {
-      toastError(getApiErrorMessage(err, 'Passkey qo\'shishda xatolik'));
+      // Brauzer/autentifikator xatosi o'z kontekstida (A4) — server xabari
+      // ustun, so'ng aniq WebAuthn sababi, oxirida umumiy fallback.
+      const described = describeWebAuthnError(err);
+      const serverMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toastError(described || serverMsg || getApiErrorMessage(err, 'Passkey qo\'shishda xatolik'));
     } finally {
       setBusy(false);
     }

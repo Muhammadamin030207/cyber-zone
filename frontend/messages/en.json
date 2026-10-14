@@ -178,6 +178,9 @@
     "history": "History",
     "bookingStatus": {
       "PENDING": "Pending",
+      "PENDING_PAYMENT": "Awaiting payment",
+      "PARTIALLY_PAID": "Partially paid",
+      "PAID": "Paid",
       "CONFIRMED": "Confirmed",
       "ACTIVE": "Active",
       "COMPLETED": "Completed",
