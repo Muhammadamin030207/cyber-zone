@@ -18,8 +18,9 @@ import { useAuthStore } from '@/store/auth';
 import { TASHKENT_DISTRICTS } from '@/lib/constants';
 import { Coffee } from 'lucide-react';
 import BarAll from '@/components/super-admin/BarAll';
+import PanelShell from '@/components/admin/PanelShell';
+import type { PanelNavGroup } from '@/components/admin/PanelShell';
 import SupportChat from '@/components/support/SupportChat';
-import Logo from '@/components/brand/Logo';
 
 const MapPicker = dynamic(() => import('@/components/rooms/MapPicker'), { ssr: false });
 const RoomsMap = dynamic(() => import('@/components/rooms/RoomsMap'), { ssr: false });
@@ -29,6 +30,7 @@ type Tab = 'overview' | 'users' | 'rooms' | 'bar' | 'payments' | 'support' | 'ad
 export default function SuperAdminPage({ params }: { params: Promise<{ locale: string }> }) {
   void params;
   const t = useTranslations('superAdmin');
+  const tP = useTranslations('panel');
   const user = useAuthStore((s) => s.user);
 
   const [tab, setTab] = useState<Tab>('overview');
@@ -42,46 +44,43 @@ export default function SuperAdminPage({ params }: { params: Promise<{ locale: s
     );
   }
 
-  const TABS = [
-    { key: 'overview' as Tab, icon: Activity, label: t('tabOverview') },
-    { key: 'users' as Tab, icon: Users, label: t('tabUsers') },
-    { key: 'rooms' as Tab, icon: Building2, label: t('tabRooms') },
-    { key: 'bar' as Tab, icon: Coffee, label: 'Gaming Bar' },
-    { key: 'payments' as Tab, icon: Wallet, label: 'To\'lovlar' },
-    { key: 'support' as Tab, icon: MessageSquare, label: 'Murojaatlar' },
-    { key: 'adminchat' as Tab, icon: MessagesSquare, label: 'Adminlar chat' },
-    { key: 'adminpm' as Tab, icon: Inbox, label: 'Xona PM' },
+  const navGroups: PanelNavGroup[] = [
+    {
+      title: t('groups.gMain'),
+      items: [
+        { key: 'overview', icon: Activity, label: t('nav.overview') },
+        { key: 'users', icon: Users, label: t('nav.users') },
+        { key: 'rooms', icon: Building2, label: t('nav.rooms') },
+      ],
+    },
+    {
+      title: t('groups.gSales'),
+      items: [
+        { key: 'payments', icon: Wallet, label: t('nav.payments') },
+        { key: 'bar', icon: Coffee, label: t('nav.bar') },
+      ],
+    },
+    {
+      title: t('groups.gComms'),
+      items: [
+        { key: 'support', icon: MessageSquare, label: t('nav.support') },
+        { key: 'adminchat', icon: MessagesSquare, label: t('nav.adminchat') },
+        { key: 'adminpm', icon: Inbox, label: t('nav.adminpm') },
+      ],
+    },
   ];
 
   return (
-    <div className="cz-shell py-10">
-      <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-5 sm:mb-6 flex items-center gap-3">
-        <span className="w-10 h-10 sm:w-11 sm:h-11 neo-card rounded-xl flex items-center justify-center shrink-0"><Logo size={24} /></span>
-        <span className="min-w-0">{t('title')}</span>
-      </h1>
-
-      <div className="relative mb-5 sm:mb-6 -mx-4 sm:mx-0 px-4 sm:px-0">
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-2 snap-x snap-mandatory">
-        {TABS.map((tb) => (
-          <button
-            key={tb.key}
-            onClick={() => setTab(tb.key)}
-            className={cn(
-              'flex shrink-0 snap-start items-center gap-1.5 px-3.5 sm:px-4 py-2.5 rounded-xl text-[13px] sm:text-sm font-medium border transition-all whitespace-nowrap',
-              tab === tb.key
-                ? 'border-yellow-400/40 bg-yellow-400/10 text-yellow-300 shadow-[0_0_18px_-6px_var(--acc-b)] animate-pop'
-                : 'border-neon-cyan/10 text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/25 hover:bg-neon-cyan/5'
-            )}
-          >
-            <tb.icon size={15} />
-            {tb.label}
-          </button>
-        ))}
-        </div>
-      </div>
-
+    <PanelShell
+      title={t('title')}
+      subtitle={tP('subtitleSuper')}
+      accent="gold"
+      groups={navGroups}
+      active={tab}
+      onNavigate={(k) => setTab(k as Tab)}
+    >
       {tab === 'overview' ? <OverviewTab /> : tab === 'users' ? <UsersTab /> : tab === 'rooms' ? <RoomsTab /> : tab === 'payments' ? <PaymentsTab /> : tab === 'support' ? <SupportChat mode="superadmin" channel="superadmin" scope="users" /> : tab === 'adminchat' ? <SupportChat mode="superadmin" channel="superadmin" scope="admins" /> : tab === 'adminpm' ? <SupportChat mode="superadmin" channel="admin" scope="all" /> : <BarAll />}
-    </div>
+    </PanelShell>
   );
 }
 

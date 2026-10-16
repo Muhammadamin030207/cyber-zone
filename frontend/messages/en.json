@@ -199,7 +199,29 @@
     "news": "News",
     "stats": "Statistics",
     "createRoom": "Create zone",
-    "noRoom": "You don't have a zone yet. Create one!"
+    "noRoom": "You don't have a zone yet. Create one!",
+    "nav": {
+      "room": "Room",
+      "zones": "Zones",
+      "computers": "Computers",
+      "bookings": "Bookings",
+      "till": "Cash desk",
+      "cards": "Payment cards",
+      "bar": "Gaming Bar",
+      "chat": "Chat",
+      "requests": "Requests",
+      "support": "Super Admin",
+      "site": "Site info",
+      "promos": "Promo",
+      "news": "News",
+      "stats": "Statistics"
+    },
+    "groups": {
+      "gManage": "Management",
+      "gSales": "Sales",
+      "gComms": "Communication",
+      "gSite": "Site & stats"
+    }
   },
   "superAdmin": {
     "title": "Super Admin",
@@ -225,7 +247,22 @@
     "deactivate": "Close",
     "delete": "Delete",
     "createRoom": "Create room",
-    "districtSales": "Sales by district"
+    "districtSales": "Sales by district",
+    "nav": {
+      "overview": "Overview",
+      "users": "Users",
+      "rooms": "Rooms",
+      "bar": "Gaming Bar",
+      "payments": "Payments",
+      "support": "Requests",
+      "adminchat": "Admin chat",
+      "adminpm": "Room PM"
+    },
+    "groups": {
+      "gMain": "Main",
+      "gSales": "Sales",
+      "gComms": "Communication"
+    }
   },
   "news": {
     "title": "News",
@@ -318,5 +355,11 @@
     "empty": "No favorites yet",
     "emptyHint": "Tap the heart on a club card to add it here.",
     "browse": "Browse clubs"
+  },
+  "panel": {
+    "openMenu": "Menu",
+    "closeMenu": "Close",
+    "subtitleAdmin": "Manage your room like a pro",
+    "subtitleSuper": "Full control over the platform"
   }
 }

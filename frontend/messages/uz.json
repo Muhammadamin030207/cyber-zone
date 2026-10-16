@@ -199,7 +199,29 @@
     "news": "Yangiliklar",
     "stats": "Statistika",
     "createRoom": "Xona yaratish",
-    "noRoom": "Sizda xona yo'q. Xona yarating!"
+    "noRoom": "Sizda xona yo'q. Xona yarating!",
+    "nav": {
+      "room": "Xona",
+      "zones": "Zonalar",
+      "computers": "Kompyuterlar",
+      "bookings": "Bronlar",
+      "till": "Kassa",
+      "cards": "To'lov kartalari",
+      "bar": "Gaming Bar",
+      "chat": "Chat",
+      "requests": "Murojaatlar",
+      "support": "Super Admin",
+      "site": "Sayt ma'lumotlari",
+      "promos": "Promo",
+      "news": "Yangiliklar",
+      "stats": "Statistika"
+    },
+    "groups": {
+      "gManage": "Boshqaruv",
+      "gSales": "Savdo",
+      "gComms": "Aloqa",
+      "gSite": "Sayt va statistika"
+    }
   },
   "superAdmin": {
     "title": "Super Admin",
@@ -225,7 +247,22 @@
     "deactivate": "Yopish",
     "delete": "O'chirish",
     "createRoom": "Xona yaratish",
-    "districtSales": "Tumanlar bo'yicha savdo"
+    "districtSales": "Tumanlar bo'yicha savdo",
+    "nav": {
+      "overview": "Umumiy",
+      "users": "Foydalanuvchilar",
+      "rooms": "Xonalar",
+      "bar": "Gaming Bar",
+      "payments": "To'lovlar",
+      "support": "Murojaatlar",
+      "adminchat": "Adminlar chat",
+      "adminpm": "Xona PM"
+    },
+    "groups": {
+      "gMain": "Asosiy",
+      "gSales": "Savdo",
+      "gComms": "Aloqa"
+    }
   },
   "news": {
     "title": "Yangiliklar",
@@ -318,5 +355,11 @@
     "empty": "Hali sevimli xona qo'shmagansiz",
     "emptyHint": "Kartalardagi yurakcha tugmasi bilan xonani bu yerga qo'shing.",
     "browse": "Xonalarni ko'rish"
+  },
+  "panel": {
+    "openMenu": "Menyu",
+    "closeMenu": "Yopish",
+    "subtitleAdmin": "Xonangizni professional boshqaring",
+    "subtitleSuper": "Platforma ustidan to'liq nazorat"
   }
 }

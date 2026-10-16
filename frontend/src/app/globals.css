@@ -1047,6 +1047,13 @@ main,
 }
 .panel-pop { animation: panelIn 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; transform-origin: top center; }
 
+/* Panel drawer (admin/super-admin mobil menyu) — chapdan sirpanib kiradi */
+@keyframes drawerIn {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+.drawer-in { animation: drawerIn 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
 /* Mobile AI chat — pastdan yuqoriga sirpanish (bottom-sheet) */
 @keyframes sheetUp {
   from { opacity: 0.6; transform: translateY(100%); }

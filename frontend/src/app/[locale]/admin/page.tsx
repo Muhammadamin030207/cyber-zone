@@ -10,7 +10,6 @@ import {
   Save, X, Gamepad2, TrendingUp, CircleDollarSign, RefreshCw, LifeBuoy, MessagesSquare, Info, Banknote, UserX,
   CreditCard,
   } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { toastError, toastSuccess } from '@/lib/toast';
 import { confirmDialog, promptDialog } from '@/lib/confirm';
@@ -19,6 +18,7 @@ import type { Room, Zone, Computer, Booking, PromoCode, NewsItem, ComputerSpecs 
 import { formatPrice, formatDate, formatDateTime, todayISO, zoneTypeLabel, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
 import BarAdmin from '@/components/admin/BarAdmin';
+import PanelShell from '@/components/admin/PanelShell';
 import ChatAdmin from '@/components/admin/ChatAdmin';
 import SupportChat from '@/components/support/SupportChat';
 import SiteSettingsTab from '@/components/admin/SiteSettingsTab';
@@ -30,29 +30,58 @@ const MapPicker = dynamic(() => import('@/components/rooms/MapPicker'), { ssr: f
 
 type Tab = 'room' | 'zones' | 'computers' | 'bookings' | 'till' | 'cards' | 'bar' | 'chat' | 'requests' | 'support' | 'promos' | 'news' | 'stats' | 'site';
 
-const TABS: { key: Tab; icon: LucideIcon; label: string }[] = [
-  { key: 'room', icon: Settings, label: 'Xona' },
-  { key: 'zones', icon: Users, label: 'Zonalar' },
-  { key: 'computers', icon: Monitor, label: 'Kompyuterlar' },
-  { key: 'bookings', icon: CalendarDays, label: 'Bronlar' },
-  { key: 'till', icon: Banknote, label: 'Kassa' },
-  { key: 'cards', icon: CreditCard, label: 'To\'lov kartalari' },
-  { key: 'bar', icon: Gamepad2, label: 'Gaming Bar' },
-  { key: 'chat', icon: MessageSquare, label: 'Chat' },
-  { key: 'requests', icon: MessagesSquare, label: 'Murojaatlar' },
-  { key: 'support', icon: LifeBuoy, label: 'Super Admin' },
-  { key: 'site', icon: Info, label: 'Sayt ma\'lumotlari' },
-  { key: 'promos', icon: BadgePercent, label: 'Promo' },
-  { key: 'news', icon: Newspaper, label: 'Yangiliklar' },
-  { key: 'stats', icon: BarChart3, label: 'Statistika' },
-];
+/**
+ * Sidebar guruhlari — bo'limlar mantiqiy ravishda 4 ta guruha jamlangan.
+ * Sarlavhalar `admin.groups.*`, nomlar `admin.nav.*` i18n kalitlaridan.
+ */
+function useNavGroups() {
+  const t = useTranslations('admin');
+  return [
+    {
+      title: t('groups.gManage'),
+      items: [
+        { key: 'room', icon: Settings, label: t('nav.room') },
+        { key: 'zones', icon: Users, label: t('nav.zones') },
+        { key: 'computers', icon: Monitor, label: t('nav.computers') },
+        { key: 'bookings', icon: CalendarDays, label: t('nav.bookings') },
+      ],
+    },
+    {
+      title: t('groups.gSales'),
+      items: [
+        { key: 'till', icon: Banknote, label: t('nav.till') },
+        { key: 'cards', icon: CreditCard, label: t('nav.cards') },
+        { key: 'bar', icon: Gamepad2, label: t('nav.bar') },
+        { key: 'promos', icon: BadgePercent, label: t('nav.promos') },
+      ],
+    },
+    {
+      title: t('groups.gComms'),
+      items: [
+        { key: 'chat', icon: MessageSquare, label: t('nav.chat') },
+        { key: 'requests', icon: MessagesSquare, label: t('nav.requests') },
+        { key: 'support', icon: LifeBuoy, label: t('nav.support') },
+      ],
+    },
+    {
+      title: t('groups.gSite'),
+      items: [
+        { key: 'site', icon: Info, label: t('nav.site') },
+        { key: 'news', icon: Newspaper, label: t('nav.news') },
+        { key: 'stats', icon: BarChart3, label: t('nav.stats') },
+      ],
+    },
+  ];
+}
 
 export default function AdminPage({ params }: { params: Promise<{ locale: string }> }) {
   void params;
   const t = useTranslations('admin');
+  const tP = useTranslations('panel');
   const tG = useTranslations('superAdmin');
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const navGroups = useNavGroups();
 
   const [tab, setTab] = useState<Tab>('room');
   const [room, setRoom] = useState<Room | null>(null);
@@ -97,33 +126,14 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
   }
 
   return (
-    <div className="cz-shell py-10">
-      <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-5 sm:mb-6 flex items-center gap-3">
-        <span className="w-10 h-10 sm:w-11 sm:h-11 neo-card rounded-xl flex items-center justify-center shrink-0"><Logo size={24} /></span>
-        <span className="min-w-0">{t('title')}</span>
-      </h1>
-
-      {/* Tabs — mobilda siljitiladi, chetlar yumshatiladi (chegara aniq ko'rinadi) */}
-      <div className="relative mb-5 sm:mb-6 -mx-4 sm:mx-0 px-4 sm:px-0">
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-2 snap-x snap-mandatory">
-        {TABS.map((tb) => (
-          <button
-            key={tb.key}
-            onClick={() => setTab(tb.key)}
-            className={cn(
-              'flex shrink-0 snap-start items-center gap-1.5 px-3.5 sm:px-4 py-2.5 rounded-xl text-[13px] sm:text-sm font-medium border transition-all whitespace-nowrap',
-              tab === tb.key
-                ? 'border-neon-cyan/40 bg-neon-cyan/10 text-neon-cyan shadow-[0_0_18px_-6px_var(--acc-a)] animate-pop'
-                : 'border-neon-cyan/10 text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/25 hover:bg-neon-cyan/5'
-            )}
-          >
-            <tb.icon size={15} className="transition-transform group-hover:scale-110" />
-            {tb.label}
-          </button>
-        ))}
-        </div>
-      </div>
-
+    <PanelShell
+      title={t('title')}
+      subtitle={tP('subtitleAdmin')}
+      accent="cyan"
+      groups={navGroups}
+      active={tab}
+      onNavigate={(k) => setTab(k as Tab)}
+    >
       {/* Content */}
       {!room && tab !== 'room' && tab !== 'bar' && tab !== 'chat' && tab !== 'requests' && tab !== 'support' && tab !== 'site' && tab !== 'bookings' && tab !== 'cards' && tab !== 'till' ? (
         <div className="text-center py-20">
@@ -164,7 +174,7 @@ export default function AdminPage({ params }: { params: Promise<{ locale: string
       ) : tab === 'stats' && room ? (
         <StatsTab room={room} />
       ) : null}
-    </div>
+    </PanelShell>
   );
 }
 
